@@ -1,0 +1,28 @@
+# Project TODO
+
+- [x] Configurar schema do banco de dados para tabela leads
+- [x] Adicionar coluna email_enviado na tabela leads
+- [x] Criar tabela para armazenar templates de email
+- [x] Desenvolver API para listar leads
+- [x] Desenvolver API para atualizar status de email enviado
+- [x] Desenvolver API para upload de template HTML
+- [x] Desenvolver API para envio de emails
+- [x] Criar interface com duas abas (Leads e Email)
+- [x] Implementar tabela de leads com atualização em tempo real
+- [x] Implementar coluna de confirmação de email enviado
+- [x] Implementar painel de upload de template HTML
+- [x] Implementar pré-visualização do email
+- [x] Implementar funcionalidade de envio automático de emails
+- [x] Testar integração com banco de dados existente
+- [x] Criar testes unitários para procedures
+- [x] Adicionar filtro de busca por nome ou email na aba de leads
+- [x] Preparar projeto para deploy no Railway
+- [x] Criar guia de deploy e configuração
+- [x] Corrigir configurações de build para Railway (Node.js version e estrutura)
+- [x] Corrigir configuração do Vite para build no Railway
+- [x] Ajustar vite.config.ts para resolver caminhos no Railway
+- [x] Ajustar nixpacks.toml para forçar Node.js 22.13.0 e corrigir build
+- [x] Criar Dockerfile para deploy no Railway
+- [x] Criar .dockerignore para otimizar build
+- [x] Corrigir erro do corepack no Dockerfile
+- [x] Adicionar pasta patches ao Dockerfile
