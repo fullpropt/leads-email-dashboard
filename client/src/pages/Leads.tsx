@@ -11,23 +11,30 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, XCircle, Loader2, RefreshCw, Mail, Send } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, RefreshCw, Mail, Send, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
+type FilterStatus = 'all' | 'pending' | 'sent';
+
 export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
   const [autoSendEnabled, setAutoSendEnabled] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
 
-  // Carregar dados dos leads (sem refetchInterval)
-  const { data: leads, isLoading, refetch } = trpc.leads.list.useQuery(undefined, {
-    staleTime: Infinity,           // Dados nunca ficam "stale" automaticamente
-    gcTime: 1000 * 60 * 60,        // Manter em cache por 1 hora
-    refetchOnWindowFocus: false,   // Nao refetch ao voltar para a aba
-    refetchOnReconnect: false,     // Nao refetch ao reconectar internet
-    refetchOnMount: false,         // Nao refetch ao montar o componente
-  });
+  // Carregar dados dos leads com paginação
+  const { data: leadsData, isLoading, refetch } = trpc.leads.listPaginated.useQuery(
+    { page: currentPage, status: filterStatus },
+    {
+      staleTime: Infinity,
+      gcTime: 1000 * 60 * 60,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: false,
+    }
+  );
 
   // Carregar status do auto-envio
   const { data: autoSendStatus } = trpc.autoSend.getStatus.useQuery(undefined, {
@@ -45,18 +52,18 @@ export default function Leads() {
     }
   }, [autoSendStatus]);
 
-  // Filtrar leads baseado no termo de busca
+  // Filtrar leads baseado no termo de busca (local)
   const filteredLeads = useMemo(() => {
-    if (!leads) return [];
-    if (!searchTerm.trim()) return leads;
+    if (!leadsData?.leads) return [];
+    if (!searchTerm.trim()) return leadsData.leads;
 
     const term = searchTerm.toLowerCase();
-    return leads.filter(
+    return leadsData.leads.filter(
       (lead) =>
         lead.nome.toLowerCase().includes(term) ||
         lead.email.toLowerCase().includes(term)
     );
-  }, [leads, searchTerm]);
+  }, [leadsData?.leads, searchTerm]);
 
   const updateEmailStatus = trpc.leads.updateEmailStatus.useMutation({
     onSuccess: () => {
@@ -109,6 +116,15 @@ export default function Leads() {
     });
   };
 
+  const handleFilterChange = (status: FilterStatus) => {
+    setFilterStatus(status);
+    setCurrentPage(1); // Voltar para página 1 ao mudar filtro
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
@@ -128,6 +144,9 @@ export default function Leads() {
       </div>
     );
   }
+
+  const totalPages = leadsData?.totalPages || 1;
+  const total = leadsData?.total || 0;
 
   return (
     <div className="space-y-6">
@@ -196,6 +215,30 @@ export default function Leads() {
               Limpar
             </Button>
           )}
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            variant={filterStatus === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => handleFilterChange('all')}
+          >
+            Todos ({total})
+          </Button>
+          <Button
+            variant={filterStatus === 'pending' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => handleFilterChange('pending')}
+          >
+            Pendentes
+          </Button>
+          <Button
+            variant={filterStatus === 'sent' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => handleFilterChange('sent')}
+          >
+            Enviados
+          </Button>
         </div>
       </div>
 
@@ -287,20 +330,62 @@ export default function Leads() {
         </Table>
       </div>
 
-      {leads && leads.length > 0 && (
+      <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          {searchTerm ? (
+          {leadsData && leadsData.total > 0 ? (
             <>
               Exibindo <span className="font-semibold">{filteredLeads.length}</span> de{" "}
-              <span className="font-semibold">{leads.length}</span> leads
+              <span className="font-semibold">{leadsData.total}</span> leads
+              {searchTerm && ` (filtrados por busca)`}
+              {filterStatus !== 'all' && ` (filtrados por status)`}
             </>
           ) : (
             <>
-              Total de leads: <span className="font-semibold">{leads.length}</span>
+              Total de leads: <span className="font-semibold">0</span>
             </>
           )}
         </div>
-      )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="gap-1"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </Button>
+
+            <div className="flex items-center gap-2">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <Button
+                  key={page}
+                  variant={currentPage === page ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handlePageChange(page)}
+                  className="min-w-10"
+                >
+                  {page}
+                </Button>
+              ))}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="gap-1"
+            >
+              Próxima
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
