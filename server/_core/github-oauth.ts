@@ -125,7 +125,11 @@ export function registerGitHubOAuthRoutes(app: Express) {
       });
 
       // Clear state cookie
-      res.clearCookie("github_oauth_state");
+      res.clearCookie("github_oauth_state", { 
+        httpOnly: true, 
+        secure: true,
+        sameSite: "lax"
+      });
 
       // Redirect to home
       res.redirect(302, "/");
