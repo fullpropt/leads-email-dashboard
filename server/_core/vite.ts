@@ -114,7 +114,7 @@ export async function setupVite(app: Express, server: Server) {
 export function serveStatic(app: Express) {
   checkBuildFiles();
   
-  const distPath = path.resolve(import.meta.dirname, "..", "public");
+  const distPath = path.resolve(import.meta.dirname, "..", "..", "dist", "public");
   const indexPath = path.resolve(distPath, "index.html");
   
   console.log(`[serveStatic] Serving static files from: ${distPath}`);
