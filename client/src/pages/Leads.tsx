@@ -17,6 +17,15 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export default function Leads() {
+  const [autoSendEnabled, setAutoSendEnabled] = useState(false);
+
+  // Carregar status ao abrir
+  useEffect(() => {
+    trpc.autoSend.getStatus.useQuery().then(result => {
+      setAutoSendEnabled(result.data);
+    });
+  }, [])
+  
   const [searchTerm, setSearchTerm] = useState("");
   
   const { data: leads, isLoading, refetch } = trpc.leads.list.useQuery(undefined, {
@@ -224,6 +233,15 @@ export default function Leads() {
                           ? "Marcar Pendente"
                           : "Marcar Enviado"}
                       </Button>
+                      // Botão para ativar/desativar
+                      <button 
+                        onClick={async () => {
+                          await trpc.autoSend.toggle.mutate(!autoSendEnabled);
+                          setAutoSendEnabled(!autoSendEnabled);
+                        }}
+                      >
+                        {autoSendEnabled ? "Desativar Envio Automático" : "Ativar Envio Automático"}
+                      </button>
                     </div>
                   </TableCell>
                 </TableRow>
