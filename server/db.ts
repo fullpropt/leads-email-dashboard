@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { emailTemplates, InsertEmailTemplate, InsertLead, InsertUser, Lead, leads, users } from "../drizzle/schema";
+import { autoSendConfig, emailTemplates, InsertEmailTemplate, InsertLead, InsertUser, Lead, leads, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -210,12 +210,17 @@ export async function getAutoSendStatus() {
   const db = await getDb();
   if (!db) return false;
   
-  const result = await db
-    .select()
-    .from(autoSendConfig)
-    .limit(1);
-  
-  return result.length > 0 ? result[0].ativo === 1 : false;
+  try {
+    const result = await db
+      .select()
+      .from(autoSendConfig)
+      .limit(1);
+    
+    return result.length > 0 ? result[0].ativo === 1 : false;
+  } catch (error) {
+    console.error("[Database] Failed to get auto send status:", error);
+    return false;
+  }
 }
 
 export async function toggleAutoSend(ativo: boolean) {
@@ -223,13 +228,25 @@ export async function toggleAutoSend(ativo: boolean) {
   if (!db) return false;
   
   try {
-    await db
-      .update(autoSendConfig)
-      .set({ ativo: ativo ? 1 : 0 })
-      .where(eq(autoSendConfig.id, 1));
+    const existing = await db
+      .select()
+      .from(autoSendConfig)
+      .limit(1);
+    
+    if (existing.length === 0) {
+      await db.insert(autoSendConfig).values({
+        id: 1,
+        ativo: ativo ? 1 : 0,
+      });
+    } else {
+      await db
+        .update(autoSendConfig)
+        .set({ ativo: ativo ? 1 : 0 })
+        .where(eq(autoSendConfig.id, 1));
+    }
     return true;
   } catch (error) {
-    console.error("Failed to toggle auto send:", error);
+    console.error("[Database] Failed to toggle auto send:", error);
     return false;
   }
 }
