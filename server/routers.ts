@@ -5,23 +5,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 
 export const appRouter = router({
-  // ... outras rotas ...
-  
-  autoSend: {
-    getStatus: publicProcedure.query(async () => {
-      return await getAutoSendStatus();
-    }),
-    
-    toggle: publicProcedure
-      .input(z.boolean())
-      .mutation(async ({ input }) => {
-        return await toggleAutoSend(input);
-      }),
-  },
-});
-
-export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
+  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
@@ -183,6 +167,21 @@ export const appRouter = router({
       const isConnected = await testEmailConnection();
       return { connected: isConnected };
     }),
+  }),
+
+  // Routers para gerenciamento de auto-envio
+  autoSend: router({
+    getStatus: publicProcedure.query(async () => {
+      const { getAutoSendStatus } = await import("./db");
+      return await getAutoSendStatus();
+    }),
+    
+    toggle: publicProcedure
+      .input(z.boolean())
+      .mutation(async ({ input }) => {
+        const { toggleAutoSend } = await import("./db");
+        return await toggleAutoSend(input);
+      }),
   }),
 });
 
