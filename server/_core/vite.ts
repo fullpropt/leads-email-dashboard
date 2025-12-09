@@ -5,14 +5,27 @@ import { nanoid } from "nanoid";
 import path from "path";
 
 export async function setupVite(app: Express, server: Server) {
-  // Importação dinâmica de vite e viteConfig (apenas em desenvolvimento)
+  // Importação dinâmica de vite (apenas em desenvolvimento)
   const { createServer: createViteServer } = await import("vite");
-  const { default: viteConfig } = await import("../../vite.config");
 
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
     allowedHosts: true as const,
+  };
+
+  // Criar configuração mínima sem importar vite.config
+  const viteConfig = {
+    root: path.resolve(import.meta.dirname, "../..", "client"),
+    publicDir: path.resolve(import.meta.dirname, "../..", "client", "public"),
+    resolve: {
+      alias: {
+        "@": path.resolve(import.meta.dirname, "../..", "client", "src"),
+        "@shared": path.resolve(import.meta.dirname, "../..", "shared"),
+        "@assets": path.resolve(import.meta.dirname, "../..", "attached_assets"),
+      },
+    },
+    envDir: path.resolve(import.meta.dirname, "../.."),
   };
 
   const vite = await createViteServer({
