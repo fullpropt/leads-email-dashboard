@@ -3,6 +3,7 @@ import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
+import { checkBuildFiles } from "./diagnostics";
 
 export async function setupVite(app: Express, server: Server) {
   // Importação dinâmica de vite (apenas em desenvolvimento)
@@ -63,6 +64,8 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
+  checkBuildFiles();
+  
   const distPath = path.resolve(import.meta.dirname, "..", "public");
   const indexPath = path.resolve(distPath, "index.html");
   
