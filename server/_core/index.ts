@@ -7,6 +7,8 @@ import { registerGitHubOAuthRoutes } from "./github-oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import cookieParser from "cookie-parser";
+app.use(cookieParser());
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
