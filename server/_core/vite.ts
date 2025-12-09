@@ -29,25 +29,30 @@ function logDirectoryStructure(dir: string, prefix = "", maxDepth = 3, currentDe
 function checkBuildFiles(): void {
   console.log("\n=== BUILD FILES DIAGNOSTIC ===\n");
   
-  const distPath = path.resolve(import.meta.dirname, "..", "public");
-  const indexPath = path.resolve(distPath, "index.html");
+  // Tenta múltiplos caminhos possíveis
+  const possiblePaths = [
+    "/app/dist/public",
+    path.join(process.cwd(), "dist", "public"),
+    path.resolve("/app", "dist", "public"),
+  ];
   
-  console.log(`Checking: ${distPath}`);
-  console.log(`Index exists: ${fs.existsSync(indexPath)}`);
-  
-  if (fs.existsSync(distPath)) {
-    console.log("\nDirectory structure:");
-    logDirectoryStructure(distPath);
-  } else {
-    console.log("Directory does not exist!");
+  for (const distPath of possiblePaths) {
+    const indexPath = path.resolve(distPath, "index.html");
+    console.log(`Checking: ${distPath}`);
+    console.log(`Index exists: ${fs.existsSync(indexPath)}`);
     
-    // Check parent directories
-    const parentPath = path.resolve(import.meta.dirname, "..");
-    console.log(`\nChecking parent: ${parentPath}`);
-    if (fs.existsSync(parentPath)) {
-      console.log("Parent directory contents:");
-      logDirectoryStructure(parentPath, "", 2);
+    if (fs.existsSync(distPath)) {
+      console.log("✓ Found! Directory structure:");
+      logDirectoryStructure(distPath);
+      console.log("\n=== END DIAGNOSTIC ===\n");
+      return;
     }
+  }
+  
+  console.log("❌ No dist/public directory found in any expected location!");
+  console.log("\nChecking /app directory:");
+  if (fs.existsSync("/app")) {
+    logDirectoryStructure("/app", "", 2);
   }
   
   console.log("\n=== END DIAGNOSTIC ===\n");
@@ -114,7 +119,8 @@ export async function setupVite(app: Express, server: Server) {
 export function serveStatic(app: Express) {
   checkBuildFiles();
   
-  const distPath = path.resolve(import.meta.dirname, "..", "..", "dist", "public");
+  // Usar caminho absoluto conhecido
+  const distPath = "/app/dist/public";
   const indexPath = path.resolve(distPath, "index.html");
   
   console.log(`[serveStatic] Serving static files from: ${distPath}`);
@@ -137,7 +143,7 @@ export function serveStatic(app: Express) {
     if (fs.existsSync(indexPath)) {
       res.sendFile(indexPath);
     } else {
-      res.status(404).send("Not Found - index.html not found");
+      res.status(404).send("Not Found - index.html not found at: " + indexPath);
     }
   });
 }
