@@ -45,7 +45,10 @@ export function registerGitHubOAuthRoutes(app: Express) {
   app.get("/api/github/callback", async (req: Request, res: Response) => {
     const code = req.query.code as string;
     const state = req.query.state as string;
-    const cookieState = req.cookies.github_oauth_state;
+    const cookieState = req.cookies?.github_oauth_state;
+      if (!cookieState) {
+        return res.status(400).json({ error: "Invalid state parameter" });
+      }
 
     if (!code || !state || state !== cookieState) {
       res.status(400).json({ error: "Invalid state parameter" });
