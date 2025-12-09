@@ -60,3 +60,16 @@ export const emailTemplates = mysqlTable("email_templates", {
 
 export type EmailTemplate = typeof emailTemplates.$inferSelect;
 export type InsertEmailTemplate = typeof emailTemplates.$inferInsert;
+
+/**
+ * Tabela para armazenar configuração de auto-envio de emails
+ */
+export const autoSendConfig = mysqlTable("auto_send_config", {
+  id: int("id").autoincrement().primaryKey(),
+  ativo: int("ativo").notNull().default(0), // 0 = desativado, 1 = ativado
+  criadoEm: timestamp("criado_em").defaultNow().notNull(),
+  atualizadoEm: timestamp("atualizado_em").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AutoSendConfig = typeof autoSendConfig.$inferSelect;
+export type InsertAutoSendConfig = typeof autoSendConfig.$inferInsert;
