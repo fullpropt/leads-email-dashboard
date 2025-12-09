@@ -24,6 +24,13 @@ export const appRouter = router({
       const { getAllLeads } = await import("./db");
       return getAllLeads();
     }),
+    listPaginated: publicProcedure
+      .input(z.object({ page: z.number().min(1).default(1), status: z.enum(['pending', 'sent', 'all']).default('all') }))
+      .query(async ({ input }) => {
+        const { getLeadsWithPagination } = await import("./db");
+        const status = input.status === 'all' ? undefined : input.status;
+        return getLeadsWithPagination(input.page, status);
+      }),
     updateEmailStatus: publicProcedure
       .input(z.object({ leadId: z.number(), enviado: z.boolean() }))
       .mutation(async ({ input }) => {
