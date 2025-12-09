@@ -43,19 +43,33 @@ export function registerGitHubOAuthRoutes(app: Express) {
 
   // Callback endpoint - handles GitHub redirect
   app.get("/api/github/callback", async (req: Request, res: Response) => {
-    const code = req.query.code as string;
-    const state = req.query.state as string;
-    const cookieState = req.cookies?.github_oauth_state;
+    try {
+      const code = req.query.code as string;
+      const state = req.query.state as string;
+      
+      // Extract state from cookies - handle both req.cookies and manual parsing
+      let cookieState: string | undefined;
+      
+      if (req.cookies && req.cookies.github_oauth_state) {
+        cookieState = req.cookies.github_oauth_state;
+      } else if (req.headers.cookie) {
+        // Manual cookie parsing as fallback
+        const cookies = req.headers.cookie.split(';').reduce((acc: Record<string, string>, cookie) => {
+          const [key, value] = cookie.trim().split('=');
+          acc[key] = decodeURIComponent(value);
+          return acc;
+        }, {});
+        cookieState = cookies.github_oauth_state;
+      }
+      
       if (!cookieState) {
+        return res.status(400).json({ error: "Invalid state parameter - no state cookie found" });
+      }
+
+      if (!code || !state || state !== cookieState) {
         return res.status(400).json({ error: "Invalid state parameter" });
       }
 
-    if (!code || !state || state !== cookieState) {
-      res.status(400).json({ error: "Invalid state parameter" });
-      return;
-    }
-
-    try {
       // Exchange code for access token
       const tokenResponse = await axios.post<GitHubTokenResponse>(
         "https://github.com/login/oauth/access_token",
