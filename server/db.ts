@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { autoSendConfig, emailTemplates, InsertEmailTemplate, InsertLead, InsertUser, Lead, leads, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -9,8 +9,9 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
-      console.log('[Database] Drizzle initialized successfully');
+      _db = drizzle(process.env.DATABASE_URL, {
+        mode: 'default',
+      });
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -103,6 +104,61 @@ export async function getAllLeads() {
 
   const result = await db.select().from(leads).orderBy(desc(leads.dataCriacao));
   return result;
+}
+
+export async function getLeadsWithPagination(
+  page: number = 1,
+  status?: 'pending' | 'sent'
+) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get leads: database not available");
+    return { leads: [], total: 0, page, pageSize: 30 };
+  }
+
+  const pageSize = 30;
+  const offset = (page - 1) * pageSize;
+
+  try {
+    // Construir a query com filtro opcional
+    let query = db.select().from(leads);
+
+    if (status === 'pending') {
+      query = query.where(eq(leads.emailEnviado, 0));
+    } else if (status === 'sent') {
+      query = query.where(eq(leads.emailEnviado, 1));
+    }
+
+    // Contar total de registros com o filtro
+    const countQuery = db.select({ count: sql`COUNT(*)` }).from(leads);
+    let countQueryWithFilter = countQuery;
+    
+    if (status === 'pending') {
+      countQueryWithFilter = db.select({ count: sql`COUNT(*)` }).from(leads).where(eq(leads.emailEnviado, 0));
+    } else if (status === 'sent') {
+      countQueryWithFilter = db.select({ count: sql`COUNT(*)` }).from(leads).where(eq(leads.emailEnviado, 1));
+    }
+
+    const [countResult] = await countQueryWithFilter;
+    const total = Number(countResult?.count || 0);
+
+    // Buscar leads com paginação
+    const result = await query
+      .orderBy(desc(leads.dataCriacao))
+      .limit(pageSize)
+      .offset(offset);
+
+    return {
+      leads: result,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  } catch (error) {
+    console.error("[Database] Failed to get leads with pagination:", error);
+    return { leads: [], total: 0, page, pageSize: 30, totalPages: 0 };
+  }
 }
 
 export async function updateLeadEmailStatus(leadId: number, enviado: boolean) {
@@ -207,7 +263,6 @@ export async function setActiveEmailTemplate(templateId: number) {
     return false;
   }
 }
-
 export async function getAutoSendStatus() {
   const db = await getDb();
   if (!db) return false;
