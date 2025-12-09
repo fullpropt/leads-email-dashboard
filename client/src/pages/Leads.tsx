@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,20 +17,21 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export default function Leads() {
+  const [searchTerm, setSearchTerm] = useState("");
   const [autoSendEnabled, setAutoSendEnabled] = useState(false);
 
-  // Carregar status ao abrir
+  // Carregar dados dos leads (sem refetchInterval)
+  const { data: leads, isLoading, refetch } = trpc.leads.list.useQuery();
+
+  // Carregar status do auto-envio
+  const { data: autoSendStatus } = trpc.autoSend.getStatus.useQuery();
+
+  // Atualizar o estado quando o status for carregado
   useEffect(() => {
-    trpc.autoSend.getStatus.useQuery().then(result => {
-      setAutoSendEnabled(result.data);
-    });
-  }, [])
-  
-  const [searchTerm, setSearchTerm] = useState("");
-  
-  const { data: leads, isLoading, refetch } = trpc.leads.list.useQuery(undefined, {
-    refetchInterval: 5000, // Atualizar a cada 5 segundos
-  });
+    if (autoSendStatus !== undefined) {
+      setAutoSendEnabled(autoSendStatus);
+    }
+  }, [autoSendStatus]);
 
   // Filtrar leads baseado no termo de busca
   const filteredLeads = useMemo(() => {
@@ -79,6 +80,16 @@ export default function Leads() {
     },
   });
 
+  const toggleAutoSend = trpc.autoSend.toggle.useMutation({
+    onSuccess: () => {
+      setAutoSendEnabled(!autoSendEnabled);
+      toast.success(autoSendEnabled ? "Envio automático desativado" : "Envio automático ativado");
+    },
+    onError: () => {
+      toast.error("Erro ao alterar configuração de auto-envio");
+    },
+  });
+
   const handleToggleEmailStatus = (leadId: number, currentStatus: number) => {
     updateEmailStatus.mutate({
       leadId,
@@ -110,37 +121,49 @@ export default function Leads() {
     <div className="space-y-6">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Leads</h2>
-          <p className="text-muted-foreground mt-1">
-            Gerencie os leads capturados do PerfectPay
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refetch()}
-            className="gap-2"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Atualizar
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => sendToAllPending.mutate()}
-            disabled={sendToAllPending.isPending}
-            className="gap-2"
-          >
-            {sendToAllPending.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            Enviar para Todos Pendentes
-          </Button>
-        </div>
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">Leads</h2>
+            <p className="text-muted-foreground mt-1">
+              Gerencie os leads capturados do PerfectPay
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetch()}
+              className="gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Atualizar
+            </Button>
+            <Button
+              variant={autoSendEnabled ? "destructive" : "default"}
+              size="sm"
+              onClick={() => toggleAutoSend.mutate(!autoSendEnabled)}
+              disabled={toggleAutoSend.isPending}
+              className="gap-2"
+            >
+              {toggleAutoSend.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : null}
+              {autoSendEnabled ? "Desativar Envio Automático" : "Ativar Envio Automático"}
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => sendToAllPending.mutate()}
+              disabled={sendToAllPending.isPending}
+              className="gap-2"
+            >
+              {sendToAllPending.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              Enviar para Todos Pendentes
+            </Button>
+          </div>
         </div>
 
         <div className="flex items-center gap-4">
@@ -233,15 +256,6 @@ export default function Leads() {
                           ? "Marcar Pendente"
                           : "Marcar Enviado"}
                       </Button>
-                      // Botão para ativar/desativar
-                      <button 
-                        onClick={async () => {
-                          await trpc.autoSend.toggle.mutate(!autoSendEnabled);
-                          setAutoSendEnabled(!autoSendEnabled);
-                        }}
-                      >
-                        {autoSendEnabled ? "Desativar Envio Automático" : "Ativar Envio Automático"}
-                      </button>
                     </div>
                   </TableCell>
                 </TableRow>
