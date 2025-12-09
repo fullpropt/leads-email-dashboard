@@ -21,10 +21,22 @@ export default function Leads() {
   const [autoSendEnabled, setAutoSendEnabled] = useState(false);
 
   // Carregar dados dos leads (sem refetchInterval)
-  const { data: leads, isLoading, refetch } = trpc.leads.list.useQuery();
+  const { data: leads, isLoading, refetch } = trpc.leads.list.useQuery(undefined, {
+    staleTime: Infinity,           // Dados nunca ficam "stale" automaticamente
+    gcTime: 1000 * 60 * 60,        // Manter em cache por 1 hora
+    refetchOnWindowFocus: false,   // Nao refetch ao voltar para a aba
+    refetchOnReconnect: false,     // Nao refetch ao reconectar internet
+    refetchOnMount: false,         // Nao refetch ao montar o componente
+  });
 
   // Carregar status do auto-envio
-  const { data: autoSendStatus } = trpc.autoSend.getStatus.useQuery();
+  const { data: autoSendStatus } = trpc.autoSend.getStatus.useQuery(undefined, {
+    staleTime: Infinity,
+    gcTime: 1000 * 60 * 60,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
 
   // Atualizar o estado quando o status for carregado
   useEffect(() => {
