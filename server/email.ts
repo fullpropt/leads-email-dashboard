@@ -1,4 +1,5 @@
-import nodemailer from "nodemailer";
+import FormData from "form-data";
+import fetch from "node-fetch";
 
 export interface SendEmailOptions {
   to: string;
@@ -8,54 +9,72 @@ export interface SendEmailOptions {
 
 export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || "587"),
-      secure: false, // Usar TLS em vez de SSL
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+    const apiKey = process.env.MAILGUN_API_KEY;
+    const domain = process.env.MAILGUN_DOMAIN;
+
+    if (!apiKey || !domain) {
+      console.error("[Email] Mailgun credentials not configured");
+      return false;
+    }
+
+    const form = new FormData();
+    form.append("from", `Support <support@${domain}>`);
+    form.append("to", options.to);
+    form.append("subject", options.subject);
+    form.append("html", options.html);
+
+    const response = await fetch(`https://api.mailgun.net/v3/${domain}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`api:${apiKey}` ).toString("base64")}`,
       },
+      body: form,
     });
 
-    const info = await transporter.sendMail({
-      from: `"${process.env.SMTP_FROM_NAME}" <${process.env.SMTP_USER}>`,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-    });
+    if (!response.ok) {
+      const error = await response.text();
+      console.error("[Email] Erro ao enviar email:", {
+        status: response.status,
+        error,
+      });
+      return false;
+    }
 
-    console.log("[Email] Mensagem enviada: %s", info.messageId);
+    const result = await response.json();
+    console.log("[Email] Mensagem enviada com sucesso:", result);
     return true;
   } catch (error) {
-    console.error("[Email] Erro ao enviar email:", {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
-      user: process.env.SMTP_USER,
-    });
+    console.error("[Email] Erro ao enviar email:", error);
     return false;
   }
 }
 
 export async function testEmailConnection(): Promise<boolean> {
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || "587"),
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+    const apiKey = process.env.MAILGUN_API_KEY;
+    const domain = process.env.MAILGUN_DOMAIN;
+
+    if (!apiKey || !domain) {
+      console.error("[Email] Mailgun credentials not configured");
+      return false;
+    }
+
+    const response = await fetch(`https://api.mailgun.net/v3/${domain}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`api:${apiKey}` ).toString("base64")}`,
       },
     });
 
-    await transporter.verify();
-    console.log("[Email] Conexão SMTP verificada com sucesso");
-    return true;
+    if (response.ok) {
+      console.log("[Email] Conexão Mailgun verificada com sucesso");
+      return true;
+    } else {
+      console.error("[Email] Erro ao verificar conexão Mailgun:", response.status);
+      return false;
+    }
   } catch (error) {
-    console.error("[Email] Erro ao verificar conexão SMTP:", error);
+    console.error("[Email] Erro ao verificar conexão Mailgun:", error);
     return false;
   }
 }
