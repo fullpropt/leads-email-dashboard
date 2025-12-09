@@ -63,20 +63,30 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath =
-    process.env.NODE_ENV === "development"
-      ? path.resolve(import.meta.dirname, "../..", "dist", "public")
-      : path.resolve(import.meta.dirname, "..", "public");
+  const distPath = path.resolve(import.meta.dirname, "..", "public");
+  const indexPath = path.resolve(distPath, "index.html");
+  
+  console.log(`[serveStatic] Serving static files from: ${distPath}`);
+  console.log(`[serveStatic] Index file exists: ${fs.existsSync(indexPath)}`);
+  
   if (!fs.existsSync(distPath)) {
     console.error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`
+      `[ERROR] Could not find the build directory: ${distPath}, make sure to build the client first`
     );
   }
 
-  app.use(express.static(distPath));
+  // Servir arquivos estáticos
+  app.use(express.static(distPath, { 
+    maxAge: "1d",
+    etag: false 
+  }));
 
-  // fall through to index.html if the file doesn't exist
+  // Fallback para index.html (SPA)
   app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).send("Not Found - index.html not found");
+    }
   });
 }
