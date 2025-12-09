@@ -206,3 +206,30 @@ export async function setActiveEmailTemplate(templateId: number) {
     return false;
   }
 }
+export async function getAutoSendStatus() {
+  const db = await getDb();
+  if (!db) return false;
+  
+  const result = await db
+    .select()
+    .from(autoSendConfig)
+    .limit(1);
+  
+  return result.length > 0 ? result[0].ativo === 1 : false;
+}
+
+export async function toggleAutoSend(ativo: boolean) {
+  const db = await getDb();
+  if (!db) return false;
+  
+  try {
+    await db
+      .update(autoSendConfig)
+      .set({ ativo: ativo ? 1 : 0 })
+      .where(eq(autoSendConfig.id, 1));
+    return true;
+  } catch (error) {
+    console.error("Failed to toggle auto send:", error);
+    return false;
+  }
+}
