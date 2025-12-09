@@ -28,7 +28,13 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
     console.log("[Email] Mensagem enviada: %s", info.messageId);
     return true;
   } catch (error) {
-    console.error("[Email] Erro ao enviar email:", error);
+    console.error("[Email] Erro ao enviar email:", {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      user: process.env.SMTP_USER,
+    });
     return false;
   }
 }
