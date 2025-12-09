@@ -5,9 +5,9 @@ import { nanoid } from "nanoid";
 import path from "path";
 
 export async function setupVite(app: Express, server: Server) {
-  // Importação dinâmica de vite (apenas em desenvolvimento)
+  // Importação dinâmica de vite e viteConfig (apenas em desenvolvimento)
   const { createServer: createViteServer } = await import("vite");
-  const viteConfig = (await import("../../vite.config")).default;
+  const { default: viteConfig } = await import("../../vite.config");
 
   const serverOptions = {
     middlewareMode: true,
