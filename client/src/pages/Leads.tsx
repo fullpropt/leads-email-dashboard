@@ -11,28 +11,46 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, XCircle, Loader2, RefreshCw, Mail, Send, ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, RefreshCw, Mail, Send, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useDebounce } from "@/hooks/use-debounce"; // Assumindo que existe ou vamos criar
 
 type FilterStatus = 'all' | 'pending' | 'sent';
 
 export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
+  // Debounce para evitar muitas requisições enquanto digita
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      if (searchTerm !== debouncedSearchTerm) {
+        setCurrentPage(1); // Resetar para página 1 ao mudar busca
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   const [autoSendEnabled, setAutoSendEnabled] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
 
-  // Carregar dados dos leads com paginação
+  // Carregar dados dos leads com paginação E BUSCA SERVER-SIDE
   const { data: leadsData, isLoading, refetch } = trpc.leads.listPaginated.useQuery(
-    { page: currentPage, status: filterStatus },
+    { 
+      page: currentPage, 
+      status: filterStatus,
+      search: debouncedSearchTerm // Enviando termo de busca para o backend
+    },
     {
-      staleTime: Infinity,
+      staleTime: 5000, // Reduzido para refletir atualizações mais rápido
       gcTime: 1000 * 60 * 60,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
-      refetchOnMount: false,
+      refetchOnMount: true,
     }
   );
 
@@ -52,18 +70,8 @@ export default function Leads() {
     }
   }, [autoSendStatus]);
 
-  // Filtrar leads baseado no termo de busca (local)
-  const filteredLeads = useMemo(() => {
-    if (!leadsData?.leads) return [];
-    if (!searchTerm.trim()) return leadsData.leads;
-
-    const term = searchTerm.toLowerCase();
-    return leadsData.leads.filter(
-      (lead) =>
-        lead.nome.toLowerCase().includes(term) ||
-        lead.email.toLowerCase().includes(term)
-    );
-  }, [leadsData?.leads, searchTerm]);
+  // NÃO FILTRAR MAIS NO FRONTEND - Usar dados diretos do backend
+  const leads = leadsData?.leads || [];
 
   const updateEmailStatus = trpc.leads.updateEmailStatus.useMutation({
     onSuccess: () => {
@@ -137,14 +145,6 @@ export default function Leads() {
     return format(new Date(date), "dd/MM/yyyy HH:mm", { locale: ptBR });
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   const totalPages = leadsData?.totalPages || 1;
   const total = leadsData?.total || 0;
 
@@ -165,7 +165,7 @@ export default function Leads() {
               onClick={() => refetch()}
               className="gap-2"
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               Atualizar
             </Button>
             <Button
@@ -198,12 +198,13 @@ export default function Leads() {
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="flex-1 max-w-md">
+          <div className="flex-1 max-w-md relative">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nome ou email..."
+              placeholder="Buscar por nome, email ou produto..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full"
+              className="w-full pl-8"
             />
           </div>
           {searchTerm && (
@@ -223,7 +224,7 @@ export default function Leads() {
             size="sm"
             onClick={() => handleFilterChange('all')}
           >
-            Todos ({total})
+            Todos
           </Button>
           <Button
             variant={filterStatus === 'pending' ? 'default' : 'outline'}
@@ -258,8 +259,17 @@ export default function Leads() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredLeads && filteredLeads.length > 0 ? (
-              filteredLeads.map((lead) => (
+            {isLoading ? (
+               <TableRow>
+                <TableCell colSpan={9} className="text-center py-12">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-muted-foreground">Carregando leads...</p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : leads && leads.length > 0 ? (
+              leads.map((lead) => (
                 <TableRow key={lead.id}>
                   <TableCell className="font-medium">{lead.id}</TableCell>
                   <TableCell>{lead.nome}</TableCell>
@@ -319,8 +329,8 @@ export default function Leads() {
               <TableRow>
                 <TableCell colSpan={9} className="text-center py-12">
                   <p className="text-muted-foreground">
-                    {searchTerm
-                      ? "Nenhum lead encontrado com esse termo de busca"
+                    {debouncedSearchTerm
+                      ? `Nenhum lead encontrado para "${debouncedSearchTerm}"`
                       : "Nenhum lead encontrado"}
                   </p>
                 </TableCell>
@@ -334,10 +344,9 @@ export default function Leads() {
         <div className="text-sm text-muted-foreground">
           {leadsData && leadsData.total > 0 ? (
             <>
-              Exibindo <span className="font-semibold">{filteredLeads.length}</span> de{" "}
+              Exibindo <span className="font-semibold">{leads.length}</span> de{" "}
               <span className="font-semibold">{leadsData.total}</span> leads
-              {searchTerm && ` (filtrados por busca)`}
-              {filterStatus !== 'all' && ` (filtrados por status)`}
+              {debouncedSearchTerm && ` (filtrados por busca)`}
             </>
           ) : (
             <>
@@ -360,17 +369,9 @@ export default function Leads() {
             </Button>
 
             <div className="flex items-center gap-2">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <Button
-                  key={page}
-                  variant={currentPage === page ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => handlePageChange(page)}
-                  className="min-w-10"
-                >
-                  {page}
-                </Button>
-              ))}
+              <span className="text-sm font-medium">
+                Página {currentPage} de {totalPages}
+              </span>
             </div>
 
             <Button
