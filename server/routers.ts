@@ -77,6 +77,19 @@ export const appRouter = router({
         const success = await setActiveEmailTemplate(input.templateId);
         return { success };
       }),
+    previewWithFirstLead: publicProcedure
+      .input(z.object({ htmlContent: z.string() }))
+      .query(async ({ input }) => {
+        const { getAllLeads, replaceTemplateVariables } = await import("./db");
+        
+        const leads = await getAllLeads();
+        if (leads.length === 0) {
+          return { success: false, html: input.htmlContent, message: "Nenhum lead disponivel para preview" };
+        }
+        
+        const html = replaceTemplateVariables(input.htmlContent, leads[0]);
+        return { success: true, html, message: "Preview gerado com sucesso" };
+      }),
   }),
 
   // Routers para envio de emails
@@ -84,7 +97,7 @@ export const appRouter = router({
     sendToLead: publicProcedure
       .input(z.object({ leadId: z.number() }))
       .mutation(async ({ input }) => {
-        const { getAllLeads, updateLeadEmailStatus } = await import("./db");
+        const { getAllLeads, updateLeadEmailStatus, replaceTemplateVariables } = await import("./db");
         const { getActiveEmailTemplate } = await import("./db");
         const { sendEmail } = await import("./email");
 
@@ -101,20 +114,8 @@ export const appRouter = router({
           return { success: false, message: "Nenhum template ativo encontrado" };
         }
 
-        // Substituir variáveis no HTML
-        let htmlContent = template.htmlContent;
-        // Variáveis padrão
-        htmlContent = htmlContent.replace(/\{\{nome\}\}/g, lead.nome || "");
-        htmlContent = htmlContent.replace(/\{\{email\}\}/g, lead.email || "");
-        htmlContent = htmlContent.replace(/\{\{produto\}\}/g, lead.produto || "");
-        htmlContent = htmlContent.replace(/\{\{plano\}\}/g, lead.plano || "");
-        htmlContent = htmlContent.replace(/\{\{valor\}\}/g, lead.valor ? \`R$ \${Number(lead.valor).toFixed(2).replace('.', ',')}\` : "R$ 0,00");
-        htmlContent = htmlContent.replace(/\{\{data_compra\}\}/g, lead.dataAprovacao ? new Date(lead.dataAprovacao).toLocaleDateString('pt-BR') : "");
-        
-        // Variáveis em inglês (compatibilidade)
-        htmlContent = htmlContent.replace(/\{CUSTOMER_NAME\}/g, lead.nome || "");
-        htmlContent = htmlContent.replace(/\{CUSTOMER_EMAIL\}/g, lead.email || "");
-        htmlContent = htmlContent.replace(/\{PRODUCT_NAME\}/g, lead.produto || "");
+        // Substituir variáveis no HTML usando função utilitária
+        const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
 
         // Enviar email
         const success = await sendEmail({
@@ -131,7 +132,7 @@ export const appRouter = router({
         }
       }),
     sendToAllPending: publicProcedure.mutation(async () => {
-      const { getAllLeads, updateLeadEmailStatus } = await import("./db");
+      const { getAllLeads, updateLeadEmailStatus, replaceTemplateVariables } = await import("./db");
       const { getActiveEmailTemplate } = await import("./db");
       const { sendEmail } = await import("./email");
 
@@ -151,19 +152,7 @@ export const appRouter = router({
       let failed = 0;
 
       for (const lead of pendingLeads) {
-        let htmlContent = template.htmlContent;
-        // Variáveis padrão
-        htmlContent = htmlContent.replace(/\{\{nome\}\}/g, lead.nome || "");
-        htmlContent = htmlContent.replace(/\{\{email\}\}/g, lead.email || "");
-        htmlContent = htmlContent.replace(/\{\{produto\}\}/g, lead.produto || "");
-        htmlContent = htmlContent.replace(/\{\{plano\}\}/g, lead.plano || "");
-        htmlContent = htmlContent.replace(/\{\{valor\}\}/g, lead.valor ? \`R$ \${Number(lead.valor).toFixed(2).replace('.', ',')}\` : "R$ 0,00");
-        htmlContent = htmlContent.replace(/\{\{data_compra\}\}/g, lead.dataAprovacao ? new Date(lead.dataAprovacao).toLocaleDateString('pt-BR') : "");
-        
-        // Variáveis em inglês (compatibilidade)
-        htmlContent = htmlContent.replace(/\{CUSTOMER_NAME\}/g, lead.nome || "");
-        htmlContent = htmlContent.replace(/\{CUSTOMER_EMAIL\}/g, lead.email || "");
-        htmlContent = htmlContent.replace(/\{PRODUCT_NAME\}/g, lead.produto || "");
+        const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
 
         const success = await sendEmail({
           to: lead.email,
@@ -178,7 +167,6 @@ export const appRouter = router({
           failed++;
         }
 
-        // Delay de 1 segundo entre envios para evitar rate limiting
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
 
