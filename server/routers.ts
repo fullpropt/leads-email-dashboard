@@ -25,11 +25,15 @@ export const appRouter = router({
       return getAllLeads();
     }),
     listPaginated: publicProcedure
-      .input(z.object({ page: z.number().min(1).default(1), status: z.enum(['pending', 'sent', 'all']).default('all') }))
+      .input(z.object({ 
+        page: z.number().min(1).default(1), 
+        status: z.enum(['pending', 'sent', 'all']).default('all'),
+        search: z.string().optional()
+      }))
       .query(async ({ input }) => {
         const { getLeadsWithPagination } = await import("./db");
         const status = input.status === 'all' ? undefined : input.status;
-        return getLeadsWithPagination(input.page, status);
+        return getLeadsWithPagination(input.page, status, input.search);
       }),
     updateEmailStatus: publicProcedure
       .input(z.object({ leadId: z.number(), enviado: z.boolean() }))
@@ -99,10 +103,18 @@ export const appRouter = router({
 
         // Substituir variáveis no HTML
         let htmlContent = template.htmlContent;
-        htmlContent = htmlContent.replace(/\{\{nome\}\}/g, lead.nome);
-        htmlContent = htmlContent.replace(/\{\{email\}\}/g, lead.email);
+        // Variáveis padrão
+        htmlContent = htmlContent.replace(/\{\{nome\}\}/g, lead.nome || "");
+        htmlContent = htmlContent.replace(/\{\{email\}\}/g, lead.email || "");
         htmlContent = htmlContent.replace(/\{\{produto\}\}/g, lead.produto || "");
         htmlContent = htmlContent.replace(/\{\{plano\}\}/g, lead.plano || "");
+        htmlContent = htmlContent.replace(/\{\{valor\}\}/g, lead.valor ? \`R$ \${Number(lead.valor).toFixed(2).replace('.', ',')}\` : "R$ 0,00");
+        htmlContent = htmlContent.replace(/\{\{data_compra\}\}/g, lead.dataAprovacao ? new Date(lead.dataAprovacao).toLocaleDateString('pt-BR') : "");
+        
+        // Variáveis em inglês (compatibilidade)
+        htmlContent = htmlContent.replace(/\{CUSTOMER_NAME\}/g, lead.nome || "");
+        htmlContent = htmlContent.replace(/\{CUSTOMER_EMAIL\}/g, lead.email || "");
+        htmlContent = htmlContent.replace(/\{PRODUCT_NAME\}/g, lead.produto || "");
 
         // Enviar email
         const success = await sendEmail({
@@ -140,10 +152,18 @@ export const appRouter = router({
 
       for (const lead of pendingLeads) {
         let htmlContent = template.htmlContent;
-        htmlContent = htmlContent.replace(/\{\{nome\}\}/g, lead.nome);
-        htmlContent = htmlContent.replace(/\{\{email\}\}/g, lead.email);
+        // Variáveis padrão
+        htmlContent = htmlContent.replace(/\{\{nome\}\}/g, lead.nome || "");
+        htmlContent = htmlContent.replace(/\{\{email\}\}/g, lead.email || "");
         htmlContent = htmlContent.replace(/\{\{produto\}\}/g, lead.produto || "");
         htmlContent = htmlContent.replace(/\{\{plano\}\}/g, lead.plano || "");
+        htmlContent = htmlContent.replace(/\{\{valor\}\}/g, lead.valor ? \`R$ \${Number(lead.valor).toFixed(2).replace('.', ',')}\` : "R$ 0,00");
+        htmlContent = htmlContent.replace(/\{\{data_compra\}\}/g, lead.dataAprovacao ? new Date(lead.dataAprovacao).toLocaleDateString('pt-BR') : "");
+        
+        // Variáveis em inglês (compatibilidade)
+        htmlContent = htmlContent.replace(/\{CUSTOMER_NAME\}/g, lead.nome || "");
+        htmlContent = htmlContent.replace(/\{CUSTOMER_EMAIL\}/g, lead.email || "");
+        htmlContent = htmlContent.replace(/\{PRODUCT_NAME\}/g, lead.produto || "");
 
         const success = await sendEmail({
           to: lead.email,
