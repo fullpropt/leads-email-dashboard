@@ -108,7 +108,8 @@ export async function getAllLeads() {
 
 export async function getLeadsWithPagination(
   page: number = 1,
-  status?: 'pending' | 'sent'
+  status?: 'pending' | 'sent',
+  search?: string
 ) {
   const db = await getDb();
   if (!db) {
@@ -120,23 +121,39 @@ export async function getLeadsWithPagination(
   const offset = (page - 1) * pageSize;
 
   try {
-    // Construir a query com filtro opcional
-    let query = db.select().from(leads);
-
+    // Construir condições de filtro
+    const conditions = [];
+    
     if (status === 'pending') {
-      query = query.where(eq(leads.emailEnviado, 0));
+      conditions.push(eq(leads.emailEnviado, 0));
     } else if (status === 'sent') {
-      query = query.where(eq(leads.emailEnviado, 1));
+      conditions.push(eq(leads.emailEnviado, 1));
+    }
+
+    if (search) {
+      const searchLike = sql`%${search}%`;
+      conditions.push(
+        sql`(${leads.nome} LIKE ${searchLike} OR ${leads.email} LIKE ${searchLike} OR ${leads.produto} LIKE ${searchLike})`
+      );
+    }
+
+    // Construir a query principal
+    let query = db.select().from(leads);
+    
+    // Aplicar filtros se existirem
+    if (conditions.length > 0) {
+      // @ts-ignore - and() aceita múltiplos argumentos
+      const { and } = await import("drizzle-orm");
+      query = query.where(and(...conditions));
     }
 
     // Contar total de registros com o filtro
-    const countQuery = db.select({ count: sql`COUNT(*)` }).from(leads);
-    let countQueryWithFilter = countQuery;
+    let countQueryWithFilter = db.select({ count: sql`COUNT(*)` }).from(leads);
     
-    if (status === 'pending') {
-      countQueryWithFilter = db.select({ count: sql`COUNT(*)` }).from(leads).where(eq(leads.emailEnviado, 0));
-    } else if (status === 'sent') {
-      countQueryWithFilter = db.select({ count: sql`COUNT(*)` }).from(leads).where(eq(leads.emailEnviado, 1));
+    if (conditions.length > 0) {
+      // @ts-ignore
+      const { and } = await import("drizzle-orm");
+      countQueryWithFilter = countQueryWithFilter.where(and(...conditions));
     }
 
     const [countResult] = await countQueryWithFilter;
