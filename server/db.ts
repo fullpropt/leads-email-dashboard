@@ -147,7 +147,7 @@ export async function getLeadsWithPagination(
       query = query.where(and(...conditions));
     }
 
-    // Contar total de registros com o filtro
+    // Contar total de registros com o filtro (BUSCA EM TODO O BANCO DE DADOS)
     let countQueryWithFilter = db.select({ count: sql`COUNT(*)` }).from(leads);
     
     if (conditions.length > 0) {
@@ -159,18 +159,27 @@ export async function getLeadsWithPagination(
     const [countResult] = await countQueryWithFilter;
     const total = Number(countResult?.count || 0);
 
-    // Buscar leads com paginação
-    const result = await query
-      .orderBy(desc(leads.dataCriacao))
-      .limit(pageSize)
-      .offset(offset);
+    // Buscar leads com paginação (RETORNA TODOS OS RESULTADOS ENCONTRADOS, NÃO APENAS OS 30 DA PÁGINA)
+    // Se houver busca, retorna todos os resultados encontrados sem limitar a 30
+    let result;
+    if (search) {
+      // Para buscas, retorna todos os resultados encontrados
+      result = await query
+        .orderBy(desc(leads.dataCriacao));
+    } else {
+      // Para listagem normal, aplica paginação
+      result = await query
+        .orderBy(desc(leads.dataCriacao))
+        .limit(pageSize)
+        .offset(offset);
+    }
 
     return {
       leads: result,
       total,
       page,
-      pageSize,
-      totalPages: Math.ceil(total / pageSize),
+      pageSize: search ? result.length : pageSize,
+      totalPages: search ? 1 : Math.ceil(total / pageSize),
     };
   } catch (error) {
     console.error("[Database] Failed to get leads with pagination:", error);
@@ -323,4 +332,28 @@ export async function toggleAutoSend(ativo: boolean) {
     console.error("[Database] Failed to toggle auto send:", error);
     return false;
   }
+}
+
+// ========================================================================
+// UTILITY FUNCTION FOR TEMPLATE VARIABLE SUBSTITUTION
+// ========================================================================
+
+export function replaceTemplateVariables(htmlContent: string, lead: Lead): string {
+  let result = htmlContent;
+  
+  result = result.replace(/\{\{nome\}\}/g, lead.nome || "");
+  result = result.replace(/\{\{email\}\}/g, lead.email || "");
+  result = result.replace(/\{\{produto\}\}/g, lead.produto || "");
+  result = result.replace(/\{\{plano\}\}/g, lead.plano || "");
+  result = result.replace(/\{\{valor\}\}/g, lead.valor ? `R$ ${Number(lead.valor).toFixed(2).replace(".", ",")}` : "R$ 0,00");
+  result = result.replace(/\{\{data_compra\}\}/g, lead.dataAprovacao ? new Date(lead.dataAprovacao).toLocaleDateString("pt-BR") : "");
+  
+  result = result.replace(/\{CUSTOMER_NAME\}/g, lead.nome || "");
+  result = result.replace(/\{CUSTOMER_EMAIL\}/g, lead.email || "");
+  result = result.replace(/\{PRODUCT_NAME\}/g, lead.produto || "");
+  result = result.replace(/\{PLAN_NAME\}/g, lead.plano || "");
+  result = result.replace(/\{SALE_VALUE\}/g, lead.valor ? `R$ ${Number(lead.valor).toFixed(2).replace(".", ",")}` : "R$ 0,00");
+  result = result.replace(/\{PURCHASE_DATE\}/g, lead.dataAprovacao ? new Date(lead.dataAprovacao).toLocaleDateString("pt-BR") : "");
+  
+  return result;
 }
