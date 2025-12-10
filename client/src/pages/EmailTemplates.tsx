@@ -55,12 +55,22 @@ export default function EmailTemplates() {
     reader.readAsText(file);
   };
 
-  const handlePreview = () => {
+  const previewTemplate = trpc.emailTemplates.previewWithFirstLead.useQuery(
+    { htmlContent },
+    { enabled: false }
+  );
+
+  const handlePreview = async () => {
     if (!htmlContent) {
       toast.error("Nenhum conteúdo HTML para pré-visualizar");
       return;
     }
-    setPreviewHtml(htmlContent);
+    const result = await previewTemplate.refetch();
+    if (result.data?.success) {
+      setPreviewHtml(result.data.html);
+    } else {
+      toast.error(result.data?.message || "Erro ao gerar pré-visualização");
+    }
   };
 
   const handleSaveTemplate = () => {
@@ -102,7 +112,7 @@ export default function EmailTemplates() {
             <CardHeader>
               <CardTitle>Novo Template de Email</CardTitle>
               <CardDescription>
-                Faça upload de um arquivo HTML para criar um novo template. Use as variáveis: {"{{nome}}"}, {"{{email}}"}, {"{{produto}}"}, {"{{plano}}"}
+                Faça upload de um arquivo HTML para criar um novo template. Use as variáveis: {"{{nome}}"}, {"{{email}}"}, {"{{produto}}"}, {"{{plano}}"}, {"{{valor}}"}, {"{{data_compra}}"} ou {"{{CUSTOMER_NAME}}"}, {"{{CUSTOMER_EMAIL}}"}, {"{{PRODUCT_NAME}}"}, {"{{PLAN_NAME}}"}, {"{{SALE_VALUE}}"}, {"{{PURCHASE_DATE}}"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -207,7 +217,7 @@ export default function EmailTemplates() {
             <CardHeader>
               <CardTitle>Pré-visualização do Email</CardTitle>
               <CardDescription>
-                Visualize como o email será exibido para os destinatários
+                Visualize como o email será exibido para os destinatários (com dados do primeiro lead)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -226,7 +236,7 @@ export default function EmailTemplates() {
                   <p>Nenhum template para pré-visualizar</p>
                   <p className="text-sm mt-2">
                     Faça upload de um template ou clique em "Pré-visualizar" após
-                    adicionar conteúdo HTML
+                    adicionar conteúdo HTML. As variáveis serão substituídas pelos dados do primeiro lead.
                   </p>
                 </div>
               )}
