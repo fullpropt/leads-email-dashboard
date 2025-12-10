@@ -131,9 +131,9 @@ export async function getLeadsWithPagination(
     }
 
     if (search) {
-      const searchLike = sql`%${search}%`;
+      const searchPattern = `%${search}%`;
       conditions.push(
-        sql`(${leads.nome} LIKE ${searchLike} OR ${leads.email} LIKE ${searchLike} OR ${leads.produto} LIKE ${searchLike})`
+        sql`(${leads.nome} LIKE ${searchPattern} OR ${leads.email} LIKE ${searchPattern} OR ${leads.produto} LIKE ${searchPattern})`
       );
     }
 
@@ -340,20 +340,25 @@ export async function toggleAutoSend(ativo: boolean) {
 
 export function replaceTemplateVariables(htmlContent: string, lead: Lead): string {
   let result = htmlContent;
+  const currentYear = new Date().getFullYear();
   
+  // Variáveis em formato {{variavel}}
   result = result.replace(/\{\{nome\}\}/g, lead.nome || "");
   result = result.replace(/\{\{email\}\}/g, lead.email || "");
   result = result.replace(/\{\{produto\}\}/g, lead.produto || "");
   result = result.replace(/\{\{plano\}\}/g, lead.plano || "");
   result = result.replace(/\{\{valor\}\}/g, lead.valor ? `R$ ${Number(lead.valor).toFixed(2).replace(".", ",")}` : "R$ 0,00");
   result = result.replace(/\{\{data_compra\}\}/g, lead.dataAprovacao ? new Date(lead.dataAprovacao).toLocaleDateString("pt-BR") : "");
+  result = result.replace(/\{\{year\}\}/g, currentYear.toString());
   
+  // Variáveis em formato {VARIAVEL}
   result = result.replace(/\{CUSTOMER_NAME\}/g, lead.nome || "");
   result = result.replace(/\{CUSTOMER_EMAIL\}/g, lead.email || "");
   result = result.replace(/\{PRODUCT_NAME\}/g, lead.produto || "");
   result = result.replace(/\{PLAN_NAME\}/g, lead.plano || "");
   result = result.replace(/\{SALE_VALUE\}/g, lead.valor ? `R$ ${Number(lead.valor).toFixed(2).replace(".", ",")}` : "R$ 0,00");
   result = result.replace(/\{PURCHASE_DATE\}/g, lead.dataAprovacao ? new Date(lead.dataAprovacao).toLocaleDateString("pt-BR") : "");
+  result = result.replace(/\{YEAR\}/g, currentYear.toString());
   
   return result;
 }
