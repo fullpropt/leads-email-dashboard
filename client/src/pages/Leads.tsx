@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { useMemo, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,28 +15,23 @@ import { CheckCircle2, XCircle, Loader2, RefreshCw, Mail, Send, ChevronLeft, Che
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useDebounce } from "@/hooks/use-debounce"; // Assumindo que existe ou vamos criar
+import { useDebounce } from "@/hooks/use-debounce";
 
 type FilterStatus = 'all' | 'pending' | 'sent';
 
 export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
-  // Debounce para evitar muitas requisições enquanto digita
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  // Usando o hook useDebounce para evitar muitas requisições
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
   
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-      if (searchTerm !== debouncedSearchTerm) {
-        setCurrentPage(1); // Resetar para página 1 ao mudar busca
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-
   const [autoSendEnabled, setAutoSendEnabled] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+
+  // Resetar para página 1 quando o termo de busca mudar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchTerm]);
 
   // Carregar dados dos leads com paginação E BUSCA SERVER-SIDE
   const { data: leadsData, isLoading, refetch } = trpc.leads.listPaginated.useQuery(
@@ -46,7 +41,7 @@ export default function Leads() {
       search: debouncedSearchTerm // Enviando termo de busca para o backend
     },
     {
-      staleTime: 5000, // Reduzido para refletir atualizações mais rápido
+      staleTime: 5000,
       gcTime: 1000 * 60 * 60,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
