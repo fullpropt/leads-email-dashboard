@@ -8,12 +8,12 @@ RUN npm install -g pnpm@10.4.1
 WORKDIR /app
 
 # Copy package files and patches
-COPY package.json pnpm-lock.yaml ./
+COPY package.json ./
 COPY patches ./patches
 
 # Install dependencies
 FROM base AS dependencies
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Build stage
 FROM base AS build
@@ -32,9 +32,9 @@ RUN npm install -g pnpm@10.4.1
 WORKDIR /app
 
 # Copy package files, patches and install production dependencies only
-COPY package.json pnpm-lock.yaml ./
+COPY package.json ./
 COPY patches ./patches
-RUN pnpm install --prod --frozen-lockfile
+RUN pnpm install --prod --no-frozen-lockfile
 
 # Copy built application from build stage
 COPY --from=build /app/dist ./dist
