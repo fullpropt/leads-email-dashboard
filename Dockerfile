@@ -32,11 +32,11 @@ RUN npm install -g pnpm@10.4.1
 
 WORKDIR /app
 
-# Copy package files, patches and install production dependencies only
+# Copy package files, patches and install all dependencies
 COPY package.json ./
 COPY patches ./patches
 RUN pnpm store prune
-RUN pnpm install --prod --no-frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Copy built application from build stage
 COPY --from=build /app/dist ./dist
