@@ -13,6 +13,7 @@ COPY patches ./patches
 
 # Install dependencies
 FROM base AS dependencies
+RUN pnpm store prune
 RUN pnpm install --no-frozen-lockfile
 
 # Build stage
@@ -34,6 +35,7 @@ WORKDIR /app
 # Copy package files, patches and install production dependencies only
 COPY package.json ./
 COPY patches ./patches
+RUN pnpm store prune
 RUN pnpm install --prod --no-frozen-lockfile
 
 # Copy built application from build stage
