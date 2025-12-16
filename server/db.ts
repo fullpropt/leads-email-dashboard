@@ -1,6 +1,6 @@
-import { desc, eq, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
-import { autoSendConfig, emailTemplates, InsertEmailTemplate, InsertLead, InsertUser, Lead, leads, users } from "../drizzle/schema";
+import { desc, eq, sql, and } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { autoSendConfig, emailTemplates, InsertEmailTemplate, InsertLead, InsertUser, Lead, leads, users } from "../drizzle/schema_postgresql";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -9,9 +9,7 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL, {
-        mode: 'default',
-      });
+      _db = drizzle(process.env.DATABASE_URL);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -70,7 +68,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
+    await db.insert(users).values(values).onConflictDoUpdate({
+      target: users.openId,
       set: updateSet,
     });
   } catch (error) {
@@ -142,8 +141,6 @@ export async function getLeadsWithPagination(
     
     // Aplicar filtros se existirem
     if (conditions.length > 0) {
-      // @ts-ignore - and() aceita múltiplos argumentos
-      const { and } = await import("drizzle-orm");
       query = query.where(and(...conditions));
     }
 
@@ -151,8 +148,6 @@ export async function getLeadsWithPagination(
     let countQueryWithFilter = db.select({ count: sql`COUNT(*)` }).from(leads);
     
     if (conditions.length > 0) {
-      // @ts-ignore
-      const { and } = await import("drizzle-orm");
       countQueryWithFilter = countQueryWithFilter.where(and(...conditions));
     }
 
