@@ -244,6 +244,43 @@ export async function getAllEmailTemplates() {
   return result;
 }
 
+export async function updateEmailTemplate(templateId: number, updates: Partial<InsertEmailTemplate>) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update template: database not available");
+    return false;
+  }
+
+  try {
+    await db
+      .update(emailTemplates)
+      .set(updates)
+      .where(eq(emailTemplates.id, templateId));
+    return true;
+  } catch (error) {
+    console.error("[Database] Failed to update email template:", error);
+    return false;
+  }
+}
+
+export async function deleteEmailTemplate(templateId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete template: database not available");
+    return false;
+  }
+
+  try {
+    await db
+      .delete(emailTemplates)
+      .where(eq(emailTemplates.id, templateId));
+    return true;
+  } catch (error) {
+    console.error("[Database] Failed to delete email template:", error);
+    return false;
+  }
+}
+
 export async function createEmailTemplate(template: InsertEmailTemplate) {
   const db = await getDb();
   if (!db) {

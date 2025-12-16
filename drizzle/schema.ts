@@ -46,7 +46,7 @@ export type Lead = typeof leads.$inferSelect;
 export type InsertLead = typeof leads.$inferInsert;
 
 /**
- * Tabela para armazenar templates de email HTML
+ * Tabela para armazenar templates de email HTML com agendamento
  */
 export const emailTemplates = mysqlTable("email_templates", {
   id: int("id").autoincrement().primaryKey(),
@@ -54,6 +54,13 @@ export const emailTemplates = mysqlTable("email_templates", {
   assunto: varchar("assunto", { length: 500 }).notNull(),
   htmlContent: text("html_content").notNull(),
   ativo: int("ativo").notNull().default(1), // 0 = inativo, 1 = ativo
+  // Configurações de agendamento
+  scheduleEnabled: int("schedule_enabled").notNull().default(0), // 0 = desativado, 1 = ativado
+  scheduleTime: varchar("schedule_time", { length: 5 }), // formato HH:MM
+  scheduleInterval: int("schedule_interval").notNull().default(1), // intervalo em dias
+  scheduleIntervalType: varchar("schedule_interval_type", { length: 10 }).notNull().default("days"), // "days" ou "weeks"
+  lastSentAt: timestamp("last_sent_at"), // última vez que foi enviado
+  nextSendAt: timestamp("next_send_at"), // próxima data de envio
   criadoEm: timestamp("criado_em").defaultNow().notNull(),
   atualizadoEm: timestamp("atualizado_em").defaultNow().onUpdateNow().notNull(),
 });

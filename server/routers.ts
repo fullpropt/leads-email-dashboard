@@ -70,6 +70,33 @@ export const appRouter = router({
         });
         return { success: !!templateId, templateId };
       }),
+    update: publicProcedure
+      .input(
+        z.object({
+          templateId: z.number(),
+          updates: z.object({
+            nome: z.string().min(1).optional(),
+            assunto: z.string().min(1).optional(),
+            htmlContent: z.string().min(1).optional(),
+            scheduleEnabled: z.number().min(0).max(1).optional(),
+            scheduleTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+            scheduleInterval: z.number().min(1).optional(),
+            scheduleIntervalType: z.enum(["days", "weeks"]).optional(),
+          }),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { updateEmailTemplate } = await import("./db");
+        const success = await updateEmailTemplate(input.templateId, input.updates);
+        return { success };
+      }),
+    delete: publicProcedure
+      .input(z.object({ templateId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { deleteEmailTemplate } = await import("./db");
+        const success = await deleteEmailTemplate(input.templateId);
+        return { success };
+      }),
     setActive: publicProcedure
       .input(z.object({ templateId: z.number() }))
       .mutation(async ({ input }) => {
