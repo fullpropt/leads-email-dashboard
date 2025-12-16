@@ -1,10 +1,12 @@
-import { serial, pgEnum, pgTable, text, timestamp, varchar, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, text, pgEnum, timestamp, integer } from 'drizzle-orm/pg-core';
 
 /**
  * Core user table backing auth flow.
  * Extend this file with additional tables as your product grows.
  * Columns use camelCase to match both database fields and generated types.
  */
+export const roleEnum = pgEnum('role', ['user', 'admin']);
+
 export const users = pgTable("users", {
   /**
    * Surrogate primary key. Auto-incremented numeric value managed by the database.
@@ -16,7 +18,7 @@ export const users = pgTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: pgEnum("role", ["user", "admin"]),
+  role: roleEnum("role"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
