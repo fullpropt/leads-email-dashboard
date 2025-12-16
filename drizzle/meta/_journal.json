@@ -15,6 +15,13 @@
       "when": 1765224529208,
       "tag": "0001_swift_queen_noir",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1765852814488,
+      "tag": "0002_glossy_pestilence",
+      "breakpoints": true
     }
   ]
 }
