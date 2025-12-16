@@ -24,9 +24,6 @@ COPY . .
 # Build the application
 RUN pnpm run build
 
-# Run database migrations
-RUN pnpm db:push
-
 # Production stage
 FROM node:22.13.0-alpine AS production
 
@@ -48,6 +45,10 @@ COPY --from=build /app/server ./server
 COPY --from=build /app/shared ./shared
 COPY --from=build /app/drizzle ./drizzle
 
+# Copy the startup script
+COPY start.sh ./
+RUN chmod +x start.sh
+
 # Expose port (Railway will set PORT env var)
 EXPOSE 3000
 
@@ -56,4 +57,4 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 # Start the application
-CMD ["pnpm", "start"]
+CMD ["./start.sh"]
