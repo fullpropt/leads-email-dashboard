@@ -24,6 +24,9 @@ COPY . .
 # Build the application
 RUN pnpm run build
 
+# Run database migrations
+RUN pnpm db:push
+
 # Production stage
 FROM node:22.13.0-alpine AS production
 
