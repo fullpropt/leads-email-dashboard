@@ -8,8 +8,10 @@ import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || "";
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || "";
-const GITHUB_REDIRECT_URI = process.env.GITHUB_REDIRECT_URI || "https://dashboard.acessaragora.digital/api/github/callback";
-console.log("[OAuth] Using GitHub Redirect URI:", GITHUB_REDIRECT_URI);
+let GITHUB_REDIRECT_URI = process.env.GITHUB_REDIRECT_URI || "https://dashboard.acessaragora.digital/api/github/callback";
+if (process.env.GITHUB_REDIRECT_URI && !process.env.GITHUB_REDIRECT_URI.startsWith("http")) {
+  GITHUB_REDIRECT_URI = `https://` + process.env.GITHUB_REDIRECT_URI;
+}
 
 interface GitHubUser {
   id: number;
