@@ -1,99 +1,156 @@
-import "dotenv/config";
-import express from "express";
-import { createServer } from "http";
-import net from "net";
-import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerGitHubOAuthRoutes } from "./github-oauth";
-import { appRouter } from "../routers";
-import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
-import { processWebhook } from "../webhooks";
+import { InsertLead } from "../drizzle/schema_postgresql";
 
-function isPortAvailable(port: number ): Promise<boolean> {
-  return new Promise(resolve => {
-    const server = net.createServer();
-    server.listen(port, () => {
-      server.close(() => resolve(true));
-    });
-    server.on("error", () => resolve(false));
-  });
-}
+/**
+ * Processa webhooks recebidos do PerfectPay
+ * Esperado receber um payload com informações de transação aprovada
+ */
+export async function processWebhook(payload: any) {
+  try {
+    console.log("[Webhook] Processando payload:", JSON.stringify(payload, null, 2));
 
-async function findAvailablePort(startPort: number = 3000): Promise<number> {
-  for (let port = startPort; port < startPort + 20; port++) {
-    if (await isPortAvailable(port)) {
-      return port;
-    }
-  }
-  throw new Error(`No available port found starting from ${startPort}`);
-}
-
-async function startServer() {
-  const app = express();
-  const server = createServer(app);
-  
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  
-  // GitHub OAuth routes (removed Manus OAuth)
-  registerGitHubOAuthRoutes(app);
-  
-  // Webhook para PerfectPay
-  app.post("/api/webhooks/perfectpay", async (req, res) => {
-    try {
-      console.log("[Server] Webhook recebido em /api/webhooks/perfectpay");
-      console.log("[Server] Headers:", req.headers);
-      console.log("[Server] Body:", req.body);
-
-      const result = await processWebhook(req.body);
-      
-      // Retornar 200 OK mesmo que haja erro (PerfectPay pode retentar)
-      res.status(200).json(result);
-    } catch (error) {
-      console.error("[Server] Erro ao processar webhook:", error);
-      res.status(200).json({
+    // Validar se o payload contém os dados necessários
+    if (!payload) {
+      console.warn("[Webhook] Payload vazio recebido");
+      return {
         success: false,
-        message: "Erro ao processar webhook",
-      });
+        message: "Payload vazio",
+      };
     }
-  });
 
-  // Health check para o webhook
-  app.get("/api/webhooks/health", (req, res) => {
-    res.status(200).json({
-      status: "ok",
-      message: "Webhook endpoint está funcionando",
-    });
-  });
-  
-  // tRPC API
-  app.use(
-    "/api/trpc",
-    createExpressMiddleware({
-      router: appRouter,
-      createContext,
-    })
-  );
-  
-  // development mode uses Vite, production mode uses static files
-  if (process.env.NODE_ENV === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
+    // Extrair dados do webhook do PerfectPay
+    // O formato esperado pode variar, adapte conforme a documentação do PerfectPay
+    const {
+      customer_name,
+      customer_email,
+      product_name,
+      plan_name,
+      sale_value,
+      transaction_id,
+      status,
+    } = payload;
+
+    // Validar campos obrigatórios
+    if (!customer_email || !customer_name) {
+      console.warn("[Webhook] Email ou nome do cliente não fornecido");
+      return {
+        success: false,
+        message: "Email e nome do cliente são obrigatórios",
+      };
+    }
+
+    // Apenas processar transações aprovadas
+    if (status && status !== "approved" && status !== "completed") {
+      console.log(`[Webhook] Transação com status '${status}' ignorada (não é aprovada)`);
+      return {
+        success: true,
+        message: `Transação com status '${status}' não processada`,
+      };
+    }
+
+    // Preparar dados do lead para inserção no banco
+    const leadData: InsertLead = {
+      nome: customer_name,
+      email: customer_email,
+      produto: product_name || "Produto não especificado",
+      plano: plan_name || "Plano não especificado",
+      // Converter valor para centavos (se for string, remover símbolos)
+      valor: convertValueToCents(sale_value),
+      dataAprovacao: new Date(),
+      dataCriacao: new Date(),
+      emailEnviado: 0, // Marcar como não enviado para envio posterior
+    };
+
+    // Importar função de banco de dados dinamicamente
+    const { getDb } = await import("./db");
+    const { leads } = await import("../drizzle/schema_postgresql");
+    const { drizzle } = await import("drizzle-orm/postgres-js");
+    const { eq } = await import("drizzle-orm");
+
+    const db = await getDb();
+    if (!db) {
+      console.error("[Webhook] Banco de dados não disponível");
+      return {
+        success: false,
+        message: "Banco de dados não disponível",
+      };
+    }
+
+    // Verificar se o lead já existe (por email)
+    const existingLead = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.email, customer_email))
+      .limit(1);
+
+    if (existingLead.length > 0) {
+      console.log(`[Webhook] Lead com email ${customer_email} já existe, atualizando...`);
+      // Atualizar lead existente
+      await db
+        .update(leads)
+        .set({
+          nome: leadData.nome,
+          produto: leadData.produto,
+          plano: leadData.plano,
+          valor: leadData.valor,
+          dataAprovacao: leadData.dataAprovacao,
+        })
+        .where(eq(leads.email, customer_email));
+    } else {
+      console.log(`[Webhook] Criando novo lead: ${customer_email}`);
+      // Inserir novo lead
+      await db.insert(leads).values(leadData);
+    }
+
+    console.log(`[Webhook] Lead processado com sucesso: ${customer_email}`);
+    return {
+      success: true,
+      message: "Lead processado com sucesso",
+      leadEmail: customer_email,
+      transactionId: transaction_id,
+    };
+  } catch (error) {
+    console.error("[Webhook] Erro ao processar webhook:", error);
+    return {
+      success: false,
+      message: "Erro ao processar webhook",
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
-
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
-
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
-  }
-
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/` );
-    console.log(`Webhook endpoint: http://localhost:${port}/api/webhooks/perfectpay`);
-  });
 }
 
-startServer().catch(console.error);
+/**
+ * Converte valor para centavos
+ * Aceita formatos: "100.00", "100,00", "10000" (já em centavos), 100.00 (número)
+ */
+function convertValueToCents(value: any): number {
+  if (!value) return 0;
+
+  // Se já é um número
+  if (typeof value === "number") {
+    // Se for maior que 10000, assumir que já está em centavos
+    if (value > 10000) return Math.round(value);
+    // Caso contrário, converter para centavos
+    return Math.round(value * 100);
+  }
+
+  // Se é string
+  if (typeof value === "string") {
+    // Remover símbolos de moeda
+    let cleanValue = value.replace(/[R$\s]/g, "");
+
+    // Converter vírgula para ponto
+    cleanValue = cleanValue.replace(",", ".");
+
+    const numValue = parseFloat(cleanValue);
+
+    if (isNaN(numValue)) return 0;
+
+    // Se for maior que 10000, assumir que já está em centavos
+    if (numValue > 10000) return Math.round(numValue);
+
+    // Caso contrário, converter para centavos
+    return Math.round(numValue * 100);
+  }
+
+  return 0;
+}
