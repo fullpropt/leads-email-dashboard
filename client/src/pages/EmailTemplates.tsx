@@ -135,15 +135,19 @@ export default function EmailTemplates() {
       return;
     }
 
-    const updates = {
+    const updates: any = {
       nome: template.nome,
       assunto: template.assunto,
       htmlContent: template.htmlContent,
       scheduleEnabled: template.scheduleEnabled ? 1 : 0,
-      scheduleTime: template.scheduleTime,
       scheduleInterval: template.scheduleInterval,
       scheduleIntervalType: template.scheduleIntervalType,
     };
+
+    // Apenas enviar scheduleTime se estiver habilitado e tiver um valor válido
+    if (template.scheduleEnabled && template.scheduleTime) {
+      updates.scheduleTime = template.scheduleTime;
+    }
 
     updateTemplate.mutate({
       templateId,
