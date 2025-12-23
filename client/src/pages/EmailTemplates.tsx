@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Upload, Eye, Send, Loader2, Plus, Trash2, Clock, Calendar } from "lucide-react";
+import { Upload, Eye, Send, Loader2, Plus, Trash2, Clock, Calendar, Code } from "lucide-react";
 
 interface TemplateBlock {
   id: number;
@@ -34,6 +34,9 @@ export default function EmailTemplates() {
   const [templates, setTemplates] = useState<TemplateBlock[]>([]);
   const [previewHtml, setPreviewHtml] = useState("");
   const [activeTab, setActiveTab] = useState("templates");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [showHtmlEditor, setShowHtmlEditor] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const { data: allTemplates, refetch: refetchTemplates } =
     trpc.emailTemplates.list.useQuery();
@@ -56,6 +59,7 @@ export default function EmailTemplates() {
     onSuccess: (data) => {
       if (data.success) {
         toast.success("Template atualizado com sucesso!");
+        setHasUnsavedChanges(false);
         refetchTemplates();
       } else {
         toast.error("Erro ao atualizar template");
@@ -109,6 +113,7 @@ export default function EmailTemplates() {
     reader.onload = (event) => {
       const content = event.target?.result as string;
       updateTemplateField(templateId, "htmlContent", content);
+      setHasUnsavedChanges(true);
       toast.success("Arquivo carregado com sucesso!");
     };
     reader.readAsText(file);
@@ -120,6 +125,7 @@ export default function EmailTemplates() {
         template.id === templateId ? { ...template, [field]: value } : template
       )
     );
+    setHasUnsavedChanges(true);
   };
 
   const handleSaveTemplate = (templateId: number) => {
@@ -146,19 +152,6 @@ export default function EmailTemplates() {
   };
 
   const handleAddTemplate = () => {
-    const newTemplate: TemplateBlock = {
-      id: Date.now(), // ID temporário
-      nome: "",
-      assunto: "",
-      htmlContent: "",
-      scheduleEnabled: false,
-      scheduleTime: "09:00",
-      scheduleInterval: 1,
-      scheduleIntervalType: "days",
-      criadoEm: new Date(),
-      atualizadoEm: new Date(),
-    };
-
     // Criar template no servidor primeiro
     createTemplate.mutate({
       nome: "Novo Template",
@@ -184,14 +177,32 @@ export default function EmailTemplates() {
       return;
     }
     
-    const result = await previewTemplate.refetch({ htmlContent });
-    if (result.data?.success) {
-      setPreviewHtml(result.data.html);
-      setActiveTab("preview");
-    } else {
-      toast.error(result.data?.message || "Erro ao gerar pré-visualização");
+    try {
+      const result = await previewTemplate.refetch({ htmlContent });
+      if (result.data?.success) {
+        setPreviewHtml(result.data.html);
+        setActiveTab("preview");
+      } else {
+        toast.error(result.data?.message || "Erro ao gerar pré-visualização");
+      }
+    } catch (error) {
+      toast.error("Erro ao gerar pré-visualização");
     }
   };
+
+  const openHtmlEditor = (templateId: number) => {
+    setSelectedTemplateId(templateId);
+    setShowHtmlEditor(true);
+  };
+
+  const closeHtmlEditor = () => {
+    setShowHtmlEditor(false);
+    setSelectedTemplateId(null);
+  };
+
+  const selectedTemplate = selectedTemplateId 
+    ? templates.find(t => t.id === selectedTemplateId)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -203,7 +214,7 @@ export default function EmailTemplates() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-md grid-cols-3">
           <TabsTrigger value="templates" className="gap-2">
             <Calendar className="h-4 w-4" />
             Templates
@@ -211,6 +222,10 @@ export default function EmailTemplates() {
           <TabsTrigger value="preview" className="gap-2">
             <Eye className="h-4 w-4" />
             Pré-visualização
+          </TabsTrigger>
+          <TabsTrigger value="editor" className="gap-2">
+            <Code className="h-4 w-4" />
+            Editor HTML
           </TabsTrigger>
         </TabsList>
 
@@ -240,10 +255,19 @@ export default function EmailTemplates() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
+                        onClick={() => openHtmlEditor(template.id)}
+                        variant="outline"
+                        size="sm"
+                        title="Editar HTML"
+                      >
+                        <Code className="h-4 w-4" />
+                      </Button>
+                      <Button
                         onClick={() => handlePreview(template.htmlContent)}
                         variant="outline"
                         size="sm"
                         disabled={!template.htmlContent}
+                        title="Pré-visualizar"
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
@@ -251,6 +275,7 @@ export default function EmailTemplates() {
                         onClick={() => handleSaveTemplate(template.id)}
                         size="sm"
                         disabled={updateTemplate.isPending}
+                        title="Salvar"
                       >
                         {updateTemplate.isPending ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -263,6 +288,7 @@ export default function EmailTemplates() {
                           onClick={() => handleRemoveTemplate(template.id)}
                           variant="destructive"
                           size="sm"
+                          title="Remover"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -334,7 +360,7 @@ export default function EmailTemplates() {
                     )}
                   </div>
 
-                  {/* Conteúdo HTML */}
+                  {/* Resumo do Conteúdo HTML */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label>Conteúdo HTML</Label>
@@ -348,13 +374,19 @@ export default function EmailTemplates() {
                         <span className="text-xs text-muted-foreground">Upload HTML</span>
                       </div>
                     </div>
-                    <Textarea
-                      placeholder="Cole ou edite o HTML do email aqui... Use variáveis: {{nome}}, {{email}}, {{produto}}, {{plano}}, {{valor}}, {{data_compra}}"
-                      value={template.htmlContent}
-                      onChange={(e) => updateTemplateField(template.id, "htmlContent", e.target.value)}
-                      rows={8}
-                      className="font-mono text-sm"
-                    />
+                    <div className="p-3 bg-muted rounded-lg border border-dashed">
+                      {template.htmlContent ? (
+                        <div className="text-sm text-muted-foreground">
+                          <p className="font-medium text-foreground mb-2">✓ HTML carregado</p>
+                          <p className="text-xs">{template.htmlContent.length} caracteres</p>
+                          <p className="text-xs mt-1">Clique no ícone de código para editar</p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Nenhum HTML carregado. Faça upload de um arquivo ou clique no ícone de código para editar.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -391,7 +423,7 @@ export default function EmailTemplates() {
                   <iframe
                     srcDoc={previewHtml}
                     title="Email Preview"
-                    className="w-full h-[600px] border-0"
+                    className="w-full h-[600px] border-0 rounded"
                     sandbox="allow-same-origin"
                   />
                 </div>
@@ -401,6 +433,60 @@ export default function EmailTemplates() {
                   <p>Nenhum template para pré-visualizar</p>
                   <p className="text-sm mt-2">
                     Clique no ícone de olho em qualquer template para pré-visualizar
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="editor">
+          <Card>
+            <CardHeader>
+              <CardTitle>Editor HTML</CardTitle>
+              <CardDescription>
+                Edite o HTML do seu template com uma visualização maior
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {selectedTemplate ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="font-medium">Editando: {selectedTemplate.nome}</Label>
+                    <Textarea
+                      placeholder="Cole ou edite o HTML do email aqui... Use variáveis: {{nome}}, {{email}}, {{produto}}, {{plano}}, {{valor}}, {{data_compra}}"
+                      value={selectedTemplate.htmlContent}
+                      onChange={(e) => updateTemplateField(selectedTemplate.id, "htmlContent", e.target.value)}
+                      rows={20}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button
+                      variant="outline"
+                      onClick={closeHtmlEditor}
+                    >
+                      Fechar
+                    </Button>
+                    <Button
+                      onClick={() => handleSaveTemplate(selectedTemplate.id)}
+                      disabled={updateTemplate.isPending}
+                    >
+                      {updateTemplate.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <Send className="h-4 w-4 mr-2" />
+                      )}
+                      Salvar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Code className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Nenhum template selecionado</p>
+                  <p className="text-sm mt-2">
+                    Clique no ícone de código em qualquer template para editar
                   </p>
                 </div>
               )}
