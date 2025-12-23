@@ -14,14 +14,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Upload, Eye, Send, Loader2, Plus, Trash2, Clock, Calendar, Code } from "lucide-react";
+import { Upload, Eye, Send, Loader2, Plus, Trash2, Clock, Calendar, Code, Power } from "lucide-react";
 
 interface TemplateBlock {
   id: number;
   nome: string;
   assunto: string;
   htmlContent: string;
+  ativo: number;
   scheduleEnabled: boolean;
   scheduleTime: string;
   scheduleInterval: number;
@@ -36,7 +38,6 @@ export default function EmailTemplates() {
   const [activeTab, setActiveTab] = useState("templates");
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [showHtmlEditor, setShowHtmlEditor] = useState(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const { data: allTemplates, refetch: refetchTemplates } =
     trpc.emailTemplates.list.useQuery();
@@ -59,7 +60,6 @@ export default function EmailTemplates() {
     onSuccess: (data) => {
       if (data.success) {
         toast.success("Template atualizado com sucesso!");
-        setHasUnsavedChanges(false);
         refetchTemplates();
       } else {
         toast.error("Erro ao atualizar template");
@@ -67,6 +67,20 @@ export default function EmailTemplates() {
     },
     onError: () => {
       toast.error("Erro ao atualizar template");
+    },
+  });
+
+  const setActive = trpc.emailTemplates.setActive.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success("Template ativado com sucesso!");
+        refetchTemplates();
+      } else {
+        toast.error("Erro ao ativar template");
+      }
+    },
+    onError: () => {
+      toast.error("Erro ao ativar template");
     },
   });
 
@@ -89,7 +103,6 @@ export default function EmailTemplates() {
     { enabled: false }
   );
 
-  // Sincronizar templates do servidor com estado local
   React.useEffect(() => {
     if (allTemplates) {
       setTemplates(allTemplates.map(t => ({
@@ -113,7 +126,6 @@ export default function EmailTemplates() {
     reader.onload = (event) => {
       const content = event.target?.result as string;
       updateTemplateField(templateId, "htmlContent", content);
-      setHasUnsavedChanges(true);
       toast.success("Arquivo carregado com sucesso!");
     };
     reader.readAsText(file);
@@ -125,7 +137,6 @@ export default function EmailTemplates() {
         template.id === templateId ? { ...template, [field]: value } : template
       )
     );
-    setHasUnsavedChanges(true);
   };
 
   const handleSaveTemplate = (templateId: number) => {
@@ -144,7 +155,6 @@ export default function EmailTemplates() {
       scheduleIntervalType: template.scheduleIntervalType,
     };
 
-    // Apenas enviar scheduleTime se estiver habilitado e tiver um valor válido
     if (template.scheduleEnabled && template.scheduleTime) {
       updates.scheduleTime = template.scheduleTime;
     }
@@ -156,7 +166,6 @@ export default function EmailTemplates() {
   };
 
   const handleAddTemplate = () => {
-    // Criar template no servidor primeiro
     createTemplate.mutate({
       nome: "Novo Template",
       assunto: "Assunto do email",
@@ -197,6 +206,7 @@ export default function EmailTemplates() {
   const openHtmlEditor = (templateId: number) => {
     setSelectedTemplateId(templateId);
     setShowHtmlEditor(true);
+    setActiveTab("editor");
   };
 
   const closeHtmlEditor = () => {
@@ -211,9 +221,9 @@ export default function EmailTemplates() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Templates de Email</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Automação de Emails</h2>
         <p className="text-muted-foreground mt-1">
-          Configure múltiplos templates com agendamento individual
+          Configure e gerencie os templates de email para automação
         </p>
       </div>
 
@@ -258,22 +268,30 @@ export default function EmailTemplates() {
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg">
+                        <Checkbox
+                          checked={selectedTemplateId === template.id}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedTemplateId(template.id);
+                            } else {
+                              setSelectedTemplateId(null);
+                            }
+                          }}
+                          title="Selecionar para visualizar"
+                        />
+                        <span className="text-xs text-muted-foreground">Selecionado</span>
+                      </div>
                       <Button
-                        onClick={() => openHtmlEditor(template.id)}
-                        variant="outline"
+                        onClick={() => setActive.mutate({ templateId: template.id })}
+                        variant={template.ativo === 1 ? "default" : "outline"}
                         size="sm"
-                        title="Editar HTML"
+                        disabled={setActive.isPending}
+                        title={template.ativo === 1 ? "Template ativo" : "Ativar template"}
+                        className="gap-2"
                       >
-                        <Code className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        onClick={() => handlePreview(template.htmlContent)}
-                        variant="outline"
-                        size="sm"
-                        disabled={!template.htmlContent}
-                        title="Pré-visualizar"
-                      >
-                        <Eye className="h-4 w-4" />
+                        <Power className="h-4 w-4" />
+                        {template.ativo === 1 ? "Ativo" : "Inativo"}
                       </Button>
                       <Button
                         onClick={() => handleSaveTemplate(template.id)}
@@ -301,7 +319,6 @@ export default function EmailTemplates() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Configurações de Agendamento */}
                   <div className="border rounded-lg p-4 bg-muted/20">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
@@ -364,7 +381,6 @@ export default function EmailTemplates() {
                     )}
                   </div>
 
-                  {/* Resumo do Conteúdo HTML */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label>Conteúdo HTML</Label>
@@ -383,11 +399,30 @@ export default function EmailTemplates() {
                         <div className="text-sm text-muted-foreground">
                           <p className="font-medium text-foreground mb-2">✓ HTML carregado</p>
                           <p className="text-xs">{template.htmlContent.length} caracteres</p>
-                          <p className="text-xs mt-1">Clique no ícone de código para editar</p>
+                          <div className="flex gap-2 mt-3">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openHtmlEditor(template.id)}
+                              className="gap-1"
+                            >
+                              <Code className="h-3 w-3" />
+                              Editar Código
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handlePreview(template.htmlContent)}
+                              className="gap-1"
+                            >
+                              <Eye className="h-3 w-3" />
+                              Visualizar Email
+                            </Button>
+                          </div>
                         </div>
                       ) : (
                         <p className="text-sm text-muted-foreground">
-                          Nenhum HTML carregado. Faça upload de um arquivo ou clique no ícone de código para editar.
+                          Nenhum HTML carregado. Faça upload de um arquivo ou clique em "Editar Código".
                         </p>
                       )}
                     </div>
@@ -396,7 +431,6 @@ export default function EmailTemplates() {
               </Card>
             ))}
 
-            {/* Botão Adicionar Template */}
             <Button
               onClick={handleAddTemplate}
               variant="outline"
@@ -436,7 +470,7 @@ export default function EmailTemplates() {
                   <Eye className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>Nenhum template para pré-visualizar</p>
                   <p className="text-sm mt-2">
-                    Clique no ícone de olho em qualquer template para pré-visualizar
+                    Selecione um template e clique em "Visualizar Email"
                   </p>
                 </div>
               )}
@@ -490,7 +524,7 @@ export default function EmailTemplates() {
                   <Code className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>Nenhum template selecionado</p>
                   <p className="text-sm mt-2">
-                    Clique no ícone de código em qualquer template para editar
+                    Marque o checkbox "Selecionado" em um template para editar
                   </p>
                 </div>
               )}
