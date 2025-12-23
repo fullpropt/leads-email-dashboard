@@ -44,6 +44,7 @@ COPY --from=build /app/client/public ./client/public
 COPY --from=build /app/server ./server
 COPY --from=build /app/shared ./shared
 COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/drizzle.config.ts ./drizzle.config.ts
 
 # Copy the startup script
 COPY start.sh ./
