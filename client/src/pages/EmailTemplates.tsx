@@ -188,21 +188,23 @@ export default function EmailTemplates() {
     });
   };
 
-  const handlePreview = async (htmlContent: string, templateId?: number) => {
-    if (!htmlContent) {
-      toast.error("Nenhum conteúdo HTML para pré-visualizar");
+  const handlePreview = async (templateId: number) => {
+    if (!templateId) {
+      toast.error("Template não encontrado");
       return;
     }
     
     try {
-      const result = await previewTemplate.refetch({ htmlContent, templateId });
+      const result = await previewTemplate.refetch({ templateId });
       if (result.data?.success) {
         setPreviewHtml(result.data.html);
         setActiveTab("preview");
+        toast.success("Prévia gerada com sucesso!");
       } else {
         toast.error(result.data?.message || "Erro ao gerar pré-visualização");
       }
     } catch (error) {
+      console.error("Erro ao gerar pré-visualização:", error);
       toast.error("Erro ao gerar pré-visualização");
     }
   };
@@ -460,7 +462,7 @@ export default function EmailTemplates() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handlePreview(template.htmlContent, template.id)}
+                              onClick={() => handlePreview(template.id)}
                               className="gap-1"
                             >
                               <Eye className="h-3 w-3" />

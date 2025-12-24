@@ -108,16 +108,22 @@ export const appRouter = router({
         return { success };
       }),
     previewWithFirstLead: publicProcedure
-      .input(z.object({ htmlContent: z.string() }))
+      .input(z.object({ templateId: z.number() }))
       .query(async ({ input }) => {
-        const { getAllLeads, replaceTemplateVariables } = await import("./db");
+        const { getAllLeads, replaceTemplateVariables, getEmailTemplateById } = await import("./db");
         
         const leads = await getAllLeads();
         if (leads.length === 0) {
-          return { success: false, html: input.htmlContent, message: "Nenhum lead disponivel para preview" };
+          return { success: false, html: "", message: "Nenhum lead disponível para preview" };
         }
         
-        const html = replaceTemplateVariables(input.htmlContent, leads[0]);
+        // Buscar o template do banco de dados
+        const template = await getEmailTemplateById(input.templateId);
+        if (!template || !template.htmlContent) {
+          return { success: false, html: "", message: "Template não encontrado ou sem conteúdo HTML" };
+        }
+        
+        const html = replaceTemplateVariables(template.htmlContent, leads[0]);
         return { success: true, html, message: "Preview gerado com sucesso" };
       }),
   }),
