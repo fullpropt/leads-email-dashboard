@@ -1,10 +1,3 @@
-CREATE TABLE "auto_send_config" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"ativo" integer DEFAULT 0 NOT NULL,
-	"criado_em" timestamp DEFAULT now() NOT NULL,
-	"atualizado_em" timestamp DEFAULT now() NOT NULL
-);
---> statement-breakpoint
 CREATE TABLE "email_send_history" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"template_id" integer NOT NULL,

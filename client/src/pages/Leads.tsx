@@ -16,7 +16,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useDebounce } from "@/hooks/use-debounce";
 
-type FilterStatus = 'all' | 'pending' | 'sent';
+type FilterStatus = 'all' | 'active' | 'abandoned';
 
 export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -114,18 +114,18 @@ export default function Leads() {
             Todos
           </Button>
           <Button
-            variant={filterStatus === 'pending' ? 'default' : 'outline'}
+            variant={filterStatus === 'active' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => handleFilterChange('pending')}
+            onClick={() => handleFilterChange('active')}
           >
-            Pendentes
+            Ativo
           </Button>
           <Button
-            variant={filterStatus === 'sent' ? 'default' : 'outline'}
+            variant={filterStatus === 'abandoned' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => handleFilterChange('sent')}
+            onClick={() => handleFilterChange('abandoned')}
           >
-            Enviados
+            Carrinho Abandonado
           </Button>
         </div>
       </div>
@@ -137,13 +137,14 @@ export default function Leads() {
               <TableHead>ID</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead>Situação</TableHead>
               <TableHead>Data de Criação</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-               <TableRow>
-                <TableCell colSpan={4} className="text-center py-12">
+                <TableRow>
+                <TableCell colSpan={5} className="text-center py-12>
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     <p className="text-muted-foreground">Carregando leads...</p>
@@ -151,19 +152,26 @@ export default function Leads() {
                 </TableCell>
               </TableRow>
             ) : leads && leads.length > 0 ? (
-              leads.map((lead) => (
-                <TableRow key={lead.id}>
-                  <TableCell className="font-medium">{lead.id}</TableCell>
-                  <TableCell>{lead.nome}</TableCell>
-                  <TableCell className="font-mono text-sm">{lead.email}</TableCell>
-                  <TableCell className="text-sm">
-                    {formatDate(lead.dataCriacao)}
-                  </TableCell>
-                </TableRow>
-              ))
+              leads.map((lead) => {
+                const situation = lead.situacao || 'Ativo';
+                const situationColor = situation === 'Carrinho Abandonado' ? 'text-orange-600' : 'text-green-600';
+                return (
+                  <TableRow key={lead.id}>
+                    <TableCell className="font-medium">{lead.id}</TableCell>
+                    <TableCell>{lead.nome}</TableCell>
+                    <TableCell className="font-mono text-sm">{lead.email}</TableCell>
+                    <TableCell className={`text-sm font-medium ${situationColor}`}>
+                      {situation}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {formatDate(lead.dataCriacao)}
+                    </TableCell>
+                  </TableRow>
+                );
+              }))
             ) : (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-12">
+                <TableCell colSpan={5} className="text-center py-12">
                   <p className="text-muted-foreground">
                     {debouncedSearchTerm
                       ? `Nenhum lead encontrado para "${debouncedSearchTerm}"`
