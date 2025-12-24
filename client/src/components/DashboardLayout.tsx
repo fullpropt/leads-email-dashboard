@@ -29,7 +29,7 @@ import { Button } from "./ui/button";
 
 const menuItems = [
   { icon: Users, label: "Leads", path: "/leads" },
-  { icon: LayoutDashboard, label: "Templates de Email", path: "/email-templates" },
+  { icon: LayoutDashboard, label: "Automação de Email", path: "/email-templates" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
