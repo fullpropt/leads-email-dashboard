@@ -241,6 +241,30 @@ export async function getAllEmailTemplates() {
   return result;
 }
 
+/**
+ * Buscar um template de email por ID
+ */
+export async function getEmailTemplateById(templateId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get template: database not available");
+    return null;
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(emailTemplates)
+      .where(eq(emailTemplates.id, templateId))
+      .limit(1);
+
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error("[Database] Failed to get email template by ID:", error);
+    return null;
+  }
+}
+
 export async function updateEmailTemplate(templateId: number, updates: Partial<InsertEmailTemplate>) {
   const db = await getDb();
   if (!db) {
@@ -323,6 +347,136 @@ export async function setActiveEmailTemplate(templateId: number) {
     return false;
   }
 }
+
+/**
+ * Atualizar configurações de envio de um template
+ * Permite ativar/desativar: envio imediato, automático por lead, e agendado
+ */
+export async function updateTemplateSendSettings(
+  templateId: number,
+  settings: {
+    sendImmediateEnabled?: number;
+    autoSendOnLeadEnabled?: number;
+    scheduleEnabled?: number;
+    scheduleTime?: string;
+    scheduleInterval?: number;
+    scheduleIntervalType?: "days" | "weeks";
+  }
+) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update template send settings: database not available");
+    return false;
+  }
+
+  try {
+    const updateData: any = {};
+
+    if (settings.sendImmediateEnabled !== undefined) {
+      updateData.sendImmediateEnabled = settings.sendImmediateEnabled;
+    }
+
+    if (settings.autoSendOnLeadEnabled !== undefined) {
+      updateData.autoSendOnLeadEnabled = settings.autoSendOnLeadEnabled;
+    }
+
+    if (settings.scheduleEnabled !== undefined) {
+      updateData.scheduleEnabled = settings.scheduleEnabled;
+    }
+
+    if (settings.scheduleTime !== undefined) {
+      updateData.scheduleTime = settings.scheduleTime;
+    }
+
+    if (settings.scheduleInterval !== undefined) {
+      updateData.scheduleInterval = settings.scheduleInterval;
+    }
+
+    if (settings.scheduleIntervalType !== undefined) {
+      updateData.scheduleIntervalType = settings.scheduleIntervalType;
+    }
+
+    await db
+      .update(emailTemplates)
+      .set(updateData)
+      .where(eq(emailTemplates.id, templateId));
+
+    return true;
+  } catch (error) {
+    console.error("[Database] Failed to update template send settings:", error);
+    return false;
+  }
+}
+
+/**
+ * Obter todos os templates com envio imediato ativado
+ */
+export async function getTemplatesWithImmediateSendEnabled() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get templates: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(emailTemplates)
+      .where(eq(emailTemplates.sendImmediateEnabled, 1));
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get templates with immediate send enabled:", error);
+    return [];
+  }
+}
+
+/**
+ * Obter todos os templates com envio automático por lead ativado
+ */
+export async function getTemplatesWithAutoSendOnLeadEnabled() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get templates: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(emailTemplates)
+      .where(eq(emailTemplates.autoSendOnLeadEnabled, 1));
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get templates with auto send on lead enabled:", error);
+    return [];
+  }
+}
+
+/**
+ * Obter todos os templates com agendamento ativado
+ */
+export async function getTemplatesWithScheduleEnabled() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get templates: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(emailTemplates)
+      .where(eq(emailTemplates.scheduleEnabled, 1));
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get templates with schedule enabled:", error);
+    return [];
+  }
+}
+
 export async function getAutoSendStatus() {
   const db = await getDb();
   if (!db) return false;

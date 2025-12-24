@@ -16,7 +16,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Upload, Eye, Send, Loader2, Plus, Trash2, Clock, Calendar, Code, Power } from "lucide-react";
+import { Upload, Eye, Send, Loader2, Plus, Trash2, Clock, Calendar, Code, Zap, Mail, Rocket } from "lucide-react";
 
 interface TemplateBlock {
   id: number;
@@ -24,7 +24,10 @@ interface TemplateBlock {
   assunto: string;
   htmlContent: string;
   ativo: number;
-  scheduleEnabled: boolean;
+  // Novos campos para múltiplos tipos de envio
+  sendImmediateEnabled: number;
+  autoSendOnLeadEnabled: number;
+  scheduleEnabled: number;
   scheduleTime: string;
   scheduleInterval: number;
   scheduleIntervalType: "days" | "weeks";
@@ -70,20 +73,6 @@ export default function EmailTemplates() {
     },
   });
 
-  const setActive = trpc.emailTemplates.setActive.useMutation({
-    onSuccess: (data) => {
-      if (data.success) {
-        toast.success("Template ativado com sucesso!");
-        refetchTemplates();
-      } else {
-        toast.error("Erro ao ativar template");
-      }
-    },
-    onError: () => {
-      toast.error("Erro ao ativar template");
-    },
-  });
-
   const deleteTemplate = trpc.emailTemplates.delete.useMutation({
     onSuccess: (data) => {
       if (data.success) {
@@ -98,6 +87,20 @@ export default function EmailTemplates() {
     },
   });
 
+  const sendImmediateEmail = trpc.email.sendImmediateToAllPending.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(`${data.sent} emails enviados com sucesso!`);
+        refetchTemplates();
+      } else {
+        toast.error(data.message || "Erro ao enviar emails");
+      }
+    },
+    onError: () => {
+      toast.error("Erro ao enviar emails");
+    },
+  });
+
   const previewTemplate = trpc.emailTemplates.previewWithFirstLead.useQuery(
     { htmlContent: "" },
     { enabled: false }
@@ -107,7 +110,6 @@ export default function EmailTemplates() {
     if (allTemplates) {
       setTemplates(allTemplates.map(t => ({
         ...t,
-        scheduleEnabled: t.scheduleEnabled === 1,
         scheduleIntervalType: t.scheduleIntervalType as "days" | "weeks",
       })));
     }
@@ -150,7 +152,9 @@ export default function EmailTemplates() {
       nome: template.nome,
       assunto: template.assunto,
       htmlContent: template.htmlContent,
-      scheduleEnabled: template.scheduleEnabled ? 1 : 0,
+      sendImmediateEnabled: template.sendImmediateEnabled,
+      autoSendOnLeadEnabled: template.autoSendOnLeadEnabled,
+      scheduleEnabled: template.scheduleEnabled,
       scheduleInterval: template.scheduleInterval,
       scheduleIntervalType: template.scheduleIntervalType,
     };
@@ -203,6 +207,25 @@ export default function EmailTemplates() {
     }
   };
 
+  const handleSendImmediate = (templateId: number) => {
+    toast.promise(
+      new Promise((resolve) => {
+        sendImmediateEmail.mutate(
+          { templateId },
+          {
+            onSuccess: (data) => resolve(data),
+            onError: (error) => resolve(error),
+          }
+        );
+      }),
+      {
+        loading: "Enviando emails...",
+        success: "Emails enviados com sucesso!",
+        error: "Erro ao enviar emails",
+      }
+    );
+  };
+
   const openHtmlEditor = (templateId: number) => {
     setSelectedTemplateId(templateId);
     setShowHtmlEditor(true);
@@ -223,7 +246,7 @@ export default function EmailTemplates() {
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Automação de Emails</h2>
         <p className="text-muted-foreground mt-1">
-          Configure e gerencie os templates de email para automação
+          Configure e gerencie os templates de email com múltiplas opções de envio
         </p>
       </div>
 
@@ -278,26 +301,16 @@ export default function EmailTemplates() {
                               setSelectedTemplateId(null);
                             }
                           }}
-                          title="Selecionar para visualizar"
+                          title="Selecionar para editar HTML"
                         />
-                        <span className="text-xs text-muted-foreground">Selecionado</span>
+                        <span className="text-xs text-muted-foreground">Selecionar</span>
                       </div>
-                      <Button
-                        onClick={() => setActive.mutate({ templateId: template.id })}
-                        variant={template.ativo === 1 ? "default" : "outline"}
-                        size="sm"
-                        disabled={setActive.isPending}
-                        title={template.ativo === 1 ? "Template ativo" : "Ativar template"}
-                        className="gap-2"
-                      >
-                        <Power className="h-4 w-4" />
-                        {template.ativo === 1 ? "Ativo" : "Inativo"}
-                      </Button>
                       <Button
                         onClick={() => handleSaveTemplate(template.id)}
                         size="sm"
                         disabled={updateTemplate.isPending}
-                        title="Salvar"
+                        title="Salvar alterações"
+                        className="gap-2"
                       >
                         {updateTemplate.isPending ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -319,27 +332,90 @@ export default function EmailTemplates() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  
+                  {/* ====== SEÇÃO DE ENVIO IMEDIATO ====== */}
+                  <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-950/20">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <Zap className="h-4 w-4 text-blue-600" />
+                        <Label className="font-medium">Envio Imediato</Label>
+                        <span className="text-xs text-muted-foreground">(Enviar agora para leads pendentes)</span>
+                      </div>
+                      <Switch
+                        checked={template.sendImmediateEnabled === 1}
+                        onCheckedChange={(checked) => 
+                          updateTemplateField(template.id, "sendImmediateEnabled", checked ? 1 : 0)
+                        }
+                      />
+                    </div>
+                    
+                    {template.sendImmediateEnabled === 1 && (
+                      <Button
+                        onClick={() => handleSendImmediate(template.id)}
+                        disabled={sendImmediateEmail.isPending}
+                        className="w-full gap-2 bg-blue-600 hover:bg-blue-700"
+                      >
+                        {sendImmediateEmail.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Enviando...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="h-4 w-4" />
+                            Enviar Agora para Todos os Leads Pendentes
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* ====== SEÇÃO DE ENVIO AUTOMÁTICO POR LEAD ====== */}
+                  <div className="border rounded-lg p-4 bg-green-50 dark:bg-green-950/20">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <Rocket className="h-4 w-4 text-green-600" />
+                        <Label className="font-medium">Envio Automático</Label>
+                        <span className="text-xs text-muted-foreground">(Quando um novo lead é criado)</span>
+                      </div>
+                      <Switch
+                        checked={template.autoSendOnLeadEnabled === 1}
+                        onCheckedChange={(checked) => 
+                          updateTemplateField(template.id, "autoSendOnLeadEnabled", checked ? 1 : 0)
+                        }
+                      />
+                    </div>
+                    
+                    {template.autoSendOnLeadEnabled === 1 && (
+                      <p className="text-sm text-muted-foreground">
+                        ✓ Este template será enviado automaticamente quando um novo lead for criado
+                      </p>
+                    )}
+                  </div>
+
+                  {/* ====== SEÇÃO DE AGENDAMENTO ====== */}
                   <div className="border rounded-lg p-4 bg-muted/20">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4" />
                         <Label className="font-medium">Agendamento</Label>
+                        <span className="text-xs text-muted-foreground">(Envio periódico)</span>
                       </div>
                       <Switch
-                        checked={template.scheduleEnabled}
+                        checked={template.scheduleEnabled === 1}
                         onCheckedChange={(checked) => 
-                          updateTemplateField(template.id, "scheduleEnabled", checked)
+                          updateTemplateField(template.id, "scheduleEnabled", checked ? 1 : 0)
                         }
                       />
                     </div>
                     
-                    {template.scheduleEnabled && (
+                    {template.scheduleEnabled === 1 && (
                       <div className="grid grid-cols-3 gap-4">
                         <div className="space-y-2">
                           <Label>Hora</Label>
                           <Input
                             type="time"
-                            value={template.scheduleTime}
+                            value={template.scheduleTime || ""}
                             onChange={(e) => updateTemplateField(template.id, "scheduleTime", e.target.value)}
                           />
                         </div>
@@ -381,6 +457,7 @@ export default function EmailTemplates() {
                     )}
                   </div>
 
+                  {/* ====== SEÇÃO DE CONTEÚDO HTML ====== */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label>Conteúdo HTML</Label>
@@ -470,7 +547,7 @@ export default function EmailTemplates() {
                   <Eye className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>Nenhum template para pré-visualizar</p>
                   <p className="text-sm mt-2">
-                    Selecione um template e clique em "Visualizar Email"
+                    Clique em "Visualizar Email" em um template para pré-visualizar
                   </p>
                 </div>
               )}
@@ -524,7 +601,7 @@ export default function EmailTemplates() {
                   <Code className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>Nenhum template selecionado</p>
                   <p className="text-sm mt-2">
-                    Marque o checkbox "Selecionado" em um template para editar
+                    Marque o checkbox "Selecionar" em um template para editar
                   </p>
                 </div>
               )}

@@ -78,6 +78,9 @@ export const appRouter = router({
             nome: z.string().min(1).optional(),
             assunto: z.string().min(1).optional(),
             htmlContent: z.string().min(1).optional(),
+            // ===== NOVOS CAMPOS PARA MÚLTIPLOS TIPOS DE ENVIO =====
+            sendImmediateEnabled: z.number().min(0).max(1).optional(),
+            autoSendOnLeadEnabled: z.number().min(0).max(1).optional(),
             scheduleEnabled: z.number().min(0).max(1).optional(),
             scheduleTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
             scheduleInterval: z.number().min(1).optional(),
@@ -121,11 +124,11 @@ export const appRouter = router({
 
   // Routers para envio de emails
   email: router({
+    // Enviar email para um lead específico usando um template específico
     sendToLead: publicProcedure
-      .input(z.object({ leadId: z.number() }))
+      .input(z.object({ leadId: z.number(), templateId: z.number().optional() }))
       .mutation(async ({ input }) => {
-        const { getAllLeads, updateLeadEmailStatus, replaceTemplateVariables } = await import("./db");
-        const { getActiveEmailTemplate } = await import("./db");
+        const { getAllLeads, updateLeadEmailStatus, replaceTemplateVariables, getEmailTemplateById } = await import("./db");
         const { sendEmail } = await import("./email");
 
         // Buscar o lead
@@ -135,10 +138,17 @@ export const appRouter = router({
           return { success: false, message: "Lead não encontrado" };
         }
 
-        // Buscar template ativo
-        const template = await getActiveEmailTemplate();
+        // Buscar template (específico ou ativo)
+        let template;
+        if (input.templateId) {
+          template = await getEmailTemplateById(input.templateId);
+        } else {
+          const { getActiveEmailTemplate } = await import("./db");
+          template = await getActiveEmailTemplate();
+        }
+        
         if (!template) {
-          return { success: false, message: "Nenhum template ativo encontrado" };
+          return { success: false, message: "Nenhum template encontrado" };
         }
 
         // Substituir variáveis no HTML usando função utilitária
@@ -158,52 +168,105 @@ export const appRouter = router({
           return { success: false, message: "Erro ao enviar email" };
         }
       }),
-    sendToAllPending: publicProcedure.mutation(async () => {
-      const { getAllLeads, updateLeadEmailStatus, replaceTemplateVariables } = await import("./db");
-      const { getActiveEmailTemplate } = await import("./db");
-      const { sendEmail } = await import("./email");
+    
+    // Enviar email imediato para todos os leads pendentes usando um template específico
+    sendImmediateToAllPending: publicProcedure
+      .input(z.object({ templateId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { getAllLeads, updateLeadEmailStatus, replaceTemplateVariables, getEmailTemplateById } = await import("./db");
+        const { sendEmail } = await import("./email");
 
-      const leads = await getAllLeads();
-      const pendingLeads = leads.filter((l) => l.emailEnviado === 0);
+        const leads = await getAllLeads();
+        const pendingLeads = leads.filter((l) => l.emailEnviado === 0);
 
-      if (pendingLeads.length === 0) {
-        return { success: true, sent: 0, failed: 0, message: "Nenhum lead pendente" };
-      }
-
-      const template = await getActiveEmailTemplate();
-      if (!template) {
-        return { success: false, sent: 0, failed: 0, message: "Nenhum template ativo" };
-      }
-
-      let sent = 0;
-      let failed = 0;
-
-      for (const lead of pendingLeads) {
-        const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
-
-        const success = await sendEmail({
-          to: lead.email,
-          subject: template.assunto,
-          html: htmlContent,
-        });
-
-        if (success) {
-          await updateLeadEmailStatus(lead.id, true);
-          sent++;
-        } else {
-          failed++;
+        if (pendingLeads.length === 0) {
+          return { success: true, sent: 0, failed: 0, message: "Nenhum lead pendente" };
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
+        const template = await getEmailTemplateById(input.templateId);
+        if (!template) {
+          return { success: false, sent: 0, failed: 0, message: "Template não encontrado" };
+        }
 
-      return {
-        success: true,
-        sent,
-        failed,
-        message: `${sent} emails enviados, ${failed} falharam`,
-      };
-    }),
+        let sent = 0;
+        let failed = 0;
+
+        for (const lead of pendingLeads) {
+          const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+
+          const success = await sendEmail({
+            to: lead.email,
+            subject: template.assunto,
+            html: htmlContent,
+          });
+
+          if (success) {
+            await updateLeadEmailStatus(lead.id, true);
+            sent++;
+          } else {
+            failed++;
+          }
+
+          // Aguardar 1 segundo entre envios para evitar rate limiting
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+
+        return {
+          success: true,
+          sent,
+          failed,
+          message: `${sent} emails enviados, ${failed} falharam`,
+        };
+      }),
+    
+    // Enviar email para todos os leads (independente do status)
+    sendToAllLeads: publicProcedure
+      .input(z.object({ templateId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { getAllLeads, replaceTemplateVariables, getEmailTemplateById } = await import("./db");
+        const { sendEmail } = await import("./email");
+
+        const leads = await getAllLeads();
+
+        if (leads.length === 0) {
+          return { success: true, sent: 0, failed: 0, message: "Nenhum lead disponível" };
+        }
+
+        const template = await getEmailTemplateById(input.templateId);
+        if (!template) {
+          return { success: false, sent: 0, failed: 0, message: "Template não encontrado" };
+        }
+
+        let sent = 0;
+        let failed = 0;
+
+        for (const lead of leads) {
+          const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+
+          const success = await sendEmail({
+            to: lead.email,
+            subject: template.assunto,
+            html: htmlContent,
+          });
+
+          if (success) {
+            sent++;
+          } else {
+            failed++;
+          }
+
+          // Aguardar 1 segundo entre envios para evitar rate limiting
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+
+        return {
+          success: true,
+          sent,
+          failed,
+          message: `${sent} emails enviados, ${failed} falharam`,
+        };
+      }),
+    
     testConnection: publicProcedure.query(async () => {
       const { testEmailConnection } = await import("./email");
       const isConnected = await testEmailConnection();
