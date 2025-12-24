@@ -333,125 +333,96 @@ export default function EmailTemplates() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   
-                  {/* ====== SEÇÃO DE ENVIO IMEDIATO ====== */}
-                  <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-950/20">
+                  {/* ====== SEÇÃO DE ENVIO E AGENDAMENTO (OTIMIZADA) ====== */}
+                  <div className="border rounded-lg p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
+                    {/* Cabeçalho com botão e toggle */}
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
-                        <Zap className="h-4 w-4 text-blue-600" />
-                        <Label className="font-medium">Envio Imediato</Label>
-                        <span className="text-xs text-muted-foreground">(Enviar agora para leads pendentes)</span>
+                        <Mail className="h-4 w-4 text-blue-600" />
+                        <Label className="font-medium">Enviar Email</Label>
+                        <span className="text-xs text-muted-foreground">(Automático ao criar novo lead)</span>
                       </div>
-                      <Switch
-                        checked={template.sendImmediateEnabled === 1}
-                        onCheckedChange={(checked) => 
-                          updateTemplateField(template.id, "sendImmediateEnabled", checked ? 1 : 0)
-                        }
-                      />
+                      <div className="flex items-center gap-3">
+                        <Button
+                          onClick={() => handleSendImmediate(template.id)}
+                          disabled={sendImmediateEmail.isPending}
+                          size="sm"
+                          className="gap-2 bg-blue-600 hover:bg-blue-700"
+                        >
+                          {sendImmediateEmail.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Enviando...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4" />
+                              Enviar
+                            </>
+                          )}
+                        </Button>
+                        <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 rounded-lg border">
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                          <Switch
+                            checked={template.scheduleEnabled === 1}
+                            onCheckedChange={(checked) => 
+                              updateTemplateField(template.id, "scheduleEnabled", checked ? 1 : 0)
+                            }
+                            title="Ativar agendamento periódico"
+                          />
+                          <span className="text-xs text-muted-foreground ml-1">Agendamento</span>
+                        </div>
+                      </div>
                     </div>
-                    
-                    {template.sendImmediateEnabled === 1 && (
-                      <Button
-                        onClick={() => handleSendImmediate(template.id)}
-                        disabled={sendImmediateEmail.isPending}
-                        className="w-full gap-2 bg-blue-600 hover:bg-blue-700"
-                      >
-                        {sendImmediateEmail.isPending ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Enviando...
-                          </>
-                        ) : (
-                          <>
-                            <Mail className="h-4 w-4" />
-                            Enviar Agora para Todos os Leads Pendentes
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
 
-                  {/* ====== SEÇÃO DE ENVIO AUTOMÁTICO POR LEAD ====== */}
-                  <div className="border rounded-lg p-4 bg-green-50 dark:bg-green-950/20">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <Rocket className="h-4 w-4 text-green-600" />
-                        <Label className="font-medium">Envio Automático</Label>
-                        <span className="text-xs text-muted-foreground">(Quando um novo lead é criado)</span>
-                      </div>
-                      <Switch
-                        checked={template.autoSendOnLeadEnabled === 1}
-                        onCheckedChange={(checked) => 
-                          updateTemplateField(template.id, "autoSendOnLeadEnabled", checked ? 1 : 0)
-                        }
-                      />
-                    </div>
-                    
-                    {template.autoSendOnLeadEnabled === 1 && (
-                      <p className="text-sm text-muted-foreground">
-                        ✓ Este template será enviado automaticamente quando um novo lead for criado
-                      </p>
-                    )}
-                  </div>
-
-                  {/* ====== SEÇÃO DE AGENDAMENTO ====== */}
-                  <div className="border rounded-lg p-4 bg-muted/20">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4" />
-                        <Label className="font-medium">Agendamento</Label>
-                        <span className="text-xs text-muted-foreground">(Envio periódico)</span>
-                      </div>
-                      <Switch
-                        checked={template.scheduleEnabled === 1}
-                        onCheckedChange={(checked) => 
-                          updateTemplateField(template.id, "scheduleEnabled", checked ? 1 : 0)
-                        }
-                      />
-                    </div>
-                    
+                    {/* Opções de agendamento (expandem quando ativado) */}
                     {template.scheduleEnabled === 1 && (
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                          <Label>Hora</Label>
-                          <Input
-                            type="time"
-                            value={template.scheduleTime || ""}
-                            onChange={(e) => updateTemplateField(template.id, "scheduleTime", e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Intervalo</Label>
-                          <div className="flex gap-2">
+                      <div className="mt-4 pt-4 border-t space-y-3">
+                        <p className="text-sm text-muted-foreground mb-3">Configure o envio periódico:</p>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <Label className="text-xs">Hora do Envio</Label>
                             <Input
-                              type="number"
-                              min="1"
-                              value={template.scheduleInterval}
-                              onChange={(e) => updateTemplateField(template.id, "scheduleInterval", parseInt(e.target.value))}
-                              className="w-20"
+                              type="time"
+                              value={template.scheduleTime || ""}
+                              onChange={(e) => updateTemplateField(template.id, "scheduleTime", e.target.value)}
+                              className="text-sm"
                             />
-                            <Select
-                              value={template.scheduleIntervalType}
-                              onValueChange={(value: "days" | "weeks") => 
-                                updateTemplateField(template.id, "scheduleIntervalType", value)
-                              }
-                            >
-                              <SelectTrigger className="w-24">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="days">Dias</SelectItem>
-                                <SelectItem value="weeks">Semanas</SelectItem>
-                              </SelectContent>
-                            </Select>
                           </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Próximo Envio</Label>
-                          <Input
-                            value="Calculado automaticamente"
-                            disabled
-                            className="text-muted-foreground"
-                          />
+                          <div className="space-y-2">
+                            <Label className="text-xs">Intervalo</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                type="number"
+                                min="1"
+                                value={template.scheduleInterval}
+                                onChange={(e) => updateTemplateField(template.id, "scheduleInterval", parseInt(e.target.value))}
+                                className="w-16 text-sm"
+                              />
+                              <Select
+                                value={template.scheduleIntervalType}
+                                onValueChange={(value: "days" | "weeks") => 
+                                  updateTemplateField(template.id, "scheduleIntervalType", value)
+                                }
+                              >
+                                <SelectTrigger className="w-24 text-sm">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="days">Dias</SelectItem>
+                                  <SelectItem value="weeks">Semanas</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs">Próximo Envio</Label>
+                            <Input
+                              value="Calculado automaticamente"
+                              disabled
+                              className="text-xs text-muted-foreground bg-muted"
+                            />
+                          </div>
                         </div>
                       </div>
                     )}
