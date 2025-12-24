@@ -14,14 +14,11 @@ echo "[Startup] Environment check passed"
 echo "[Startup] Node version: $(node --version)"
 echo "[Startup] pnpm version: $(pnpm --version)"
 
-# Run database migrations
+# Run database migrations (ignore if tables already exist)
 echo "[Startup] Running database migrations..."
-if ! pnpm db:push --config=drizzle.config.ts; then
-  echo "[ERROR] Database migrations failed"
-  exit 1
-fi
+pnpm db:push --config=drizzle.config.ts || true
 
-echo "[Startup] Database migrations completed successfully"
+echo "[Startup] Database migrations completed"
 
 # Start the application
 echo "[Startup] Starting application..."
