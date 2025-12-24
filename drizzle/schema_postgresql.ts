@@ -1,4 +1,45 @@
-import { pgTable, serial, varchar, text, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, text, integer, timestamp } from "drizzle-orm/pg-core";
+
+/**
+ * Tabela de usuários para autenticação e controle de acesso
+ */
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  /**
+   * Manus OAuth identifier (openId) retornado do callback OAuth.
+   * Único por usuário.
+   */
+  openId: varchar("openId", { length: 64 }).notNull().unique(),
+  name: text("name"),
+  email: varchar("email", { length: 320 }),
+  loginMethod: varchar("loginMethod", { length: 64 }),
+  role: varchar("role", { length: 10 }).notNull().default("user"), // "user" ou "admin"
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+});
+
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
+
+/**
+ * Tabela de leads capturados (ex: do PerfectPay)
+ */
+export const leads = pgTable("leads", {
+  id: serial("id").primaryKey(),
+  nome: text("nome").notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  produto: text("produto"),
+  plano: text("plano"),
+  valor: integer("valor").notNull().default(0), // valor em centavos
+  dataAprovacao: timestamp("data_aprovacao"),
+  dataCriacao: timestamp("data_criacao").defaultNow().notNull(),
+  emailEnviado: integer("email_enviado").notNull().default(0), // 0 = não enviado, 1 = enviado
+  dataEnvioEmail: timestamp("data_envio_email"),
+});
+
+export type Lead = typeof leads.$inferSelect;
+export type InsertLead = typeof leads.$inferInsert;
 
 /**
  * Tabela refatorada para armazenar templates de email com suporte a múltiplos tipos de envio
