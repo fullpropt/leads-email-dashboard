@@ -168,7 +168,7 @@ export default function Leads() {
                     </TableCell>
                   </TableRow>
                 );
-              }))
+              })
             ) : (
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-12">
