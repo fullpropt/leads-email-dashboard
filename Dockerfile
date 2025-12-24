@@ -35,8 +35,8 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 COPY patches ./patches
 
-# Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
+# Install ALL dependencies (including devDependencies needed for migrations)
+RUN pnpm install --frozen-lockfile
 
 # Copy built application from build stage
 COPY --from=build /app/dist ./dist
