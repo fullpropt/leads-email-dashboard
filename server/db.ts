@@ -252,12 +252,22 @@ export async function getEmailTemplateById(templateId: number) {
   }
 
   try {
+    console.log("[DEBUG] Buscando template com ID:", templateId);
     const result = await db
       .select()
       .from(emailTemplates)
       .where(eq(emailTemplates.id, templateId))
       .limit(1);
 
+    console.log("[DEBUG] Resultado da query:", result);
+    console.log("[DEBUG] Numero de resultados:", result.length);
+    
+    if (result.length > 0) {
+      console.log("[DEBUG] Template encontrado com sucesso");
+    } else {
+      console.log("[DEBUG] Nenhum template encontrado com ID:", templateId);
+    }
+    
     return result.length > 0 ? result[0] : null;
   } catch (error) {
     console.error("[Database] Failed to get email template by ID:", error);
