@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS "email_templates" (
 	"assunto" varchar(500) NOT NULL,
 	"html_content" text NOT NULL,
 	"ativo" integer DEFAULT 1 NOT NULL,
+	"send_immediate_enabled" integer DEFAULT 0 NOT NULL,
+	"auto_send_on_lead_enabled" integer DEFAULT 0 NOT NULL,
 	"schedule_enabled" integer DEFAULT 0 NOT NULL,
 	"schedule_time" varchar(5),
 	"schedule_interval" integer DEFAULT 1 NOT NULL,
