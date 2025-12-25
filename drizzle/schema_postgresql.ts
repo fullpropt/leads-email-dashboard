@@ -52,6 +52,7 @@ export const emailTemplates = pgTable("email_templates", {
   htmlContent: text("html_content").notNull(),
   
   // ===== CONTROLES DE ENVIO IMEDIATO =====
+  ativo: integer("ativo").notNull().default(1), // 0 = inativo, 1 = ativo
   // Permite enviar o email manualmente para todos os leads pendentes
   sendImmediateEnabled: integer("send_immediate_enabled").notNull().default(0), // 0 = desativado, 1 = ativado
   
