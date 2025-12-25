@@ -119,7 +119,10 @@ export const appRouter = router({
         
         // Buscar o template do banco de dados
         const template = await getEmailTemplateById(input.templateId);
+        console.log("[DEBUG] Template ID:", input.templateId);
+        console.log("[DEBUG] Template encontrado:", template);
         if (!template || !template.htmlContent) {
+          console.log("[DEBUG] Template vazio ou sem HTML");
           return { success: false, html: "", message: "Template não encontrado ou sem conteúdo HTML" };
         }
         
