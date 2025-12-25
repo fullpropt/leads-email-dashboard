@@ -102,7 +102,7 @@ export default function EmailTemplates() {
   });
 
   const previewTemplate = trpc.emailTemplates.previewWithFirstLead.useQuery(
-    { templateId: 0 },
+    { templateId: selectedTemplateId || 0 },
     { enabled: false }
   );
 
