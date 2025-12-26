@@ -16,7 +16,7 @@ echo "[Startup] pnpm version: $(pnpm --version)"
 
 # Run database migrations (ignore if tables already exist)
 echo "[Startup] Running database migrations..."
-pnpm db:push --config=drizzle.config.ts || true
+pnpm db:migrate || true
 
 echo "[Startup] Database migrations completed"
 
