@@ -60,7 +60,7 @@ export const appRouter = router({
         const success = await updateAllLeadsManualSendSelection(input.selected);
         return { success };
       }),
-    }),
+  }),
 
   // Routers para gerenciamento de templates de email
   emailTemplates: router({
@@ -355,7 +355,6 @@ export const appRouter = router({
 
         return { success: true, sent, failed, message: `${sent} emails enviados, ${failed} falharam` };
       }),
-    }),
   }),
 
   // Routers para gerenciamento de auto-envio
