@@ -41,7 +41,7 @@ export default function EmailTemplates() {
   const [activeTab, setActiveTab] = useState("templates");
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [showHtmlEditor, setShowHtmlEditor] = useState(false);
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewTemplateId, setPreviewTemplateId] = useState<number | null>(null);
 
   const { data: allTemplates, refetch: refetchTemplates } =
     trpc.emailTemplates.list.useQuery();
@@ -102,9 +102,15 @@ export default function EmailTemplates() {
     },
   });
 
-  // ✅ CORREÇÃO: Usar useMutation em vez de useQuery
-  // Isso é semanticamente correto pois preview é uma ação, não uma consulta
-  const previewTemplate = trpc.emailTemplates.previewWithFirstLead.useMutation();
+  // ✅ CORREÇÃO: Usar useQuery APENAS quando previewTemplateId é válido
+  // Isso evita o problema do templateId: 0
+  const previewTemplate = trpc.emailTemplates.previewWithFirstLead.useQuery(
+    { templateId: previewTemplateId! },
+    { 
+      enabled: previewTemplateId !== null && previewTemplateId > 0,
+      retry: false,
+    }
+  );
 
   React.useEffect(() => {
     if (allTemplates) {
@@ -114,6 +120,17 @@ export default function EmailTemplates() {
       })));
     }
   }, [allTemplates]);
+
+  // ✅ NOVO: Observar mudanças na query de preview
+  React.useEffect(() => {
+    if (previewTemplate.data?.success) {
+      setPreviewHtml(previewTemplate.data.html);
+      setActiveTab("preview");
+      toast.success("Prévia gerada com sucesso!");
+    } else if (previewTemplate.isError) {
+      toast.error("Erro ao gerar pré-visualização");
+    }
+  }, [previewTemplate.data, previewTemplate.isError]);
 
   const handleFileUpload = (templateId: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -188,34 +205,16 @@ export default function EmailTemplates() {
     });
   };
 
-  // ✅ CORREÇÃO: Atualizado para usar useMutation
-  const handlePreview = async (templateId: number) => {
+  // ✅ CORREÇÃO: Simples e direto - apenas atualiza o estado
+  const handlePreview = (templateId: number) => {
     if (!templateId) {
       toast.error("Template não encontrado");
       return;
     }
     
-    try {
-      setIsPreviewLoading(true);
-      console.log("[DEBUG Frontend] Chamando preview com templateId:", templateId);
-      
-      // Usar mutateAsync para aguardar o resultado
-      const result = await previewTemplate.mutateAsync({ templateId });
-      
-      console.log("[DEBUG Frontend] Resultado:", result);
-      if (result.success) {
-        setPreviewHtml(result.html);
-        setActiveTab("preview");
-        toast.success("Prévia gerada com sucesso!");
-      } else {
-        toast.error(result.message || "Erro ao gerar pré-visualização");
-      }
-    } catch (error) {
-      console.error("Erro ao gerar pré-visualização:", error);
-      toast.error("Erro ao gerar pré-visualização");
-    } finally {
-      setIsPreviewLoading(false);
-    }
+    console.log("[DEBUG Frontend] Ativando preview para templateId:", templateId);
+    setPreviewTemplateId(templateId);
+    // A query será ativada automaticamente pelo useEffect acima
   };
 
   const handleSendImmediate = (templateId: number) => {
@@ -454,10 +453,10 @@ export default function EmailTemplates() {
                             size="sm"
                             variant="outline"
                             onClick={() => handlePreview(template.id)}
-                            disabled={isPreviewLoading}
+                            disabled={previewTemplate.isLoading}
                             className="gap-1"
                           >
-                            {isPreviewLoading ? (
+                            {previewTemplate.isLoading ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             ) : (
                               <Eye className="h-3 w-3" />
@@ -487,10 +486,10 @@ export default function EmailTemplates() {
                             size="sm"
                             variant="outline"
                             onClick={() => handlePreview(template.id)}
-                            disabled={isPreviewLoading}
+                            disabled={previewTemplate.isLoading}
                             className="gap-1"
                           >
-                            {isPreviewLoading ? (
+                            {previewTemplate.isLoading ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             ) : (
                               <Eye className="h-3 w-3" />
@@ -525,7 +524,12 @@ export default function EmailTemplates() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {previewHtml ? (
+              {previewTemplate.isLoading && (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {previewHtml && !previewTemplate.isLoading ? (
                 <div className="border rounded-lg p-4 bg-white">
                   <iframe
                     srcDoc={previewHtml}
@@ -534,7 +538,7 @@ export default function EmailTemplates() {
                     sandbox={{ allow: ["same-origin"] }}
                   />
                 </div>
-              ) : (
+              ) : !previewTemplate.isLoading && (
                 <div className="text-center py-12 text-muted-foreground">
                   <Eye className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>Selecione um template e clique em "Visualizar Email" para ver a pré-visualização</p>
