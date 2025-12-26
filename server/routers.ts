@@ -108,7 +108,7 @@ export const appRouter = router({
         return { success };
       }),
     previewWithFirstLead: publicProcedure
-      .input(z.object({ templateId: z.number() }))
+      .input(z.object({ templateId: z.number().min(1) }))
       .query(async ({ input }) => {
         const { getAllLeads, replaceTemplateVariables, getEmailTemplateById } = await import("./db");
         
