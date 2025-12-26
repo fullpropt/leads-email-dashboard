@@ -11,9 +11,9 @@
     },
     {
       "idx": 1,
-      "version": "6",
+      "version": "7",
       "when": 1766784810389,
-      "tag": "0001_many_bromley",
+      "tag": "0001_add_selected_for_manual_send",
       "breakpoints": true
     }
   ]
