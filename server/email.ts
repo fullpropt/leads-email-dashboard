@@ -1,14 +1,3 @@
-/**
- * Módulo de Envio de Emails com Mailgun
- * 
- * CORREÇÕES APLICADAS:
- * 1. Removidas importações desnecessárias (form-data, node-fetch)
- * 2. Usando FormData nativa do Node.js 18+
- * 3. Usando fetch nativa do Node.js 18+
- * 4. Melhorado tratamento de erros
- * 5. Adicionado logging detalhado
- */
-
 export interface SendEmailOptions {
   to: string;
   subject: string;
@@ -36,7 +25,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
 
     // Criar FormData com os dados do email
     const form = new FormData();
-    form.append("from", `Support <support@${domain}>`);
+    form.append("from", `TubeTools <contato@mail.youtbviews.online>`);
     form.append("to", options.to);
     form.append("subject", options.subject);
     form.append("html", options.html);
