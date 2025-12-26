@@ -112,12 +112,17 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const { getAllLeads, replaceTemplateVariables, getEmailTemplateById } = await import("./db");
         
+        console.log("[DEBUG ROTA] Input recebido:", input);
+        console.log("[DEBUG ROTA] Input.templateId:", input.templateId);
+        console.log("[DEBUG ROTA] Tipo de templateId:", typeof input.templateId);
+        
         const leads = await getAllLeads();
         if (leads.length === 0) {
           return { success: false, html: "", message: "Nenhum lead disponível para preview" };
         }
         
         // Buscar o template do banco de dados
+        console.log("[DEBUG ROTA] Chamando getEmailTemplateById com:", input.templateId);
         const template = await getEmailTemplateById(input.templateId);
         console.log("[DEBUG] Template ID:", input.templateId);
         console.log("[DEBUG] Template encontrado:", template);
