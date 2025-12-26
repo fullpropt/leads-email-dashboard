@@ -195,7 +195,9 @@ export default function EmailTemplates() {
     }
     
     try {
-      const result = await previewTemplate.refetch({ templateId });
+      console.log("[DEBUG Frontend] Chamando preview com templateId:", templateId);
+      const result = await previewTemplate.refetch({ templateId: templateId });
+      console.log("[DEBUG Frontend] Resultado do refetch:", result);
       if (result.data?.success) {
         setPreviewHtml(result.data.html);
         setActiveTab("preview");
