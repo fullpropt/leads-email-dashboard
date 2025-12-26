@@ -560,3 +560,74 @@ export function replaceTemplateVariables(htmlContent: string, lead: Lead): strin
   
   return result;
 }
+
+// ========================================================================
+// MANUAL SEND SELECTION
+// ========================================================================
+
+export async function updateLeadManualSendSelection(leadId: number, selected: boolean) {
+  const db = await getDb();
+  if (!db) return false;
+  
+  try {
+    await db.update(leads)
+      .set({ selectedForManualSend: selected ? 1 : 0 })
+      .where(eq(leads.id, leadId));
+    return true;
+  } catch (error) {
+    console.error("[Database] Erro ao atualizar seleção de lead:", error);
+    return false;
+  }
+}
+
+export async function updateAllLeadsManualSendSelection(selected: boolean) {
+  const db = await getDb();
+  if (!db) return false;
+  
+  try {
+    await db.update(leads)
+      .set({ selectedForManualSend: selected ? 1 : 0 });
+    return true;
+  } catch (error) {
+    console.error("[Database] Erro ao atualizar seleção de todos os leads:", error);
+    return false;
+  }
+}
+
+export async function getSelectedLeadsForManualSend() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  try {
+    return await db.select()
+      .from(leads)
+      .where(eq(leads.selectedForManualSend, 1));
+  } catch (error) {
+    console.error("[Database] Erro ao obter leads selecionados:", error);
+    return [];
+  }
+}
+
+export async function toggleEmailTemplateActive(templateId: number) {
+  const db = await getDb();
+  if (!db) return false;
+  
+  try {
+    const template = await db.select()
+      .from(emailTemplates)
+      .where(eq(emailTemplates.id, templateId))
+      .limit(1);
+    
+    if (template.length === 0) return false;
+    
+    const currentStatus = template[0].ativo;
+    await db.update(emailTemplates)
+      .set({ ativo: currentStatus === 1 ? 0 : 1 })
+      .where(eq(emailTemplates.id, templateId));
+    
+    return true;
+  } catch (error) {
+    console.error("[Database] Erro ao toggle template:", error);
+    return false;
+  }
+}

@@ -42,7 +42,25 @@ export const appRouter = router({
         const success = await updateLeadEmailStatus(input.leadId, input.enviado);
         return { success };
       }),
-  }),
+    updateManualSendSelection: publicProcedure
+      .input(z.object({ 
+        leadId: z.number(), 
+        selected: z.boolean() 
+      }))
+      .mutation(async ({ input }) => {
+        const { updateLeadManualSendSelection } = await import("./db");
+        const success = await updateLeadManualSendSelection(input.leadId, input.selected);
+        return { success };
+      }),
+
+    updateAllManualSendSelection: publicProcedure
+      .input(z.object({ selected: z.boolean() }))
+      .mutation(async ({ input }) => {
+        const { updateAllLeadsManualSendSelection } = await import("./db");
+        const success = await updateAllLeadsManualSendSelection(input.selected);
+        return { success };
+      }),
+    }),
 
   // Routers para gerenciamento de templates de email
   emailTemplates: router({
@@ -133,6 +151,13 @@ export const appRouter = router({
         
         const html = replaceTemplateVariables(template.htmlContent, leads[0]);
         return { success: true, html, message: "Preview gerado com sucesso" };
+      }),
+    toggleActive: publicProcedure
+      .input(z.object({ templateId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { toggleEmailTemplateActive } = await import("./db");
+        const success = await toggleEmailTemplateActive(input.templateId);
+        return { success };
       }),
   }),
 
@@ -285,6 +310,51 @@ export const appRouter = router({
       const { testEmailConnection } = await import("./email");
       const isConnected = await testEmailConnection();
       return { connected: isConnected };
+    }),
+    
+    sendToSelectedLeads: publicProcedure
+      .input(z.object({ templateId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { getSelectedLeadsForManualSend, updateLeadEmailStatus, replaceTemplateVariables, getEmailTemplateById } = await import("./db");
+        const { sendEmail } = await import("./email");
+
+        const selectedLeads = await getSelectedLeadsForManualSend();
+        
+        if (selectedLeads.length === 0) {
+          return { success: true, sent: 0, failed: 0, message: "Nenhum lead selecionado" };
+        }
+
+        const template = await getEmailTemplateById(input.templateId);
+        if (!template) {
+          return { success: false, message: "Template não encontrado" };
+        }
+
+        let sent = 0;
+        let failed = 0;
+
+        for (const lead of selectedLeads) {
+          try {
+            const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+            const success = await sendEmail({
+              to: lead.email,
+              subject: template.assunto,
+              html: htmlContent,
+            });
+
+            if (success) {
+              await updateLeadEmailStatus(lead.id, true);
+              sent++;
+            } else {
+              failed++;
+            }
+          } catch (error) {
+            console.error(`Erro ao enviar email para lead ${lead.id}:`, error);
+            failed++;
+          }
+        }
+
+        return { success: true, sent, failed, message: `${sent} emails enviados, ${failed} falharam` };
+      }),
     }),
   }),
 

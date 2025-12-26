@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -24,6 +25,7 @@ export default function Leads() {
   
   const [currentPage, setCurrentPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+  const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     setCurrentPage(1);
@@ -44,6 +46,10 @@ export default function Leads() {
     }
   );
 
+  // ✨ NOVO: Mutations para gerenciar seleção de leads
+  const updateLeadSelection = trpc.leads.updateManualSendSelection.useMutation();
+  const updateAllSelection = trpc.leads.updateAllManualSendSelection.useMutation();
+
   const leads = leadsData?.leads || [];
 
   const handleFilterChange = (status: FilterStatus) => {
@@ -58,6 +64,37 @@ export default function Leads() {
   const formatDate = (date: Date | null) => {
     if (!date) return "-";
     return format(new Date(date), "dd/MM/yyyy HH:mm", { locale: ptBR });
+  };
+
+  // ✨ NOVO: Função para toggle individual de lead
+  const handleToggleLead = (leadId: number) => {
+    const newSelected = new Set(selectedLeads);
+    if (newSelected.has(leadId)) {
+      newSelected.delete(leadId);
+    } else {
+      newSelected.add(leadId);
+    }
+    setSelectedLeads(newSelected);
+    
+    updateLeadSelection.mutate({
+      leadId,
+      selected: newSelected.has(leadId)
+    });
+  };
+
+  // ✨ NOVO: Função para toggle de todos os leads (seleciona/deseleciona)
+  const handleToggleAll = () => {
+    const allSelected = selectedLeads.size === leads.length && leads.length > 0;
+    
+    if (allSelected) {
+      setSelectedLeads(new Set());
+    } else {
+      setSelectedLeads(new Set(leads.map(l => l.id)));
+    }
+    
+    updateAllSelection.mutate({
+      selected: !allSelected
+    });
   };
 
   const totalPages = leadsData?.totalPages || 1;
@@ -128,12 +165,28 @@ export default function Leads() {
             Carrinho Abandonado
           </Button>
         </div>
+
+        {/* ✨ NOVO: Indicador de seleção */}
+        {selectedLeads.size > 0 && (
+          <div className="text-sm text-muted-foreground bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
+            <span className="font-semibold">{selectedLeads.size}</span> lead(s) selecionado(s) para envio
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
+              {/* ✨ NOVO: Coluna de checkbox para selecionar todos */}
+              <TableHead className="w-12">
+                <Checkbox 
+                  checked={selectedLeads.size === leads.length && leads.length > 0}
+                  indeterminate={selectedLeads.size > 0 && selectedLeads.size < leads.length}
+                  onChange={handleToggleAll}
+                  title={selectedLeads.size === leads.length && leads.length > 0 ? "Desselecionar todos" : "Selecionar todos"}
+                />
+              </TableHead>
               <TableHead>ID</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
@@ -144,7 +197,7 @@ export default function Leads() {
           <TableBody>
             {isLoading ? (
                 <TableRow>
-                <TableCell colSpan={5} className="text-center py-12">
+                <TableCell colSpan={6} className="text-center py-12">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     <p className="text-muted-foreground">Carregando leads...</p>
@@ -157,6 +210,13 @@ export default function Leads() {
                 const situationColor = situation === 'Carrinho Abandonado' ? 'text-orange-600' : 'text-green-600';
                 return (
                   <TableRow key={lead.id}>
+                    {/* ✨ NOVO: Checkbox individual para cada lead */}
+                    <TableCell>
+                      <Checkbox 
+                        checked={selectedLeads.has(lead.id)}
+                        onChange={() => handleToggleLead(lead.id)}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">{lead.id}</TableCell>
                     <TableCell>{lead.nome}</TableCell>
                     <TableCell className="font-mono text-sm">{lead.email}</TableCell>
@@ -171,7 +231,7 @@ export default function Leads() {
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-12">
+                <TableCell colSpan={6} className="text-center py-12">
                   <p className="text-muted-foreground">
                     {debouncedSearchTerm
                       ? `Nenhum lead encontrado para "${debouncedSearchTerm}"`

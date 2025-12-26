@@ -36,6 +36,7 @@ export const leads = pgTable("leads", {
   dataCriacao: timestamp("data_criacao").defaultNow().notNull(),
   emailEnviado: integer("email_enviado").notNull().default(0), // 0 = não enviado, 1 = enviado
   dataEnvioEmail: timestamp("data_envio_email"),
+  selectedForManualSend: integer("selected_for_manual_send").notNull().default(0),
 });
 
 export type Lead = typeof leads.$inferSelect;
