@@ -15,6 +15,13 @@
       "when": 1766784810389,
       "tag": "0001_add_selected_for_manual_send",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1766826187000,
+      "tag": "0002_add_auto_send_enabled",
+      "breakpoints": true
     }
   ]
 }
