@@ -5,40 +5,121 @@ export interface SendEmailOptions {
 }
 
 /**
- * Envia um email através do Mailgun
+ * Envia um email usando Mailrelay como provedor principal e Mailgun como fallback.
  * 
  * @param options - Opções do email (destinatário, assunto, conteúdo HTML)
  * @returns Promise<boolean> - true se enviado com sucesso, false caso contrário
  */
 export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
   try {
+    // Tenta enviar com Mailrelay primeiro
+    const mailrelaySuccess = await sendWithMailrelay(options);
+    if (mailrelaySuccess) {
+      return true;
+    }
+
+    // Se Mailrelay falhar, tenta com Mailgun
+    console.warn("[Email] ⚠️ Mailrelay falhou, tentando com Mailgun...");
+    const mailgunSuccess = await sendWithMailgun(options);
+    return mailgunSuccess;
+
+  } catch (error) {
+    console.error("[Email] ❌ Exceção geral ao enviar email:", error);
+    return false;
+  }
+}
+
+/**
+ * Envia um email usando a API da Mailrelay.
+ */
+async function sendWithMailrelay(options: SendEmailOptions): Promise<boolean> {
+  try {
+    const apiKey = "HEP6AS37LsvDiLNkVTyMExGFsSwMcfaUo4xmP36Q";
+    const account = "tubetools";
+    const apiUrl = `https://app.${account}.mailrelay.com/api/v1/send_emails`;
+
+    console.log("[Mailrelay] 📤 Enviando email para:", options.to);
+    console.log("[Mailrelay] 📧 Assunto:", options.subject);
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-AUTH-TOKEN": apiKey,
+      },
+      body: JSON.stringify({
+        from: {
+          email: "support@acessaragora.digital",
+          name: "Talis Brandson",
+        },
+        to: [{ email: options.to }],
+        subject: options.subject,
+        html_part: options.html,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Mailrelay] ❌ Erro ao enviar email");
+      console.error("[Mailrelay] Status:", response.status);
+      console.error("[Mailrelay] Resposta:", errorText);
+      
+      try {
+        const errorJson = JSON.parse(errorText);
+        console.error("[Mailrelay] Erro detalhado:", errorJson);
+      } catch (e) {
+        // Não é JSON, ignorar
+      }
+      
+      return false;
+    }
+
+    const result = await response.json();
+    console.log("[Mailrelay] ✅ Email enviado com sucesso!");
+    console.log("[Mailrelay] Resposta:", result);
+    
+    return true;
+
+  } catch (error) {
+    console.error("[Mailrelay] ❌ Exceção ao enviar email:");
+    console.error("[Mailrelay] Erro:", error);
+    if (error instanceof Error) {
+      console.error("[Mailrelay] Mensagem:", error.message);
+      console.error("[Mailrelay] Stack:", error.stack);
+    }
+    return false;
+  }
+}
+
+/**
+ * Envia um email usando a API do Mailgun.
+ */
+async function sendWithMailgun(options: SendEmailOptions): Promise<boolean> {
+  try {
     const apiKey = process.env.MAILGUN_API_KEY;
     const domain = process.env.MAILGUN_DOMAIN;
 
     // Validar credenciais
     if (!apiKey || !domain) {
-      console.error("[Email] ❌ Credenciais do Mailgun não configuradas");
-      console.error("[Email] MAILGUN_API_KEY:", apiKey ? "✓ Configurado" : "✗ Faltando");
-      console.error("[Email] MAILGUN_DOMAIN:", domain ? "✓ Configurado" : "✗ Faltando");
+      console.error("[Mailgun] ❌ Credenciais não configuradas");
+      console.error("[Mailgun] MAILGUN_API_KEY:", apiKey ? "✓ Configurado" : "✗ Faltando");
+      console.error("[Mailgun] MAILGUN_DOMAIN:", domain ? "✓ Configurado" : "✗ Faltando");
       return false;
     }
 
-    // Criar FormData com os dados do email
     const form = new FormData();
     form.append("from", `TubeTools <contato@mail.youtbviews.online>`);
     form.append("to", options.to);
     form.append("subject", options.subject);
     form.append("html", options.html);
 
-    // Criar header de autenticação Basic Auth
     const authString = `api:${apiKey}`;
     const encodedAuth = Buffer.from(authString).toString("base64");
 
-    console.log("[Email] 📤 Enviando email para:", options.to);
-    console.log("[Email] 📧 Assunto:", options.subject);
-    console.log("[Email] 🔐 Domínio:", domain);
+    console.log("[Mailgun] 📤 Enviando email para:", options.to);
+    console.log("[Mailgun] 📧 Assunto:", options.subject);
+    console.log("[Mailgun] 🔐 Domínio:", domain);
 
-    // Fazer requisição para API do Mailgun
     const response = await fetch(`https://api.mailgun.net/v3/${domain}/messages`, {
       method: "POST",
       headers: {
@@ -47,17 +128,15 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
       body: form,
     });
 
-    // Verificar resposta
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Email] ❌ Erro ao enviar email");
-      console.error("[Email] Status:", response.status);
-      console.error("[Email] Resposta:", errorText);
+      console.error("[Mailgun] ❌ Erro ao enviar email");
+      console.error("[Mailgun] Status:", response.status);
+      console.error("[Mailgun] Resposta:", errorText);
       
-      // Tentar parsear como JSON
       try {
         const errorJson = JSON.parse(errorText);
-        console.error("[Email] Erro detalhado:", errorJson);
+        console.error("[Mailgun] Erro detalhado:", errorJson);
       } catch (e) {
         // Não é JSON, ignorar
       }
@@ -65,20 +144,63 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
       return false;
     }
 
-    // Parsear resposta bem-sucedida
     const result = await response.json();
-    console.log("[Email] ✅ Email enviado com sucesso!");
-    console.log("[Email] ID da mensagem:", result.id);
-    console.log("[Email] Resposta:", result);
+    console.log("[Mailgun] ✅ Email enviado com sucesso!");
+    console.log("[Mailgun] ID da mensagem:", result.id);
+    console.log("[Mailgun] Resposta:", result);
     
     return true;
+
   } catch (error) {
-    console.error("[Email] ❌ Exceção ao enviar email:");
-    console.error("[Email] Erro:", error);
+    console.error("[Mailgun] ❌ Exceção ao enviar email:");
+    console.error("[Mailgun] Erro:", error);
     if (error instanceof Error) {
-      console.error("[Email] Mensagem:", error.message);
-      console.error("[Email] Stack:", error.stack);
+      console.error("[Mailgun] Mensagem:", error.message);
+      console.error("[Mailgun] Stack:", error.stack);
     }
+    return false;
+  }
+}
+
+/**
+ * Testa a conexão com o Mailrelay
+ * 
+ * @returns Promise<boolean> - true se conectado com sucesso, false caso contrário
+ */
+async function testMailrelayConnection(): Promise<boolean> {
+  try {
+    const apiKey = "HEP6AS37LsvDiLNkVTyMExGFsSwMcfaUo4xmP36Q";
+    const account = "tubetools";
+    const apiUrl = `https://app.${account}.mailrelay.com/api/v1/groups`;
+
+    console.log("[Mailrelay] 🔍 Testando conexão com Mailrelay...");
+
+    const response = await fetch(apiUrl, {
+      method: "GET",
+      headers: {
+        "X-AUTH-TOKEN": apiKey,
+      },
+    });
+
+    if (response.ok) {
+      console.log("[Mailrelay] ✅ Conexão Mailrelay verificada com sucesso!");
+      return true;
+    } else {
+      const errorText = await response.text();
+      console.error("[Mailrelay] ❌ Erro ao verificar conexão");
+      console.error("[Mailrelay] Status:", response.status);
+      console.error("[Mailrelay] Resposta:", errorText);
+      
+      if (response.status === 401) {
+        console.error("[Mailrelay] ⚠️ Erro 401: API Key inválida ou expirada");
+      } else if (response.status === 404) {
+        console.error("[Mailrelay] ⚠️ Erro 404: Conta não encontrada");
+      }
+      
+      return false;
+    }
+  } catch (error) {
+    console.error("[Mailrelay] ❌ Exceção ao testar conexão:", error);
     return false;
   }
 }
@@ -88,25 +210,23 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
  * 
  * @returns Promise<boolean> - true se conectado com sucesso, false caso contrário
  */
-export async function testEmailConnection(): Promise<boolean> {
+async function testMailgunConnection(): Promise<boolean> {
   try {
     const apiKey = process.env.MAILGUN_API_KEY;
     const domain = process.env.MAILGUN_DOMAIN;
 
     // Validar credenciais
     if (!apiKey || !domain) {
-      console.error("[Email] ❌ Credenciais do Mailgun não configuradas");
+      console.error("[Mailgun] ❌ Credenciais não configuradas");
       return false;
     }
 
-    console.log("[Email] 🔍 Testando conexão com Mailgun...");
-    console.log("[Email] Domínio:", domain);
+    console.log("[Mailgun] 🔍 Testando conexão com Mailgun...");
+    console.log("[Mailgun] Domínio:", domain);
 
-    // Criar header de autenticação
     const authString = `api:${apiKey}`;
     const encodedAuth = Buffer.from(authString).toString("base64");
 
-    // Fazer requisição GET para verificar domínio
     const response = await fetch(`https://api.mailgun.net/v3/${domain}`, {
       method: "GET",
       headers: {
@@ -116,32 +236,55 @@ export async function testEmailConnection(): Promise<boolean> {
 
     if (response.ok) {
       const data = await response.json();
-      console.log("[Email] ✅ Conexão Mailgun verificada com sucesso!");
-      console.log("[Email] Dados do domínio:", data);
+      console.log("[Mailgun] ✅ Conexão Mailgun verificada com sucesso!");
+      console.log("[Mailgun] Dados do domínio:", data);
       return true;
     } else {
       const errorText = await response.text();
-      console.error("[Email] ❌ Erro ao verificar conexão Mailgun");
-      console.error("[Email] Status:", response.status);
-      console.error("[Email] Resposta:", errorText);
+      console.error("[Mailgun] ❌ Erro ao verificar conexão");
+      console.error("[Mailgun] Status:", response.status);
+      console.error("[Mailgun] Resposta:", errorText);
       
-      // Mensagens de erro comuns
       if (response.status === 401) {
-        console.error("[Email] ⚠️ Erro 401: API Key inválida ou expirada");
+        console.error("[Mailgun] ⚠️ Erro 401: API Key inválida ou expirada");
       } else if (response.status === 404) {
-        console.error("[Email] ⚠️ Erro 404: Domínio não encontrado");
+        console.error("[Mailgun] ⚠️ Erro 404: Domínio não encontrado");
       } else if (response.status === 403) {
-        console.error("[Email] ⚠️ Erro 403: Acesso negado");
+        console.error("[Mailgun] ⚠️ Erro 403: Acesso negado");
       }
       
       return false;
     }
   } catch (error) {
-    console.error("[Email] ❌ Exceção ao testar conexão:");
-    console.error("[Email] Erro:", error);
+    console.error("[Mailgun] ❌ Exceção ao testar conexão:", error);
     if (error instanceof Error) {
-      console.error("[Email] Mensagem:", error.message);
+      console.error("[Mailgun] Mensagem:", error.message);
     }
+    return false;
+  }
+}
+
+/**
+ * Testa a conexão com ambos os provedores de email
+ * 
+ * @returns Promise<boolean> - true se pelo menos um está conectado
+ */
+export async function testEmailConnection(): Promise<boolean> {
+  try {
+    console.log("[Email] 🧪 Iniciando testes de conexão...");
+    
+    const mailrelayOk = await testMailrelayConnection();
+    const mailgunOk = await testMailgunConnection();
+
+    if (mailrelayOk || mailgunOk) {
+      console.log("[Email] ✅ Pelo menos um provedor está funcionando!");
+      return true;
+    } else {
+      console.error("[Email] ❌ Nenhum provedor de email está funcionando!");
+      return false;
+    }
+  } catch (error) {
+    console.error("[Email] ❌ Exceção ao testar conexões:", error);
     return false;
   }
 }
@@ -188,13 +331,13 @@ export async function sendTestEmail(testEmail: string): Promise<boolean> {
           </div>
           <div class="content">
             <p>Olá,</p>
-            <p>Este é um email de teste para validar a configuração do Mailgun.</p>
+            <p>Este é um email de teste para validar a configuração do seu sistema de emails.</p>
             <p><strong>Se você recebeu este email, a integração está funcionando corretamente!</strong></p>
             <hr>
             <p>Informações do teste:</p>
             <ul>
               <li>Data/Hora: ${new Date().toLocaleString('pt-BR')}</li>
-              <li>Domínio: ${process.env.MAILGUN_DOMAIN}</li>
+              <li>Provedores: Mailrelay (principal) + Mailgun (fallback)</li>
               <li>Status: ✅ Enviado com sucesso</li>
             </ul>
             <p>Atenciosamente,<br>Sistema de Dashboard de Leads</p>
