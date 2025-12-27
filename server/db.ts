@@ -497,14 +497,14 @@ export async function getAutoSendStatus() {
       .from(autoSendConfig)
       .limit(1);
     
-    return result.length > 0 ? result[0].ativo === 1 : false;
+    return result.length > 0 ? result[0].autoSendEnabled === 1 : false;
   } catch (error) {
     console.error("[Database] Failed to get auto send status:", error);
     return false;
   }
 }
 
-export async function toggleAutoSend(ativo: boolean) {
+export async function toggleAutoSend(enabled: boolean) {
   const db = await getDb();
   if (!db) return false;
   
@@ -517,12 +517,12 @@ export async function toggleAutoSend(ativo: boolean) {
     if (existing.length === 0) {
       await db.insert(autoSendConfig).values({
         id: 1,
-        ativo: ativo ? 1 : 0,
+        autoSendEnabled: enabled ? 1 : 0,
       });
     } else {
       await db
         .update(autoSendConfig)
-        .set({ ativo: ativo ? 1 : 0 })
+        .set({ autoSendEnabled: enabled ? 1 : 0 })
         .where(eq(autoSendConfig.id, 1));
     }
     return true;

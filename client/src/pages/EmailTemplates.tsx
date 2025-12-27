@@ -16,7 +16,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Upload, Eye, Send, Loader2, Plus, Trash2, Clock, Calendar, Code, Zap, Mail, Rocket, Power } from "lucide-react";
+import { Upload, Eye, Send, Loader2, Plus, Trash2, Clock, Calendar, Code, Zap, Mail, Rocket } from "lucide-react";
 
 interface TemplateBlock {
   id: number;
@@ -85,21 +85,6 @@ export default function EmailTemplates() {
     },
     onError: () => {
       toast.error("Erro ao remover template");
-    },
-  });
-
-  // ✨ NOVO: Mutation para toggle de ativo/desativado
-  const toggleTemplateActive = trpc.emailTemplates.toggleActive.useMutation({
-    onSuccess: (data) => {
-      if (data.success) {
-        toast.success("Status do template atualizado!");
-        refetchTemplates();
-      } else {
-        toast.error("Erro ao atualizar status do template");
-      }
-    },
-    onError: () => {
-      toast.error("Erro ao atualizar status do template");
     },
   });
 
@@ -235,23 +220,10 @@ export default function EmailTemplates() {
     });
   };
 
-  // ✨ NOVO: Função para toggle de ativo/desativado
-  const handleToggleActive = (templateId: number) => {
-    const template = templates.find(t => t.id === templateId);
-    if (!template) return;
-    
-    toggleTemplateActive.mutate({ templateId });
-  };
-
   // ✨ NOVO: Função para enviar a leads selecionados
   const handleSendToSelected = (templateId: number) => {
     const template = templates.find(t => t.id === templateId);
     if (!template) return;
-    
-    if (template.ativo === 0) {
-      toast.error("Template inativo. Ative o template antes de enviar.");
-      return;
-    }
     
     toast.promise(
       new Promise((resolve) => {
@@ -286,11 +258,6 @@ export default function EmailTemplates() {
   const handleSendImmediate = (templateId: number) => {
     const template = templates.find(t => t.id === templateId);
     if (!template) return;
-    
-    if (template.ativo === 0) {
-      toast.error("Template inativo. Ative o template antes de enviar.");
-      return;
-    }
 
     toast.promise(
       new Promise((resolve) => {
@@ -417,31 +384,7 @@ export default function EmailTemplates() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   
-                  {/* ✨ NOVO: SEÇÃO DE STATUS ATIVO/DESATIVADO */}
-                  <div className="border rounded-lg p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Power className="h-4 w-4 text-purple-600" />
-                        <div>
-                          <Label className="font-medium">Status do Template</Label>
-                          <p className="text-xs text-muted-foreground">
-                            {template.ativo === 1 ? "Template ativo - pronto para envio" : "Template inativo - não será enviado"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 rounded-lg border">
-                        <Switch
-                          checked={template.ativo === 1}
-                          onCheckedChange={() => handleToggleActive(template.id)}
-                          disabled={toggleTemplateActive.isPending}
-                        />
-                        <span className="text-sm font-medium">
-                          {template.ativo === 1 ? "Ativo" : "Inativo"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  
+
                   {/* ====== SEÇÃO DE ENVIO E AGENDAMENTO (OTIMIZADA) ====== */}
                   <div className="border rounded-lg p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
                     {/* Cabeçalho com botões de envio */}
@@ -455,11 +398,11 @@ export default function EmailTemplates() {
                         {/* ✨ NOVO: Botão para enviar a leads selecionados */}
                         <Button
                           onClick={() => handleSendToSelected(template.id)}
-                          disabled={template.ativo === 0 || sendToSelectedLeads.isPending}
+                          disabled={sendToSelectedLeads.isPending}
                           size="sm"
                           variant="secondary"
                           className="gap-2"
-                          title={template.ativo === 0 ? "Ative o template antes de enviar" : "Enviar para leads selecionados"}
+                          title="Enviar para leads selecionados"
                         >
                           {sendToSelectedLeads.isPending ? (
                             <>
@@ -477,10 +420,10 @@ export default function EmailTemplates() {
                         {/* Botão de envio imediato (todos os pendentes) */}
                         <Button
                           onClick={() => handleSendImmediate(template.id)}
-                          disabled={template.ativo === 0 || sendImmediateEmail.isPending}
+                          disabled={sendImmediateEmail.isPending}
                           size="sm"
                           className="gap-2 bg-blue-600 hover:bg-blue-700"
-                          title={template.ativo === 0 ? "Ative o template antes de enviar" : "Enviar para todos os leads pendentes"}
+                          title="Enviar para todos os leads pendentes"
                         >
                           {sendImmediateEmail.isPending ? (
                             <>

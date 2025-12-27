@@ -105,6 +105,59 @@ export async function processWebhook(payload: any) {
       await db.insert(leads).values(leadData);
     }
 
+    // ===== NOVO: Verificar se o envio automático está ativado =====
+    const { getAutoSendStatus, getTemplatesWithAutoSendOnLeadEnabled, updateLeadEmailStatus, replaceTemplateVariables } = await import("./db");
+    const autoSendEnabled = await getAutoSendStatus();
+    
+    if (autoSendEnabled) {
+      console.log(`[Webhook] Auto-envio ativado, buscando templates...`);
+      const templatesWithAutoSend = await getTemplatesWithAutoSendOnLeadEnabled();
+      
+      if (templatesWithAutoSend.length > 0) {
+        const { sendEmail } = await import("./email");
+        
+        for (const template of templatesWithAutoSend) {
+          try {
+            console.log(`[Webhook] Enviando template '${template.nome}' para ${customer_email}`);
+            
+            // Buscar o lead recém-criado para ter os dados atualizados
+            const createdLead = await db
+              .select()
+              .from(leads)
+              .where(eq(leads.email, customer_email))
+              .limit(1);
+            
+            if (createdLead.length === 0) {
+              console.error(`[Webhook] Lead não encontrado após criação: ${customer_email}`);
+              continue;
+            }
+            
+            const lead = createdLead[0];
+            const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+            
+            const emailSent = await sendEmail({
+              to: lead.email,
+              subject: template.assunto,
+              html: htmlContent,
+            });
+            
+            if (emailSent) {
+              await updateLeadEmailStatus(lead.id, true);
+              console.log(`[Webhook] Email enviado automaticamente para ${customer_email}`);
+            } else {
+              console.error(`[Webhook] Falha ao enviar email para ${customer_email}`);
+            }
+          } catch (templateError) {
+            console.error(`[Webhook] Erro ao processar template ${template.id}:`, templateError);
+          }
+        }
+      } else {
+        console.log(`[Webhook] Nenhum template com auto-envio ativado encontrado`);
+      }
+    } else {
+      console.log(`[Webhook] Auto-envio desativado, email não será enviado automaticamente`);
+    }
+
     console.log(`[Webhook] Lead processado com sucesso: ${customer_email}`);
     return {
       success: true,

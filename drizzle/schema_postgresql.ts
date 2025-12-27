@@ -97,11 +97,11 @@ export type InsertEmailSendHistory = typeof emailSendHistory.$inferInsert;
 
 /**
  * Tabela para armazenar configuração de auto-envio de emails
- * DESCONTINUADA: Use sendImmediateEnabled, autoSendOnLeadEnabled e scheduleEnabled nos templates
+ * Controla se o envio automático de emails para novos leads está ativado
  */
 export const autoSendConfig = pgTable("auto_send_config", {
   id: serial("id").primaryKey(),
-  ativo: integer("ativo").notNull().default(0), // 0 = desativado, 1 = ativado
+  autoSendEnabled: integer("auto_send_enabled").notNull().default(0), // 0 = desativado, 1 = ativado - NOVA CHAVE
   criadoEm: timestamp("criado_em").defaultNow().notNull(),
   atualizadoEm: timestamp("atualizado_em").defaultNow().notNull(),
 });
