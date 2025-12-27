@@ -46,24 +46,30 @@ export default function Leads() {
     }
   );
 
-  // ✨ NOVO: Mutations para gerenciar seleção de leads
+  // Mutations para gerenciar seleção de leads
   const updateLeadSelection = trpc.leads.updateManualSendSelection.useMutation({
+    onSuccess: () => {
+      console.log("✅ Lead seleção atualizada com sucesso");
+    },
     onError: (error) => {
-      console.error("Erro ao atualizar seleção:", error);
+      console.error("❌ Erro ao atualizar seleção:", error);
       toast.error("Erro ao atualizar seleção do lead");
     },
   });
   
   const updateAllSelection = trpc.leads.updateAllManualSendSelection.useMutation({
+    onSuccess: () => {
+      console.log("✅ Seleção de todos os leads atualizada com sucesso");
+    },
     onError: (error) => {
-      console.error("Erro ao atualizar seleção de todos:", error);
+      console.error("❌ Erro ao atualizar seleção de todos:", error);
       toast.error("Erro ao atualizar seleção dos leads");
     },
   });
 
   const leads = leadsData?.leads || [];
 
-  // ✨ NOVO: Carregar o estado inicial de seleção do banco de dados
+  // Carregar o estado inicial de seleção do banco de dados
   useEffect(() => {
     if (leads && leads.length > 0) {
       const selectedSet = new Set<number>();
@@ -73,6 +79,7 @@ export default function Leads() {
         }
       });
       setSelectedLeads(selectedSet);
+      console.log("📋 Estado inicial carregado:", selectedSet);
     }
   }, [leads]);
 
@@ -90,18 +97,23 @@ export default function Leads() {
     return format(new Date(date), "dd/MM/yyyy HH:mm", { locale: ptBR });
   };
 
-  // ✨ NOVO: Função para toggle individual de lead
+  // Função para toggle individual de lead
   const handleToggleLead = (leadId: number) => {
+    console.log("🔄 Toggle lead:", leadId);
+    
     const newSelected = new Set(selectedLeads);
     const isCurrentlySelected = newSelected.has(leadId);
     
     if (isCurrentlySelected) {
       newSelected.delete(leadId);
+      console.log("➖ Lead removido da seleção:", leadId);
     } else {
       newSelected.add(leadId);
+      console.log("➕ Lead adicionado à seleção:", leadId);
     }
     
     setSelectedLeads(newSelected);
+    console.log("📊 Leads selecionados agora:", Array.from(newSelected));
     
     // Atualizar no banco de dados
     updateLeadSelection.mutate({
@@ -110,14 +122,17 @@ export default function Leads() {
     });
   };
 
-  // ✨ NOVO: Função para toggle de todos os leads (seleciona/deseleciona)
+  // Função para toggle de todos os leads (seleciona/deseleciona)
   const handleToggleAll = () => {
     const allSelected = selectedLeads.size === leads.length && leads.length > 0;
+    console.log("🔄 Toggle all - Todos selecionados?", allSelected);
     
     if (allSelected) {
       setSelectedLeads(new Set());
+      console.log("➖ Todos os leads removidos da seleção");
     } else {
       setSelectedLeads(new Set(leads.map(l => l.id)));
+      console.log("➕ Todos os leads adicionados à seleção");
     }
     
     // Atualizar no banco de dados
@@ -195,7 +210,7 @@ export default function Leads() {
           </Button>
         </div>
 
-        {/* ✨ NOVO: Indicador de seleção */}
+        {/* Indicador de seleção */}
         {selectedLeads.size > 0 && (
           <div className="text-sm text-muted-foreground bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
             <span className="font-semibold">{selectedLeads.size}</span> lead(s) selecionado(s) para envio
@@ -207,15 +222,15 @@ export default function Leads() {
         <Table>
           <TableHeader>
             <TableRow>
-              {/* ✨ NOVO: Coluna de checkbox para selecionar todos */}
-              <TableHead className="w-12">
-                <Checkbox 
-                  checked={selectedLeads.size === leads.length && leads.length > 0}
-                  indeterminate={selectedLeads.size > 0 && selectedLeads.size < leads.length}
-                  onChange={handleToggleAll}
-                  disabled={isLoading}
-                  title={selectedLeads.size === leads.length && leads.length > 0 ? "Desselecionar todos" : "Selecionar todos"}
-                />
+              {/* Coluna de checkbox para selecionar todos */}
+              <TableHead className="w-12 cursor-pointer">
+                <div onClick={() => handleToggleAll()} className="flex items-center justify-center">
+                  <Checkbox 
+                    checked={selectedLeads.size === leads.length && leads.length > 0}
+                    onCheckedChange={() => handleToggleAll()}
+                    title={selectedLeads.size === leads.length && leads.length > 0 ? "Desselecionar todos" : "Selecionar todos"}
+                  />
+                </div>
               </TableHead>
               <TableHead>ID</TableHead>
               <TableHead>Nome</TableHead>
@@ -240,13 +255,14 @@ export default function Leads() {
                 const situationColor = situation === 'Carrinho Abandonado' ? 'text-orange-600' : 'text-green-600';
                 return (
                   <TableRow key={lead.id}>
-                    {/* ✨ NOVO: Checkbox individual para cada lead */}
-                    <TableCell>
-                      <Checkbox 
-                        checked={selectedLeads.has(lead.id)}
-                        onChange={() => handleToggleLead(lead.id)}
-                        disabled={updateLeadSelection.isPending}
-                      />
+                    {/* Checkbox individual para cada lead */}
+                    <TableCell className="cursor-pointer" onClick={() => handleToggleLead(lead.id)}>
+                      <div className="flex items-center justify-center">
+                        <Checkbox 
+                          checked={selectedLeads.has(lead.id)}
+                          onCheckedChange={() => handleToggleLead(lead.id)}
+                        />
+                      </div>
                     </TableCell>
                     <TableCell className="font-medium">{lead.id}</TableCell>
                     <TableCell>{lead.nome}</TableCell>
