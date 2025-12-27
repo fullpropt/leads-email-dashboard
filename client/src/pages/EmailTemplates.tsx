@@ -42,9 +42,29 @@ export default function EmailTemplates() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [showHtmlEditor, setShowHtmlEditor] = useState(false);
   const [previewTemplateId, setPreviewTemplateId] = useState<number | null>(null);
+  const [autoSendEnabled, setAutoSendEnabled] = useState(false);
 
   const { data: allTemplates, refetch: refetchTemplates } =
     trpc.emailTemplates.list.useQuery();
+
+  // Query para obter status do auto-envio
+  const { data: autoSendStatus, refetch: refetchAutoSendStatus } =
+    trpc.autoSend.getStatus.useQuery();
+
+  // Mutation para toggle do auto-envio
+  const toggleAutoSend = trpc.autoSend.toggle.useMutation({
+    onSuccess: (data) => {
+      if (data) {
+        toast.success("Status do auto-envio atualizado!");
+        refetchAutoSendStatus();
+      } else {
+        toast.error("Erro ao atualizar status do auto-envio");
+      }
+    },
+    onError: () => {
+      toast.error("Erro ao atualizar status do auto-envio");
+    },
+  });
 
   const createTemplate = trpc.emailTemplates.create.useMutation({
     onSuccess: (data) => {
@@ -135,6 +155,18 @@ export default function EmailTemplates() {
       })));
     }
   }, [allTemplates]);
+
+  // Sincronizar status do auto-envio
+  React.useEffect(() => {
+    if (autoSendStatus !== undefined) {
+      setAutoSendEnabled(autoSendStatus);
+    }
+  }, [autoSendStatus]);
+
+  // Função para toggle do auto-envio
+  const handleToggleAutoSend = () => {
+    toggleAutoSend.mutate(!autoSendEnabled);
+  };
 
   // ✅ NOVO: Observar mudanças na query de preview
   React.useEffect(() => {
@@ -395,6 +427,19 @@ export default function EmailTemplates() {
                         <span className="text-xs text-muted-foreground">(Automático ao criar novo lead)</span>
                       </div>
                       <div className="flex items-center gap-3">
+                        {/* Toggle para ativar/desativar auto-envio */}
+                        <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 rounded-lg border">
+                          <Zap className="h-4 w-4 text-yellow-600" />
+                          <Switch
+                            checked={autoSendEnabled}
+                            onCheckedChange={handleToggleAutoSend}
+                            disabled={toggleAutoSend.isPending}
+                            title="Ativar/desativar envio automático para novos leads"
+                          />
+                          <span className="text-xs text-muted-foreground ml-1">
+                            {autoSendEnabled ? "Ativado" : "Desativado"}
+                          </span>
+                        </div>
                         {/* ✨ NOVO: Botão para enviar a leads selecionados */}
                         <Button
                           onClick={() => handleSendToSelected(template.id)}
