@@ -18,20 +18,25 @@ export async function processWebhook(payload: any) {
     }
 
     // Extrair dados do webhook do PerfectPay
-    // O formato esperado pode variar, adapte conforme a documentação do PerfectPay
-    const {
-      customer_name,
-      customer_email,
-      product_name,
-      plan_name,
-      sale_value,
-      transaction_id,
-      status,
-    } = payload;
+    // O PerfectPay envia os dados do cliente dentro de um objeto "customer"
+    const customer = payload.customer || {};
+    const product = payload.product || {};
+    const plan = payload.plan || {};
+    
+    const customer_name = customer.full_name;
+    const customer_email = customer.email;
+    const product_name = product.name;
+    const plan_name = plan.name;
+    const sale_value = payload.sale_amount;
+    const transaction_id = payload.code;
+    const status = payload.sale_status_enum_key; // PerfectPay usa "approved" como valor
+
+    console.log(`[Webhook] Dados extraídos - Email: ${customer_email}, Nome: ${customer_name}, Status: ${status}`);
 
     // Validar campos obrigatórios
     if (!customer_email || !customer_name) {
       console.warn("[Webhook] Email ou nome do cliente não fornecido");
+      console.warn(`[Webhook] Customer data: ${JSON.stringify(customer)}`);
       return {
         success: false,
         message: "Email e nome do cliente são obrigatórios",
@@ -63,7 +68,6 @@ export async function processWebhook(payload: any) {
     // Importar função de banco de dados dinamicamente
     const { getDb } = await import("./db");
     const { leads } = await import("../drizzle/schema_postgresql");
-    const { drizzle } = await import("drizzle-orm/postgres-js");
     const { eq } = await import("drizzle-orm");
 
     const db = await getDb();
