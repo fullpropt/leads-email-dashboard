@@ -47,10 +47,34 @@ export default function Leads() {
   );
 
   // ✨ NOVO: Mutations para gerenciar seleção de leads
-  const updateLeadSelection = trpc.leads.updateManualSendSelection.useMutation();
-  const updateAllSelection = trpc.leads.updateAllManualSendSelection.useMutation();
+  const updateLeadSelection = trpc.leads.updateManualSendSelection.useMutation({
+    onError: (error) => {
+      console.error("Erro ao atualizar seleção:", error);
+      toast.error("Erro ao atualizar seleção do lead");
+    },
+  });
+  
+  const updateAllSelection = trpc.leads.updateAllManualSendSelection.useMutation({
+    onError: (error) => {
+      console.error("Erro ao atualizar seleção de todos:", error);
+      toast.error("Erro ao atualizar seleção dos leads");
+    },
+  });
 
   const leads = leadsData?.leads || [];
+
+  // ✨ NOVO: Carregar o estado inicial de seleção do banco de dados
+  useEffect(() => {
+    if (leads && leads.length > 0) {
+      const selectedSet = new Set<number>();
+      leads.forEach((lead) => {
+        if (lead.selectedForManualSend === 1) {
+          selectedSet.add(lead.id);
+        }
+      });
+      setSelectedLeads(selectedSet);
+    }
+  }, [leads]);
 
   const handleFilterChange = (status: FilterStatus) => {
     setFilterStatus(status);
@@ -69,16 +93,20 @@ export default function Leads() {
   // ✨ NOVO: Função para toggle individual de lead
   const handleToggleLead = (leadId: number) => {
     const newSelected = new Set(selectedLeads);
-    if (newSelected.has(leadId)) {
+    const isCurrentlySelected = newSelected.has(leadId);
+    
+    if (isCurrentlySelected) {
       newSelected.delete(leadId);
     } else {
       newSelected.add(leadId);
     }
+    
     setSelectedLeads(newSelected);
     
+    // Atualizar no banco de dados
     updateLeadSelection.mutate({
       leadId,
-      selected: newSelected.has(leadId)
+      selected: !isCurrentlySelected
     });
   };
 
@@ -92,6 +120,7 @@ export default function Leads() {
       setSelectedLeads(new Set(leads.map(l => l.id)));
     }
     
+    // Atualizar no banco de dados
     updateAllSelection.mutate({
       selected: !allSelected
     });
@@ -184,6 +213,7 @@ export default function Leads() {
                   checked={selectedLeads.size === leads.length && leads.length > 0}
                   indeterminate={selectedLeads.size > 0 && selectedLeads.size < leads.length}
                   onChange={handleToggleAll}
+                  disabled={isLoading}
                   title={selectedLeads.size === leads.length && leads.length > 0 ? "Desselecionar todos" : "Selecionar todos"}
                 />
               </TableHead>
@@ -215,6 +245,7 @@ export default function Leads() {
                       <Checkbox 
                         checked={selectedLeads.has(lead.id)}
                         onChange={() => handleToggleLead(lead.id)}
+                        disabled={updateLeadSelection.isPending}
                       />
                     </TableCell>
                     <TableCell className="font-medium">{lead.id}</TableCell>
