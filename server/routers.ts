@@ -161,6 +161,140 @@ export const appRouter = router({
       }),
   }),
 
+  // Router para recuperação de senha (TubeTools)
+  passwordReset: router({
+    sendResetEmail: publicProcedure
+      .input(z.object({ 
+        email: z.string().email(),
+        resetToken: z.string(),
+        appName: z.string().default('TubeTools')
+      }))
+      .mutation(async ({ input }) => {
+        const { sendEmail } = await import("./email");
+
+        const resetLink = `https://youthviews.online/reset-password?token=${input.resetToken}`;
+        
+        const htmlContent = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="UTF-8">
+              <style>
+                body { 
+                  font-family: Arial, sans-serif; 
+                  background-color: #f5f5f5;
+                  margin: 0;
+                  padding: 0;
+                }
+                .container { 
+                  max-width: 600px; 
+                  margin: 40px auto; 
+                  background-color: white;
+                  border-radius: 8px;
+                  overflow: hidden;
+                  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }
+                .header { 
+                  background-color: #dc2626; 
+                  color: white; 
+                  padding: 30px 20px;
+                  text-align: center;
+                }
+                .header h1 {
+                  margin: 0;
+                  font-size: 24px;
+                }
+                .content { 
+                  padding: 40px 30px;
+                  line-height: 1.6;
+                  color: #333;
+                }
+                .button { 
+                  display: inline-block;
+                  background-color: #dc2626; 
+                  color: white !important; 
+                  padding: 14px 30px; 
+                  text-decoration: none; 
+                  border-radius: 5px;
+                  margin: 20px 0;
+                  font-weight: bold;
+                }
+                .footer {
+                  background-color: #f9f9f9;
+                  padding: 20px;
+                  text-align: center;
+                  font-size: 12px;
+                  color: #666;
+                  border-top: 1px solid #eee;
+                }
+                .warning {
+                  background-color: #fff3cd;
+                  border-left: 4px solid #ffc107;
+                  padding: 15px;
+                  margin: 20px 0;
+                  font-size: 14px;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="container">
+                <div class="header">
+                  <h1>🔐 Redefinir Senha - ${input.appName}</h1>
+                </div>
+                <div class="content">
+                  <p>Olá,</p>
+                  <p>Recebemos uma solicitação para redefinir a senha da sua conta no <strong>${input.appName}</strong>.</p>
+                  <p>Clique no botão abaixo para criar uma nova senha:</p>
+                  
+                  <div style="text-align: center;">
+                    <a href="${resetLink}" class="button">Redefinir Minha Senha</a>
+                  </div>
+
+                  <div class="warning">
+                    <strong>⚠️ Importante:</strong>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                      <li>Este link expira em <strong>1 hora</strong></li>
+                      <li>Se você não solicitou esta redefinição, ignore este email</li>
+                      <li>Sua senha atual permanecerá inalterada</li>
+                    </ul>
+                  </div>
+
+                  <p style="margin-top: 30px; font-size: 14px; color: #666;">
+                    Se o botão não funcionar, copie e cole este link no seu navegador:
+                  </p>
+                  <p style="word-break: break-all; background-color: #f5f5f5; padding: 10px; border-radius: 4px; font-size: 12px;">
+                    ${resetLink}
+                  </p>
+                </div>
+                <div class="footer">
+                  <p>Este é um email automático, por favor não responda.</p>
+                  <p>© ${new Date().getFullYear()} ${input.appName}. Todos os direitos reservados.</p>
+                </div>
+              </div>
+            </body>
+          </html>
+        `;
+
+        const success = await sendEmail({
+          to: input.email,
+          subject: `🔐 Redefinir Senha - ${input.appName}`,
+          html: htmlContent,
+        });
+
+        if (success) {
+          return { 
+            success: true, 
+            message: "Email de recuperação enviado com sucesso" 
+          };
+        } else {
+          return { 
+            success: false, 
+            message: "Erro ao enviar email de recuperação" 
+          };
+        }
+      }),
+  }),
+
   // Routers para envio de emails
   email: router({
     // Enviar email para um lead específico usando um template específico
