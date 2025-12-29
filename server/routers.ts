@@ -172,7 +172,7 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const { sendEmail } = await import("./email");
 
-        const resetLink = `https://youthviews.online/reset-password?token=${input.resetToken}`;
+        const resetLink = `https://youtbviews.online/reset-password?token=${input.resetToken}`;
         
         const htmlContent = `
           <!DOCTYPE html>
@@ -239,36 +239,36 @@ export const appRouter = router({
             <body>
               <div class="container">
                 <div class="header">
-                  <h1>🔐 Redefinir Senha - ${input.appName}</h1>
+                  <h1>🔐 Reset Password - ${input.appName}</h1>
                 </div>
                 <div class="content">
-                  <p>Olá,</p>
-                  <p>Recebemos uma solicitação para redefinir a senha da sua conta no <strong>${input.appName}</strong>.</p>
-                  <p>Clique no botão abaixo para criar uma nova senha:</p>
+                  <p>Hello,</p>
+                  <p>We received a request to reset your password for your <strong>${input.appName}</strong> account.</p>
+                  <p>Click the button below to create a new password:</p>
                   
                   <div style="text-align: center;">
-                    <a href="${resetLink}" class="button">Redefinir Minha Senha</a>
+                    <a href="${resetLink}" class="button">Reset My Password</a>
                   </div>
 
                   <div class="warning">
-                    <strong>⚠️ Importante:</strong>
+                    <strong>⚠️ Important:</strong>
                     <ul style="margin: 10px 0; padding-left: 20px;">
-                      <li>Este link expira em <strong>1 hora</strong></li>
-                      <li>Se você não solicitou esta redefinição, ignore este email</li>
-                      <li>Sua senha atual permanecerá inalterada</li>
+                      <li>This link expires in <strong>1 hour</strong></li>
+                      <li>If you didn't request this reset, ignore this email</li>
+                      <li>Your current password will remain unchanged</li>
                     </ul>
                   </div>
 
                   <p style="margin-top: 30px; font-size: 14px; color: #666;">
-                    Se o botão não funcionar, copie e cole este link no seu navegador:
+                    If the button doesn't work, copy and paste this link into your browser:
                   </p>
                   <p style="word-break: break-all; background-color: #f5f5f5; padding: 10px; border-radius: 4px; font-size: 12px;">
                     ${resetLink}
                   </p>
                 </div>
                 <div class="footer">
-                  <p>Este é um email automático, por favor não responda.</p>
-                  <p>© ${new Date().getFullYear()} ${input.appName}. Todos os direitos reservados.</p>
+                  <p>This is an automated email, please do not reply.</p>
+                  <p>© ${new Date().getFullYear()} ${input.appName}. All rights reserved.</p>
                 </div>
               </div>
             </body>
@@ -277,19 +277,19 @@ export const appRouter = router({
 
         const success = await sendEmail({
           to: input.email,
-          subject: `🔐 Redefinir Senha - ${input.appName}`,
+          subject: `🔐 Reset Password - ${input.appName}`,
           html: htmlContent,
         });
 
         if (success) {
           return { 
             success: true, 
-            message: "Email de recuperação enviado com sucesso" 
+            message: "Password reset email sent successfully" 
           };
         } else {
           return { 
             success: false, 
-            message: "Erro ao enviar email de recuperação" 
+            message: "Error sending password reset email" 
           };
         }
       }),
