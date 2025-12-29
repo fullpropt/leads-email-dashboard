@@ -34,8 +34,9 @@ export default function Leads() {
   const { data: leadsData, isLoading, refetch } = trpc.leads.listPaginated.useQuery(
     { 
       page: currentPage, 
-      status: filterStatus,
-      search: debouncedSearchTerm
+      status: 'all', // status de email (pending/sent/all)
+      search: debouncedSearchTerm,
+      leadStatus: filterStatus // status de lead (active/abandoned/all)
     },
     {
       staleTime: 5000,
@@ -270,8 +271,8 @@ export default function Leads() {
               </TableRow>
             ) : leads && leads.length > 0 ? (
               leads.map((lead) => {
-                const situation = lead.situacao || 'Ativo';
-                const situationColor = situation === 'Carrinho Abandonado' ? 'text-orange-600' : 'text-green-600';
+                const situation = lead.status === 'abandoned' ? 'Carrinho Abandonado' : 'Ativo';
+                const situationColor = lead.status === 'abandoned' ? 'text-orange-600' : 'text-green-600';
                 return (
                   <TableRow key={lead.id}>
                     {/* Checkbox individual para cada lead */}

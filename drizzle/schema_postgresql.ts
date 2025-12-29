@@ -37,6 +37,7 @@ export const leads = pgTable("leads", {
   emailEnviado: integer("email_enviado").notNull().default(0), // 0 = não enviado, 1 = enviado
   dataEnvioEmail: timestamp("data_envio_email"),
   selectedForManualSend: integer("selected_for_manual_send").notNull().default(0),
+  status: varchar("status", { length: 20 }).notNull().default("active"), // "active" = compra aprovada, "abandoned" = carrinho abandonado
 });
 
 export type Lead = typeof leads.$inferSelect;

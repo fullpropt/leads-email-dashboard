@@ -43,9 +43,15 @@ export async function processWebhook(payload: any) {
       };
     }
 
-    // Apenas processar transações aprovadas
-    if (status && status !== "approved" && status !== "completed") {
-      console.log(`[Webhook] Transação com status '${status}' ignorada (não é aprovada)`);
+    // Determinar o status do lead baseado no status da transação
+    let leadStatus = "active"; // padrão: compra aprovada
+    
+    if (status === "precheckout") {
+      leadStatus = "abandoned"; // carrinho abandonado
+      console.log(`[Webhook] Carrinho abandonado detectado para ${customer_email}`);
+    } else if (status && status !== "approved" && status !== "completed") {
+      // Ignorar outros status que não são aprovados nem carrinho abandonado
+      console.log(`[Webhook] Transação com status '${status}' ignorada`);
       return {
         success: true,
         message: `Transação com status '${status}' não processada`,
@@ -60,9 +66,10 @@ export async function processWebhook(payload: any) {
       plano: plan_name || "Plano não especificado",
       // Converter valor para centavos (se for string, remover símbolos)
       valor: convertValueToCents(sale_value),
-      dataAprovacao: new Date(),
+      dataAprovacao: leadStatus === "active" ? new Date() : null, // Apenas para compras aprovadas
       dataCriacao: new Date(),
       emailEnviado: 0, // Marcar como não enviado para envio posterior
+      status: leadStatus, // "active" ou "abandoned"
     };
 
     // Importar função de banco de dados dinamicamente
@@ -97,6 +104,7 @@ export async function processWebhook(payload: any) {
           plano: leadData.plano,
           valor: leadData.valor,
           dataAprovacao: leadData.dataAprovacao,
+          status: leadData.status, // Atualizar status
         })
         .where(eq(leads.email, customer_email));
     } else {

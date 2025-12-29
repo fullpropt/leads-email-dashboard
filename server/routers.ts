@@ -28,12 +28,14 @@ export const appRouter = router({
       .input(z.object({ 
         page: z.number().min(1).default(1), 
         status: z.enum(['pending', 'sent', 'all']).default('all'),
-        search: z.string().optional()
+        search: z.string().optional(),
+        leadStatus: z.enum(['active', 'abandoned', 'all']).default('all')
       }))
       .query(async ({ input }) => {
         const { getLeadsWithPagination } = await import("./db");
-        const status = input.status === 'all' ? undefined : input.status;
-        return getLeadsWithPagination(input.page, status, input.search);
+        const emailStatus = input.status === 'all' ? undefined : input.status;
+        const leadStatus = input.leadStatus === 'all' ? undefined : input.leadStatus;
+        return getLeadsWithPagination(input.page, emailStatus, input.search, leadStatus);
       }),
     updateEmailStatus: publicProcedure
       .input(z.object({ leadId: z.number(), enviado: z.boolean() }))

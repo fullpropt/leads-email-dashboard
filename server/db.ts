@@ -109,8 +109,9 @@ export async function getAllLeads() {
 
 export async function getLeadsWithPagination(
   page: number = 1,
-  status?: 'pending' | 'sent',
-  search?: string
+  emailStatus?: 'pending' | 'sent',
+  search?: string,
+  leadStatus?: 'active' | 'abandoned'
 ) {
   const db = await getDb();
   if (!db) {
@@ -125,10 +126,18 @@ export async function getLeadsWithPagination(
     // Construir condições de filtro
     const conditions = [];
     
-    if (status === 'pending') {
+    // Filtro de status de email
+    if (emailStatus === 'pending') {
       conditions.push(eq(leads.emailEnviado, 0));
-    } else if (status === 'sent') {
+    } else if (emailStatus === 'sent') {
       conditions.push(eq(leads.emailEnviado, 1));
+    }
+    
+    // Filtro de status de lead (ativo vs carrinho abandonado)
+    if (leadStatus === 'active') {
+      conditions.push(eq(leads.status, 'active'));
+    } else if (leadStatus === 'abandoned') {
+      conditions.push(eq(leads.status, 'abandoned'));
     }
 
     if (search) {
