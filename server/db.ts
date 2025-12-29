@@ -608,6 +608,21 @@ export async function getSelectedLeadsForManualSend() {
   }
 }
 
+export async function getSelectedLeadsCount() {
+  const db = await getDb();
+  if (!db) return 0;
+  
+  try {
+    const [result] = await db.select({ count: sql`COUNT(*)` })
+      .from(leads)
+      .where(eq(leads.selectedForManualSend, 1));
+    return Number(result?.count || 0);
+  } catch (error) {
+    console.error("[Database] Erro ao contar leads selecionados:", error);
+    return 0;
+  }
+}
+
 export async function toggleEmailTemplateActive(templateId: number) {
   const db = await getDb();
   if (!db) return false;
