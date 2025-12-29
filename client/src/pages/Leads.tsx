@@ -46,10 +46,23 @@ export default function Leads() {
     }
   );
 
+  // Query para buscar contador global de leads selecionados
+  const { data: selectedCount = 0, refetch: refetchSelectedCount } = trpc.leads.getSelectedCount.useQuery(
+    undefined,
+    {
+      staleTime: 1000,
+      gcTime: 1000 * 60 * 60,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: true,
+    }
+  );
+
   // Mutations para gerenciar seleção de leads
   const updateLeadSelection = trpc.leads.updateManualSendSelection.useMutation({
     onSuccess: () => {
       console.log("✅ Lead seleção atualizada com sucesso");
+      refetchSelectedCount(); // Atualizar contador global
     },
     onError: (error) => {
       console.error("❌ Erro ao atualizar seleção:", error);
@@ -60,6 +73,7 @@ export default function Leads() {
   const updateAllSelection = trpc.leads.updateAllManualSendSelection.useMutation({
     onSuccess: () => {
       console.log("✅ Seleção de todos os leads atualizada com sucesso");
+      refetchSelectedCount(); // Atualizar contador global
     },
     onError: (error) => {
       console.error("❌ Erro ao atualizar seleção de todos:", error);
@@ -211,9 +225,9 @@ export default function Leads() {
         </div>
 
         {/* Indicador de seleção */}
-        {selectedLeads.size > 0 && (
+        {selectedCount > 0 && (
           <div className="text-sm text-muted-foreground bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
-            <span className="font-semibold">{selectedLeads.size}</span> lead(s) selecionado(s) para envio
+            <span className="font-semibold">{selectedCount}</span> lead(s) selecionado(s) para envio
           </div>
         )}
       </div>

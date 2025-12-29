@@ -60,6 +60,12 @@ export const appRouter = router({
         const success = await updateAllLeadsManualSendSelection(input.selected);
         return { success };
       }),
+
+    getSelectedCount: publicProcedure
+      .query(async () => {
+        const { getSelectedLeadsCount } = await import("./db");
+        return getSelectedLeadsCount();
+      }),
   }),
 
   // Routers para gerenciamento de templates de email
