@@ -6,21 +6,32 @@ export interface SendEmailOptions {
 
 /**
  * Envia um email usando Mailrelay como provedor principal e Mailgun como fallback.
+ * Automaticamente envolve o conteúdo com header e rodapé padrão TubeTools.
  * 
  * @param options - Opções do email (destinatário, assunto, conteúdo HTML)
  * @returns Promise<boolean> - true se enviado com sucesso, false caso contrário
  */
 export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
   try {
+    // Processar HTML com header e rodapé padrão
+    const { processEmailTemplate } = await import("./emailTemplate");
+    const processedHtml = processEmailTemplate(options.html);
+    
+    // Criar opções com HTML processado
+    const processedOptions = {
+      ...options,
+      html: processedHtml
+    };
+    
     // Tenta enviar com Mailrelay primeiro
-    const mailrelaySuccess = await sendWithMailrelay(options);
+    const mailrelaySuccess = await sendWithMailrelay(processedOptions);
     if (mailrelaySuccess) {
       return true;
     }
 
     // Se Mailrelay falhar, tenta com Mailgun
     console.warn("[Email] ⚠️ Mailrelay falhou, tentando com Mailgun...");
-    const mailgunSuccess = await sendWithMailgun(options);
+    const mailgunSuccess = await sendWithMailgun(processedOptions);
     return mailgunSuccess;
 
   } catch (error) {

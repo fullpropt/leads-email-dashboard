@@ -547,35 +547,8 @@ export default function EmailTemplates() {
 
                   {/* ====== SEÇÃO DE CONTEÚDO HTML ====== */}
                   <div className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="mb-4">
                       <Label className="font-medium">Conteúdo do Email</Label>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openHtmlEditor(template.id)}
-                          className="gap-1"
-                        >
-                          <Code className="h-3 w-3" />
-                          Editar Código
-                        </Button>
-                        {template.htmlContent && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handlePreview(template.id)}
-                            disabled={previewTemplate.isLoading}
-                            className="gap-1"
-                          >
-                            {previewTemplate.isLoading ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Eye className="h-3 w-3" />
-                            )}
-                            Visualizar Email
-                          </Button>
-                        )}
-                      </div>
                     </div>
 
                     {template.htmlContent ? (
