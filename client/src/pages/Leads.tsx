@@ -58,6 +58,11 @@ export default function Leads() {
     }
   );
 
+  // Debug: Log do contador global
+  useEffect(() => {
+    console.log("🔢 Contador global de leads selecionados:", selectedCount);
+  }, [selectedCount]);
+
   // Mutations para gerenciar seleção de leads
   const updateLeadSelection = trpc.leads.updateManualSendSelection.useMutation({
     onSuccess: () => {
