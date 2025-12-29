@@ -45,9 +45,8 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
  */
 async function sendWithMailrelay(options: SendEmailOptions): Promise<boolean> {
   try {
-    const apiKey = "HEP6AS37LsvDiLNkVTyMExGFsSwMcfaUo4xmP36Q";
-    const account = "tubetools";
-    const apiUrl = `https://app.${account}.mailrelay.com/api/v1/send_emails`;
+    const apiKey = "hf75c49PswLbz4dtb9FYYFCPJP1Zx6htKPouctQh";
+    const apiUrl = "https://acessaragora.ipzmarketing.com/api/v1/send_emails";
 
     console.log("[Mailrelay] 📤 Enviando email para:", options.to);
     console.log("[Mailrelay] 📧 Assunto:", options.subject);
