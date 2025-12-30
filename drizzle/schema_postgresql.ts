@@ -43,7 +43,6 @@ export const leads = pgTable("leads", {
   
   // ===== NOVOS CAMPOS PARA TIPOS DE LEADS =====
   leadType: varchar("lead_type", { length: 50 }).notNull().default("compra_aprovada"), // "compra_aprovada", "novo_cadastro", "carrinho_abandonado"
-  templateAppliedAt: timestamp("template_applied_at"), // Rastreia quando o template foi aplicado ao lead
   isNewLeadAfterUpdate: integer("is_new_lead_after_update").notNull().default(1), // 1 = lead criado após mudanças, 0 = lead antigo
 });
 

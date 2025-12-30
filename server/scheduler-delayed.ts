@@ -70,6 +70,12 @@ export async function processScheduledEmails() {
                 eq(emailTemplates.templateType, lead.leadType)
               )
             );
+            
+          // Se não houver templates específicos, tenta buscar templates genéricos
+          if (templates.length === 0) {
+            console.log(`[Scheduler] Nenhum template encontrado para tipo '${lead.leadType}', pulando lead`);
+            continue;
+          }
 
           console.log(`[Scheduler] Encontrados ${templates.length} template(s) para tipo '${lead.leadType}'`);
 
