@@ -59,8 +59,8 @@ async function sendWithMailrelay(options: SendEmailOptions): Promise<boolean> {
       },
       body: JSON.stringify({
         from: {
-          email: "support@acessaragora.digital",
-          name: "Talis Brandson",
+          email: "noreply@emails.youtbsupport.online",
+          name: "TubeTools Support",
         },
         to: [{ email: options.to }],
         subject: options.subject,
