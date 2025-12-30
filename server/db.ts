@@ -888,3 +888,39 @@ export async function getLeadsWhoDidNotAccessPlatform(): Promise<Lead[]> {
     return [];
   }
 }
+
+// Função para contar leads por status de acesso à plataforma
+export async function getLeadsAccessStats() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get access stats: database not available");
+    return { total: 0, accessed: 0, notAccessed: 0 };
+  }
+
+  try {
+    const { count, eq, sql } = await import("drizzle-orm");
+    
+    // Contar total de leads
+    const [totalResult] = await db.select({ count: sql`COUNT(*)` }).from(leads);
+    const total = Number(totalResult?.count || 0);
+    
+    // Contar leads que acessaram
+    const [accessedResult] = await db
+      .select({ count: sql`COUNT(*)` })
+      .from(leads)
+      .where(eq(leads.hasAccessedPlatform, 1));
+    const accessed = Number(accessedResult?.count || 0);
+    
+    // Contar leads que não acessaram
+    const notAccessed = total - accessed;
+    
+    return {
+      total,
+      accessed,
+      notAccessed,
+    };
+  } catch (error) {
+    console.error("[Database] Failed to get access stats:", error);
+    return { total: 0, accessed: 0, notAccessed: 0 };
+  }
+}

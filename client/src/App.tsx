@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import DashboardLayout from "./components/DashboardLayout";
 import Leads from "./pages/Leads";
 import EmailTemplates from "./pages/EmailTemplates";
+import Analytics from "./pages/Analytics";
 
 function Router() {
   return (
@@ -24,6 +25,11 @@ function Router() {
       <Route path={"/email-templates"}>
         <DashboardLayout>
           <EmailTemplates />
+        </DashboardLayout>
+      </Route>
+      <Route path={"/analytics"}>
+        <DashboardLayout>
+          <Analytics />
         </DashboardLayout>
       </Route>
       <Route path={"/404"} component={NotFound} />

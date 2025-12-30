@@ -70,6 +70,12 @@ export const appRouter = router({
         const { getSelectedLeadsCount } = await import("./db");
         return getSelectedLeadsCount();
       }),
+
+    getAccessStats: publicProcedure
+      .query(async () => {
+        const { getLeadsAccessStats } = await import("./db");
+        return getLeadsAccessStats();
+      }),
   }),
 
   // Routers para gerenciamento de templates de email
@@ -552,6 +558,20 @@ export const appRouter = router({
       const { getLeadsWhoDidNotAccessPlatform } = await import("./db");
       return await getLeadsWhoDidNotAccessPlatform();
     }),
+
+    // Buscar analytics do TubeTools
+    getAnalytics: publicProcedure.query(async () => {
+      const { getTubetoolsAnalytics } = await import("./tubetools-db");
+      return await getTubetoolsAnalytics();
+    }),
+
+    // Buscar informações de um usuário específico por email
+    getUserByEmail: publicProcedure
+      .input(z.object({ email: z.string().email() }))
+      .query(async ({ input }) => {
+        const { getTubetoolsUserByEmail } = await import("./tubetools-db");
+        return await getTubetoolsUserByEmail(input.email);
+      }),
   }),
 });
 

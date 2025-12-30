@@ -63,6 +63,18 @@ export default function Leads() {
     }
   );
 
+  // Query para buscar estatísticas de acesso à plataforma
+  const { data: accessStats } = trpc.leads.getAccessStats.useQuery(
+    undefined,
+    {
+      staleTime: 5000,
+      gcTime: 1000 * 60 * 60,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: true,
+    }
+  );
+
   // Debug: Log do contador global
   useEffect(() => {
     console.log("🔢 Contador global de leads selecionados:", selectedCount);
@@ -249,7 +261,7 @@ export default function Leads() {
             size="sm"
             onClick={() => handlePlatformAccessFilterChange('all')}
           >
-            Todos
+            Todos {accessStats && `(${accessStats.total})`}
           </Button>
           <Button
             variant={platformAccessFilter === 'accessed' ? 'default' : 'outline'}
@@ -258,7 +270,7 @@ export default function Leads() {
             className="gap-2"
           >
             <CheckCircle2 className="h-4 w-4" />
-            Acessaram
+            Acessaram {accessStats && `(${accessStats.accessed})`}
           </Button>
           <Button
             variant={platformAccessFilter === 'not_accessed' ? 'default' : 'outline'}
@@ -267,7 +279,7 @@ export default function Leads() {
             className="gap-2"
           >
             <XCircle className="h-4 w-4" />
-            Não Acessaram
+            Não Acessaram {accessStats && `(${accessStats.notAccessed})`}
           </Button>
         </div>
 
