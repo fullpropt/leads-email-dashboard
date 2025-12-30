@@ -39,6 +39,7 @@ export const leads = pgTable("leads", {
   selectedForManualSend: integer("selected_for_manual_send").notNull().default(0),
   status: varchar("status", { length: 20 }).notNull().default("active"), // "active" = compra aprovada, "abandoned" = carrinho abandonado
   nextEmailSendAt: timestamp("next_email_send_at"), // Próxima data para enviar email com atraso
+  hasAccessedPlatform: integer("has_accessed_platform").notNull().default(0), // 0 = não acessou, 1 = acessou o TubeTools
 });
 
 export type Lead = typeof leads.$inferSelect;

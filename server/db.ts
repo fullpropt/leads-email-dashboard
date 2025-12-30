@@ -777,3 +777,106 @@ export async function clearLeadNextSendAt(leadId: number) {
     return false;
   }
 }
+
+// ===== FUNÇÕES PARA SINCRONIZAÇÃO COM TUBETOOLS =====
+
+/**
+ * Atualizar o status de acesso à plataforma de um lead
+ * @param leadId ID do lead
+ * @param hasAccessed true se o lead acessou a plataforma, false caso contrário
+ */
+export async function updateLeadPlatformAccessStatus(leadId: number, hasAccessed: boolean): Promise<boolean> {
+  try {
+    const db = await getDb();
+    if (!db) {
+      console.warn("[Database] Cannot update platform access status: database not available");
+      return false;
+    }
+
+    await db
+      .update(leads)
+      .set({ hasAccessedPlatform: hasAccessed ? 1 : 0 })
+      .where(eq(leads.id, leadId));
+
+    console.log(`[Database] Lead ${leadId} platform access status updated: ${hasAccessed}`);
+    return true;
+  } catch (error) {
+    console.error("[Database] Error updating platform access status:", error);
+    return false;
+  }
+}
+
+/**
+ * Buscar todos os leads que ainda não foram verificados (has_accessed_platform = 0)
+ * @returns Lista de leads não verificados
+ */
+export async function getUnverifiedLeads(): Promise<Lead[]> {
+  try {
+    const db = await getDb();
+    if (!db) {
+      console.warn("[Database] Cannot get unverified leads: database not available");
+      return [];
+    }
+
+    const result = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.hasAccessedPlatform, 0));
+
+    console.log(`[Database] Found ${result.length} unverified leads`);
+    return result;
+  } catch (error) {
+    console.error("[Database] Error getting unverified leads:", error);
+    return [];
+  }
+}
+
+/**
+ * Buscar leads que acessaram a plataforma
+ * @returns Lista de leads que acessaram
+ */
+export async function getLeadsWhoAccessedPlatform(): Promise<Lead[]> {
+  try {
+    const db = await getDb();
+    if (!db) {
+      console.warn("[Database] Cannot get accessed leads: database not available");
+      return [];
+    }
+
+    const result = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.hasAccessedPlatform, 1));
+
+    console.log(`[Database] Found ${result.length} leads who accessed platform`);
+    return result;
+  } catch (error) {
+    console.error("[Database] Error getting accessed leads:", error);
+    return [];
+  }
+}
+
+/**
+ * Buscar leads que NÃO acessaram a plataforma
+ * @returns Lista de leads que não acessaram
+ */
+export async function getLeadsWhoDidNotAccessPlatform(): Promise<Lead[]> {
+  try {
+    const db = await getDb();
+    if (!db) {
+      console.warn("[Database] Cannot get non-accessed leads: database not available");
+      return [];
+    }
+
+    const result = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.hasAccessedPlatform, 0));
+
+    console.log(`[Database] Found ${result.length} leads who did not access platform`);
+    return result;
+  } catch (error) {
+    console.error("[Database] Error getting non-accessed leads:", error);
+    return [];
+  }
+}

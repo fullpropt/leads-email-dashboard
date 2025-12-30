@@ -515,6 +515,42 @@ export const appRouter = router({
         return await toggleAutoSend(input);
       }),
   }),
+
+  // Routers para sincronização com TubeTools
+  tubetools: router({
+    // Sincronizar todos os leads
+    syncAll: publicProcedure.mutation(async () => {
+      const { syncAllLeadsWithTubetools } = await import("./sync-tubetools");
+      return await syncAllLeadsWithTubetools();
+    }),
+
+    // Sincronizar apenas leads não verificados
+    syncUnverified: publicProcedure.mutation(async () => {
+      const { syncUnverifiedLeadsWithTubetools } = await import("./sync-tubetools");
+      return await syncUnverifiedLeadsWithTubetools();
+    }),
+
+    // Sincronizar um único lead
+    syncSingle: publicProcedure
+      .input(z.object({ leadId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { syncSingleLead } = await import("./sync-tubetools");
+        const success = await syncSingleLead(input.leadId);
+        return { success };
+      }),
+
+    // Buscar leads que acessaram a plataforma
+    getAccessedLeads: publicProcedure.query(async () => {
+      const { getLeadsWhoAccessedPlatform } = await import("./db");
+      return await getLeadsWhoAccessedPlatform();
+    }),
+
+    // Buscar leads que NÃO acessaram a plataforma
+    getNotAccessedLeads: publicProcedure.query(async () => {
+      const { getLeadsWhoDidNotAccessPlatform } = await import("./db");
+      return await getLeadsWhoDidNotAccessPlatform();
+    }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
