@@ -572,6 +572,12 @@ export const appRouter = router({
         const { getTubetoolsUserByEmail } = await import("./tubetools-db");
         return await getTubetoolsUserByEmail(input.email);
       }),
+
+    // Buscar analytics temporais (votos por hora, cadastros por dia, etc)
+    getTemporalAnalytics: publicProcedure.query(async () => {
+      const { getTemporalAnalytics } = await import("./tubetools-db");
+      return await getTemporalAnalytics();
+    }),
   }),
 });
 

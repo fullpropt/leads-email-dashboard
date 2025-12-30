@@ -273,3 +273,209 @@ export async function getTubetoolsUserByEmail(email: string) {
     return null;
   }
 }
+
+/**
+ * Buscar distribuição de votos por hora do dia
+ * @returns Array com contagem de votos por hora (0-23)
+ */
+export async function getVotesByHour() {
+  try {
+    const sql = getTubetoolsDb();
+    
+    if (!sql) {
+      return [];
+    }
+
+    const result = await sql`
+      SELECT 
+        EXTRACT(HOUR FROM created_at) as hour,
+        COUNT(*) as count
+      FROM votes
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY EXTRACT(HOUR FROM created_at)
+      ORDER BY hour
+    `;
+
+    return result.map((row: any) => ({
+      hour: parseInt(row.hour),
+      count: parseInt(row.count),
+    }));
+  } catch (error) {
+    console.error("[TubeTools DB] Erro ao buscar votos por hora:", error);
+    return [];
+  }
+}
+
+/**
+ * Buscar distribuição de votos por dia da semana
+ * @returns Array com contagem de votos por dia (0=Domingo, 6=Sábado)
+ */
+export async function getVotesByDayOfWeek() {
+  try {
+    const sql = getTubetoolsDb();
+    
+    if (!sql) {
+      return [];
+    }
+
+    const result = await sql`
+      SELECT 
+        EXTRACT(DOW FROM created_at) as day_of_week,
+        COUNT(*) as count
+      FROM votes
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY EXTRACT(DOW FROM created_at)
+      ORDER BY day_of_week
+    `;
+
+    const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+    return result.map((row: any) => ({
+      dayOfWeek: parseInt(row.day_of_week),
+      dayName: dayNames[parseInt(row.day_of_week)],
+      count: parseInt(row.count),
+    }));
+  } catch (error) {
+    console.error("[TubeTools DB] Erro ao buscar votos por dia da semana:", error);
+    return [];
+  }
+}
+
+/**
+ * Buscar cadastros de usuários por dia (últimos 30 dias)
+ * @returns Array com contagem de cadastros por dia
+ */
+export async function getUserSignupsByDay() {
+  try {
+    const sql = getTubetoolsDb();
+    
+    if (!sql) {
+      return [];
+    }
+
+    const result = await sql`
+      SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as count
+      FROM users
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY DATE(created_at)
+      ORDER BY date
+    `;
+
+    return result.map((row: any) => ({
+      date: row.date,
+      count: parseInt(row.count),
+    }));
+  } catch (error) {
+    console.error("[TubeTools DB] Erro ao buscar cadastros por dia:", error);
+    return [];
+  }
+}
+
+/**
+ * Buscar ganhos (recompensas) distribuídos por dia (últimos 30 dias)
+ * @returns Array com soma de recompensas por dia
+ */
+export async function getEarningsByDay() {
+  try {
+    const sql = getTubetoolsDb();
+    
+    if (!sql) {
+      return [];
+    }
+
+    const result = await sql`
+      SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as vote_count,
+        SUM(reward_amount) as total_rewards
+      FROM votes
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+        AND reward_amount > 0
+      GROUP BY DATE(created_at)
+      ORDER BY date
+    `;
+
+    return result.map((row: any) => ({
+      date: row.date,
+      voteCount: parseInt(row.vote_count),
+      totalRewards: parseFloat(row.total_rewards || 0),
+    }));
+  } catch (error) {
+    console.error("[TubeTools DB] Erro ao buscar ganhos por dia:", error);
+    return [];
+  }
+}
+
+/**
+ * Buscar usuários ativos por dia (últimos 30 dias)
+ * Usuário ativo = votou naquele dia
+ * @returns Array com contagem de usuários ativos por dia
+ */
+export async function getActiveUsersByDay() {
+  try {
+    const sql = getTubetoolsDb();
+    
+    if (!sql) {
+      return [];
+    }
+
+    const result = await sql`
+      SELECT 
+        DATE(created_at) as date,
+        COUNT(DISTINCT user_id) as active_users
+      FROM votes
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY DATE(created_at)
+      ORDER BY date
+    `;
+
+    return result.map((row: any) => ({
+      date: row.date,
+      activeUsers: parseInt(row.active_users),
+    }));
+  } catch (error) {
+    console.error("[TubeTools DB] Erro ao buscar usuários ativos por dia:", error);
+    return [];
+  }
+}
+
+/**
+ * Buscar todos os dados temporais de uma vez (otimizado)
+ * @returns Objeto com todos os dados temporais
+ */
+export async function getTemporalAnalytics() {
+  try {
+    const [
+      votesByHour,
+      votesByDayOfWeek,
+      userSignupsByDay,
+      earningsByDay,
+      activeUsersByDay,
+    ] = await Promise.all([
+      getVotesByHour(),
+      getVotesByDayOfWeek(),
+      getUserSignupsByDay(),
+      getEarningsByDay(),
+      getActiveUsersByDay(),
+    ]);
+
+    return {
+      votesByHour,
+      votesByDayOfWeek,
+      userSignupsByDay,
+      earningsByDay,
+      activeUsersByDay,
+    };
+  } catch (error) {
+    console.error("[TubeTools DB] Erro ao buscar analytics temporais:", error);
+    return {
+      votesByHour: [],
+      votesByDayOfWeek: [],
+      userSignupsByDay: [],
+      earningsByDay: [],
+      activeUsersByDay: [],
+    };
+  }
+}
