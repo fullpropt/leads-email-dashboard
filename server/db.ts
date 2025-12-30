@@ -924,3 +924,168 @@ export async function getLeadsAccessStats() {
     return { total: 0, accessed: 0, notAccessed: 0 };
   }
 }
+
+
+// ========================================================================
+// NOVAS FUNÇÕES PARA SUPORTE A TIPOS DE TEMPLATES E LEADS
+// ========================================================================
+
+/**
+ * Buscar templates por tipo
+ */
+export async function getTemplatesByType(templateType: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get templates: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(emailTemplates)
+      .where(eq(emailTemplates.templateType, templateType))
+      .orderBy(desc(emailTemplates.atualizadoEm));
+    
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get templates by type:", error);
+    return [];
+  }
+}
+
+/**
+ * Buscar templates por tipo E tipo de envio
+ */
+export async function getTemplatesByTypeAndSendType(
+  templateType: string,
+  sendType: 'immediate' | 'delayed' | 'scheduled'
+) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get templates: database not available");
+    return [];
+  }
+
+  try {
+    const conditions: any[] = [eq(emailTemplates.templateType, templateType)];
+    
+    if (sendType === 'immediate') {
+      conditions.push(eq(emailTemplates.sendImmediateEnabled, 1));
+    } else if (sendType === 'delayed') {
+      conditions.push(eq(emailTemplates.sendOnLeadDelayEnabled, 1));
+    } else if (sendType === 'scheduled') {
+      conditions.push(eq(emailTemplates.scheduleEnabled, 1));
+    }
+    
+    const result = await db
+      .select()
+      .from(emailTemplates)
+      .where(and(...conditions))
+      .orderBy(desc(emailTemplates.atualizadoEm));
+    
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get templates by type and send type:", error);
+    return [];
+  }
+}
+
+/**
+ * Atualizar tipo de lead
+ */
+export async function updateLeadType(leadId: number, leadType: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update lead type: database not available");
+    return false;
+  }
+
+  try {
+    await db
+      .update(leads)
+      .set({ leadType })
+      .where(eq(leads.id, leadId));
+    return true;
+  } catch (error) {
+    console.error("[Database] Failed to update lead type:", error);
+    return false;
+  }
+}
+
+/**
+ * Buscar leads novos (isNewLeadAfterUpdate = 1) que precisam de envio agendado
+ */
+export async function getNewLeadsForScheduledSend() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get leads: database not available");
+    return [];
+  }
+
+  try {
+    const now = new Date();
+    
+    const result = await db
+      .select()
+      .from(leads)
+      .where(
+        and(
+          sql`${leads.nextEmailSendAt} IS NOT NULL`,
+          sql`${leads.nextEmailSendAt} <= ${now}`,
+          eq(leads.emailEnviado, 0),
+          eq(leads.isNewLeadAfterUpdate, 1)
+        )
+      )
+      .orderBy(desc(leads.dataCriacao));
+    
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get leads for scheduled send:", error);
+    return [];
+  }
+}
+
+/**
+ * Atualizar flag de novo lead após update
+ */
+export async function updateIsNewLeadAfterUpdate(leadId: number, isNew: boolean) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update lead: database not available");
+    return false;
+  }
+
+  try {
+    await db
+      .update(leads)
+      .set({ isNewLeadAfterUpdate: isNew ? 1 : 0 })
+      .where(eq(leads.id, leadId));
+    return true;
+  } catch (error) {
+    console.error("[Database] Failed to update isNewLeadAfterUpdate:", error);
+    return false;
+  }
+}
+
+/**
+ * Atualizar templateAppliedAt
+ */
+export async function updateTemplateAppliedAt(leadId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update lead: database not available");
+    return false;
+  }
+
+  try {
+    await db
+      .update(leads)
+      .set({ templateAppliedAt: new Date() })
+      .where(eq(leads.id, leadId));
+    return true;
+  } catch (error) {
+    console.error("[Database] Failed to update templateAppliedAt:", error);
+    return false;
+  }
+}

@@ -40,6 +40,11 @@ export const leads = pgTable("leads", {
   status: varchar("status", { length: 20 }).notNull().default("active"), // "active" = compra aprovada, "abandoned" = carrinho abandonado
   nextEmailSendAt: timestamp("next_email_send_at"), // Próxima data para enviar email com atraso
   hasAccessedPlatform: integer("has_accessed_platform").notNull().default(0), // 0 = não acessou, 1 = acessou o TubeTools
+  
+  // ===== NOVOS CAMPOS PARA TIPOS DE LEADS =====
+  leadType: varchar("lead_type", { length: 50 }).notNull().default("compra_aprovada"), // "compra_aprovada", "novo_cadastro", "carrinho_abandonado"
+  templateAppliedAt: timestamp("template_applied_at"), // Rastreia quando o template foi aplicado ao lead
+  isNewLeadAfterUpdate: integer("is_new_lead_after_update").notNull().default(1), // 1 = lead criado após mudanças, 0 = lead antigo
 });
 
 export type Lead = typeof leads.$inferSelect;
@@ -77,6 +82,9 @@ export const emailTemplates = pgTable("email_templates", {
   scheduleIntervalType: varchar("schedule_interval_type", { length: 10 }).notNull().default("days"), // "days" ou "weeks"
   lastSentAt: timestamp("last_sent_at"), // última vez que foi enviado
   nextSendAt: timestamp("next_send_at"), // próxima data de envio
+  
+  // ===== NOVOS CAMPOS PARA TIPOS DE TEMPLATES =====
+  templateType: varchar("template_type", { length: 50 }).notNull().default("compra_aprovada"), // "compra_aprovada", "novo_cadastro", "programado", "carrinho_abandonado"
   
   // ===== METADADOS =====
   criadoEm: timestamp("criado_em").defaultNow().notNull(),

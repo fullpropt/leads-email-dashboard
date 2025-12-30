@@ -94,6 +94,7 @@ export const appRouter = router({
           nome: z.string().min(1),
           assunto: z.string().min(1),
           htmlContent: z.string().min(1),
+          templateType: z.enum(["compra_aprovada", "novo_cadastro", "programado", "carrinho_abandonado"]).default("compra_aprovada"),
         })
       )
       .mutation(async ({ input }) => {
@@ -121,6 +122,7 @@ export const appRouter = router({
             scheduleTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
             scheduleInterval: z.number().min(1).optional(),
             scheduleIntervalType: z.enum(["days", "weeks"]).optional(),
+            templateType: z.enum(["compra_aprovada", "novo_cadastro", "programado", "carrinho_abandonado"]).optional(),
           }),
         })
       )
@@ -176,6 +178,28 @@ export const appRouter = router({
         const { toggleEmailTemplateActive } = await import("./db");
         const success = await toggleEmailTemplateActive(input.templateId);
         return { success };
+      }),
+    getByType: publicProcedure
+      .input(z.object({
+        templateType: z.enum(["compra_aprovada", "novo_cadastro", "programado", "carrinho_abandonado"]),
+      }))
+      .query(async ({ input }) => {
+        const { getTemplatesByType } = await import("./db");
+        return getTemplatesByType(input.templateType);
+      }),
+  }),
+  
+  // Router para webhooks
+  webhooks: router({
+    newSignup: publicProcedure
+      .input(z.object({
+        name: z.string(),
+        email: z.string().email(),
+        full_name: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { processNewSignupWebhook } = await import("./webhooks-signup");
+        return processNewSignupWebhook(input);
       }),
   }),
 

@@ -17,6 +17,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Upload, Eye, Send, Loader2, Plus, Trash2, Clock, Calendar, Code, Zap, Mail, Rocket } from "lucide-react";
+import { TemplateTypeSelector } from "@/components/TemplateTypeSelector";
+import React from "react";
 
 interface TemplateBlock {
   id: number;
@@ -27,10 +29,13 @@ interface TemplateBlock {
   // Novos campos para múltiplos tipos de envio
   sendImmediateEnabled: number;
   autoSendOnLeadEnabled: number;
+  sendOnLeadDelayEnabled: number;
+  delayDaysAfterLeadCreation: number;
   scheduleEnabled: number;
   scheduleTime: string;
   scheduleInterval: number;
   scheduleIntervalType: "days" | "weeks";
+  templateType: "compra_aprovada" | "novo_cadastro" | "programado" | "carrinho_abandonado";
   criadoEm: Date;
   atualizadoEm: Date;
 }
@@ -43,6 +48,8 @@ export default function EmailTemplates() {
   const [showHtmlEditor, setShowHtmlEditor] = useState(false);
   const [previewTemplateId, setPreviewTemplateId] = useState<number | null>(null);
   const [autoSendEnabled, setAutoSendEnabled] = useState(false);
+  const [showTypeSelector, setShowTypeSelector] = useState(false);
+  const [selectedType, setSelectedType] = useState<"compra_aprovada" | "novo_cadastro" | "programado" | "carrinho_abandonado" | null>(null);
 
   const { data: allTemplates, refetch: refetchTemplates } =
     trpc.emailTemplates.list.useQuery();
@@ -216,8 +223,11 @@ export default function EmailTemplates() {
       nome: template.nome,
       assunto: template.assunto,
       htmlContent: template.htmlContent,
+      templateType: template.templateType,
       sendImmediateEnabled: template.sendImmediateEnabled,
       autoSendOnLeadEnabled: template.autoSendOnLeadEnabled,
+      sendOnLeadDelayEnabled: template.sendOnLeadDelayEnabled,
+      delayDaysAfterLeadCreation: template.delayDaysAfterLeadCreation,
       scheduleEnabled: template.scheduleEnabled,
       scheduleInterval: template.scheduleInterval,
       scheduleIntervalType: template.scheduleIntervalType,
@@ -234,11 +244,37 @@ export default function EmailTemplates() {
   };
 
   const handleAddTemplate = () => {
+    setShowTypeSelector(true);
+  };
+  
+  const handleTemplateTypeSelected = (type: "compra_aprovada" | "novo_cadastro" | "programado" | "carrinho_abandonado") => {
+    setSelectedType(type);
     createTemplate.mutate({
-      nome: "Novo Template",
+      nome: `Novo Template - ${getTemplateTypeName(type)}`,
       assunto: "Assunto do email",
       htmlContent: "<p>Conteúdo do email</p>",
+      templateType: type,
     });
+  };
+  
+  const getTemplateTypeName = (type: string): string => {
+    const names: Record<string, string> = {
+      compra_aprovada: "Compra Aprovada",
+      novo_cadastro: "Novo Cadastro",
+      programado: "Programado",
+      carrinho_abandonado: "Carrinho Abandonado",
+    };
+    return names[type] || type;
+  };
+  
+  const getTemplateTypeColor = (type: string): string => {
+    const colors: Record<string, string> = {
+      compra_aprovada: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
+      novo_cadastro: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+      programado: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
+      carrinho_abandonado: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
+    };
+    return colors[type] || "bg-gray-100 text-gray-700";
   };
 
   const handleRemoveTemplate = (templateId: number) => {
@@ -350,20 +386,50 @@ export default function EmailTemplates() {
         </TabsList>
 
         <TabsContent value="templates" className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-semibold">Templates de Email</h3>
+              <p className="text-sm text-muted-foreground">Gerencie seus templates por tipo</p>
+            </div>
+            <Button
+              onClick={handleAddTemplate}
+              disabled={createTemplate.isPending}
+              className="gap-2"
+            >
+              {createTemplate.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              Novo Template
+            </Button>
+          </div>
+          
+          <TemplateTypeSelector
+            open={showTypeSelector}
+            onSelect={handleTemplateTypeSelected}
+            onOpenChange={setShowTypeSelector}
+          />
+          
           <div className="space-y-4">
             {templates.map((template) => (
               <Card key={template.id} className="relative">
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <CardTitle className="text-lg">
-                        <Input
-                          placeholder="Nome do Template"
-                          value={template.nome}
-                          onChange={(e) => updateTemplateField(template.id, "nome", e.target.value)}
-                          className="text-lg font-semibold border-0 p-0 h-auto focus-visible:ring-0"
-                        />
-                      </CardTitle>
+                      <div className="flex items-center gap-2 mb-2">
+                        <CardTitle className="text-lg flex-1">
+                          <Input
+                            placeholder="Nome do Template"
+                            value={template.nome}
+                            onChange={(e) => updateTemplateField(template.id, "nome", e.target.value)}
+                            className="text-lg font-semibold border-0 p-0 h-auto focus-visible:ring-0"
+                          />
+                        </CardTitle>
+                        <div className={`px-3 py-1 rounded-full text-xs font-semibold ${getTemplateTypeColor(template.templateType)}`}>
+                          {getTemplateTypeName(template.templateType)}
+                        </div>
+                      </div>
                       <CardDescription className="mt-2">
                         <Input
                           placeholder="Assunto do Email"
@@ -374,6 +440,20 @@ export default function EmailTemplates() {
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Select
+                        value={template.templateType}
+                        onValueChange={(value) => updateTemplateField(template.id, "templateType", value as any)}
+                      >
+                        <SelectTrigger className="w-40 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="compra_aprovada">Compra Aprovada</SelectItem>
+                          <SelectItem value="novo_cadastro">Novo Cadastro</SelectItem>
+                          <SelectItem value="programado">Programado</SelectItem>
+                          <SelectItem value="carrinho_abandonado">Carrinho Abandonado</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg">
                         <Checkbox
                           checked={selectedTemplateId === template.id}
@@ -386,7 +466,7 @@ export default function EmailTemplates() {
                           }}
                           title="Selecionar para editar HTML"
                         />
-                        <span className="text-xs text-muted-foreground">Selecionar</span>
+                        <span className="text-xs text-muted-foreground">Editar HTML</span>
                       </div>
                       <Button
                         onClick={() => handleSaveTemplate(template.id)}
@@ -419,6 +499,33 @@ export default function EmailTemplates() {
 
                   {/* ====== SEÇÃO DE ENVIO E AGENDAMENTO (OTIMIZADA) ====== */}
                   <div className="border rounded-lg p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
+                    {/* Opções de envio por tipo de template */}
+                    {template.templateType === "programado" && (
+                      <div className="mb-4 p-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                        <Label className="font-medium text-purple-900 dark:text-purple-300 mb-2 block">Dias de Atraso (após criação do lead)</Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            value={template.delayDaysAfterLeadCreation || 0}
+                            onChange={(e) => updateTemplateField(template.id, "delayDaysAfterLeadCreation", parseInt(e.target.value))}
+                            className="w-24"
+                          />
+                          <span className="text-sm text-muted-foreground">dias</span>
+                          <div className="flex items-center gap-2 ml-auto">
+                            <Checkbox
+                              checked={template.sendOnLeadDelayEnabled === 1}
+                              onCheckedChange={(checked) => 
+                                updateTemplateField(template.id, "sendOnLeadDelayEnabled", checked ? 1 : 0)
+                              }
+                              title="Ativar envio atrasado"
+                            />
+                            <span className="text-xs text-muted-foreground">Ativar</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
                     {/* Cabeçalho com botões de envio */}
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
