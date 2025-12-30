@@ -111,7 +111,8 @@ export async function getLeadsWithPagination(
   page: number = 1,
   emailStatus?: 'pending' | 'sent',
   search?: string,
-  leadStatus?: 'active' | 'abandoned'
+  leadStatus?: 'active' | 'abandoned',
+  platformAccess?: 'accessed' | 'not_accessed'
 ) {
   const db = await getDb();
   if (!db) {
@@ -138,6 +139,13 @@ export async function getLeadsWithPagination(
       conditions.push(eq(leads.status, 'active'));
     } else if (leadStatus === 'abandoned') {
       conditions.push(eq(leads.status, 'abandoned'));
+    }
+    
+    // Filtro de acesso à plataforma
+    if (platformAccess === 'accessed') {
+      conditions.push(eq(leads.hasAccessedPlatform, 1));
+    } else if (platformAccess === 'not_accessed') {
+      conditions.push(eq(leads.hasAccessedPlatform, 0));
     }
 
     if (search) {

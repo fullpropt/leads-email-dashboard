@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -11,13 +12,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, RefreshCw, Search } from "lucide-react";
+import { Loader2, RefreshCw, Search, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useDebounce } from "@/hooks/use-debounce";
 
 type FilterStatus = 'all' | 'active' | 'abandoned';
+type PlatformAccessFilter = 'all' | 'accessed' | 'not_accessed';
 
 export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -25,18 +27,20 @@ export default function Leads() {
   
   const [currentPage, setCurrentPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+  const [platformAccessFilter, setPlatformAccessFilter] = useState<PlatformAccessFilter>('all');
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm]);
+  }, [debouncedSearchTerm, platformAccessFilter]);
 
   const { data: leadsData, isLoading, refetch } = trpc.leads.listPaginated.useQuery(
     { 
       page: currentPage, 
       status: 'all', // status de email (pending/sent/all)
       search: debouncedSearchTerm,
-      leadStatus: filterStatus // status de lead (active/abandoned/all)
+      leadStatus: filterStatus, // status de lead (active/abandoned/all)
+      platformAccess: platformAccessFilter // NOVO: filtro de acesso à plataforma
     },
     {
       staleTime: 5000,
@@ -105,6 +109,11 @@ export default function Leads() {
 
   const handleFilterChange = (status: FilterStatus) => {
     setFilterStatus(status);
+    setCurrentPage(1);
+  };
+
+  const handlePlatformAccessFilterChange = (filter: PlatformAccessFilter) => {
+    setPlatformAccessFilter(filter);
     setCurrentPage(1);
   };
 
@@ -230,6 +239,38 @@ export default function Leads() {
           </Button>
         </div>
 
+        {/* NOVO: Filtros de acesso à plataforma */}
+        <div className="flex gap-2 border-t pt-4">
+          <span className="text-sm font-medium text-muted-foreground mr-2 flex items-center">
+            Acesso à Plataforma:
+          </span>
+          <Button
+            variant={platformAccessFilter === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => handlePlatformAccessFilterChange('all')}
+          >
+            Todos
+          </Button>
+          <Button
+            variant={platformAccessFilter === 'accessed' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => handlePlatformAccessFilterChange('accessed')}
+            className="gap-2"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Acessaram
+          </Button>
+          <Button
+            variant={platformAccessFilter === 'not_accessed' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => handlePlatformAccessFilterChange('not_accessed')}
+            className="gap-2"
+          >
+            <XCircle className="h-4 w-4" />
+            Não Acessaram
+          </Button>
+        </div>
+
         {/* Indicador de seleção */}
         {selectedCount > 0 && (
           <div className="text-sm text-muted-foreground bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
@@ -255,6 +296,7 @@ export default function Leads() {
               <TableHead>ID</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead>Status Plataforma</TableHead>
               <TableHead>Situação</TableHead>
               <TableHead>Data de Criação</TableHead>
             </TableRow>
@@ -262,7 +304,7 @@ export default function Leads() {
           <TableBody>
             {isLoading ? (
                 <TableRow>
-                <TableCell colSpan={6} className="text-center py-12">
+                <TableCell colSpan={7} className="text-center py-12">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     <p className="text-muted-foreground">Carregando leads...</p>
@@ -273,6 +315,10 @@ export default function Leads() {
               leads.map((lead) => {
                 const situation = lead.status === 'abandoned' ? 'Carrinho Abandonado' : 'Ativo';
                 const situationColor = lead.status === 'abandoned' ? 'text-orange-600' : 'text-green-600';
+                
+                // NOVO: Badge de acesso à plataforma
+                const hasAccessed = lead.hasAccessedPlatform === 1;
+                
                 return (
                   <TableRow key={lead.id}>
                     {/* Checkbox individual para cada lead */}
@@ -287,6 +333,22 @@ export default function Leads() {
                     <TableCell className="font-medium">{lead.id}</TableCell>
                     <TableCell>{lead.nome}</TableCell>
                     <TableCell className="font-mono text-sm">{lead.email}</TableCell>
+                    
+                    {/* NOVO: Coluna de status da plataforma com badge */}
+                    <TableCell>
+                      {hasAccessed ? (
+                        <Badge variant="default" className="gap-1 bg-green-600 hover:bg-green-700">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Ativo
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="gap-1 bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-950 dark:text-red-300">
+                          <XCircle className="h-3 w-3" />
+                          Inativo
+                        </Badge>
+                      )}
+                    </TableCell>
+                    
                     <TableCell className={`text-sm font-medium ${situationColor}`}>
                       {situation}
                     </TableCell>
@@ -298,10 +360,14 @@ export default function Leads() {
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12">
+                <TableCell colSpan={7} className="text-center py-12">
                   <p className="text-muted-foreground">
                     {debouncedSearchTerm
                       ? `Nenhum lead encontrado para "${debouncedSearchTerm}"`
+                      : platformAccessFilter === 'accessed'
+                      ? "Nenhum lead acessou a plataforma ainda"
+                      : platformAccessFilter === 'not_accessed'
+                      ? "Todos os leads já acessaram a plataforma"
                       : "Nenhum lead encontrado"}
                   </p>
                 </TableCell>
@@ -318,6 +384,7 @@ export default function Leads() {
               Exibindo <span className="font-semibold">{leads.length}</span> de{" "}
               <span className="font-semibold">{leadsData.total}</span> leads
               {debouncedSearchTerm && ` (filtrados por busca)`}
+              {platformAccessFilter !== 'all' && ` (filtrados por acesso)`}
             </>
           ) : (
             <>
