@@ -70,7 +70,7 @@ async function processDelayedSends() {
         and(
           eq(leads.emailEnviado, 0), // Email não enviado
           sql`${leads.nextEmailSendAt} IS NOT NULL`, // nextEmailSendAt está definido
-          sql`${leads.nextEmailSendAt} <= ${now}` // Tempo de envio chegou
+          sql`${leads.nextEmailSendAt} <= ${now.toISOString()}` // Tempo de envio chegou
         )
       );
 
@@ -177,23 +177,23 @@ export async function recalculateAllLeadsNextSendAt() {
 
     console.log(`[Scheduler] 📋 Processando ${allLeads.length} lead(s)`);
 
-    // Para cada lead, usar o template com maior atraso (para não sobrescrever)
-    for (const lead of allLeads) {
-      // Usar o primeiro template (você pode customizar essa lógica)
-      const template = templatesWithDelayedSend[0];
-      const delayDays = template.delayDaysAfterLeadCreation || 0;
+      // Para cada lead, usar o template com maior atraso (para não sobrescrever)
+      for (const lead of allLeads) {
+        // Usar o primeiro template (você pode customizar essa lógica)
+        const template = templatesWithDelayedSend[0];
+        const delayDays = template.delayDaysAfterLeadCreation || 0;
 
-      const createdAt = new Date(lead.dataCriacao);
-      const nextSendAt = new Date(createdAt);
-      nextSendAt.setDate(nextSendAt.getDate() + delayDays);
+        const createdAt = new Date(lead.dataCriacao);
+        const nextSendAt = new Date(createdAt);
+        nextSendAt.setDate(nextSendAt.getDate() + delayDays);
 
-      await db
-        .update(leads)
-        .set({ nextEmailSendAt: nextSendAt })
-        .where(eq(leads.id, lead.id));
+        await db
+          .update(leads)
+          .set({ nextEmailSendAt: nextSendAt.toISOString() as any })
+          .where(eq(leads.id, lead.id));
 
-      console.log(`[Scheduler] ✓ Lead ${lead.email} agendado para ${nextSendAt.toLocaleString("pt-BR")}`);
-    }
+        console.log(`[Scheduler] ✓ Lead ${lead.email} agendado para ${nextSendAt.toLocaleString("pt-BR")}`);
+      }
 
     console.log("[Scheduler] ✅ Recálculo concluído");
   } catch (error) {

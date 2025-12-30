@@ -191,10 +191,10 @@ export async function processWebhook(payload: any) {
       const createdAt = new Date(lead.dataCriacao);
       const nextSendAt = new Date(createdAt);
       nextSendAt.setDate(nextSendAt.getDate() + delayDays);
-      
+
       await db
         .update(leads)
-        .set({ nextEmailSendAt: nextSendAt })
+        .set({ nextEmailSendAt: nextSendAt.toISOString() as any })
         .where(eq(leads.id, lead.id));
       
       console.log(`[Webhook] Email agendado para ${nextSendAt.toLocaleString("pt-BR")}`);
