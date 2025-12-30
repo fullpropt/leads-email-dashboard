@@ -11,7 +11,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
-    "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts"
+    "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
+    "sync:tubetools": "node -e \"fetch('https://leads-email-dashboard-production.up.railway.app/api/trpc/tubetools.syncAll', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({} )}).then(r => r.json()).then(data => console.log(JSON.stringify(data, null, 2))).catch(err => console.error('Erro:', err.message))\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
