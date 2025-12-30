@@ -45,11 +45,22 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
  */
 async function sendWithMailrelay(options: SendEmailOptions): Promise<boolean> {
   try {
-    const apiKey = "hf75c49PswLbz4dtb9FYYFCPJP1Zx6htKPouctQh";
-    const apiUrl = "https://acessaragora.ipzmarketing.com/api/v1/send_emails";
+    // ✅ CORREÇÃO: Usar variáveis de ambiente em vez de hardcoded
+    const apiKey = process.env.MAILRELAY_API_KEY;
+    const apiUrl = process.env.MAILRELAY_API_URL || "https://acessaragora.ipzmarketing.com/api/v1/send_emails";
+    const fromEmail = process.env.MAILRELAY_FROM_EMAIL || "noreply@emails.youtbsupport.online";
+    const fromName = process.env.MAILRELAY_FROM_NAME || "TubeTools Support";
+
+    // Validar credenciais
+    if (!apiKey) {
+      console.error("[Mailrelay] ❌ API Key não configurada");
+      console.error("[Mailrelay] ⚠️ Configure a variável de ambiente MAILRELAY_API_KEY");
+      return false;
+    }
 
     console.log("[Mailrelay] 📤 Enviando email para:", options.to);
     console.log("[Mailrelay] 📧 Assunto:", options.subject);
+    console.log("[Mailrelay] 👤 De:", fromEmail);
 
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -59,8 +70,8 @@ async function sendWithMailrelay(options: SendEmailOptions): Promise<boolean> {
       },
       body: JSON.stringify({
         from: {
-          email: "noreply@emails.youtbsupport.online",
-          name: "TubeTools Support",
+          email: fromEmail,
+          name: fromName,
         },
         to: [{ email: options.to }],
         subject: options.subject,
@@ -77,6 +88,18 @@ async function sendWithMailrelay(options: SendEmailOptions): Promise<boolean> {
       try {
         const errorJson = JSON.parse(errorText);
         console.error("[Mailrelay] Erro detalhado:", errorJson);
+        
+        // ✅ CORREÇÃO: Adicionar mensagens de erro específicas
+        if (response.status === 422) {
+          if (errorJson.errors?.from) {
+            console.error("[Mailrelay] ⚠️ AVISO: Email remetente não confirmado!");
+            console.error("[Mailrelay] ⚠️ Confirme o email no painel do Mailrelay: https://app.mailrelay.com");
+          }
+        } else if (response.status === 401) {
+          console.error("[Mailrelay] ⚠️ Erro 401: API Key inválida ou expirada");
+        } else if (response.status === 403) {
+          console.error("[Mailrelay] ⚠️ Erro 403: Acesso negado");
+        }
       } catch (e) {
         // Não é JSON, ignorar
       }
@@ -108,6 +131,7 @@ async function sendWithMailgun(options: SendEmailOptions): Promise<boolean> {
   try {
     const apiKey = process.env.MAILGUN_API_KEY;
     const domain = process.env.MAILGUN_DOMAIN;
+    const fromEmail = process.env.MAILGUN_FROM_EMAIL || "contato@mail.youtbviews.online";
 
     // Validar credenciais
     if (!apiKey || !domain) {
@@ -118,7 +142,7 @@ async function sendWithMailgun(options: SendEmailOptions): Promise<boolean> {
     }
 
     const form = new FormData();
-    form.append("from", `TubeTools <contato@mail.youtbviews.online>`);
+    form.append("from", `TubeTools <${fromEmail}>`);
     form.append("to", options.to);
     form.append("subject", options.subject);
     form.append("html", options.html);
@@ -179,9 +203,15 @@ async function sendWithMailgun(options: SendEmailOptions): Promise<boolean> {
  */
 async function testMailrelayConnection(): Promise<boolean> {
   try {
-    const apiKey = "HEP6AS37LsvDiLNkVTyMExGFsSwMcfaUo4xmP36Q";
-    const account = "tubetools";
+    // ✅ CORREÇÃO: Usar variáveis de ambiente
+    const apiKey = process.env.MAILRELAY_API_KEY;
+    const account = process.env.MAILRELAY_ACCOUNT || "tubetools";
     const apiUrl = `https://app.${account}.mailrelay.com/api/v1/groups`;
+
+    if (!apiKey) {
+      console.error("[Mailrelay] ❌ API Key não configurada para teste");
+      return false;
+    }
 
     console.log("[Mailrelay] 🔍 Testando conexão com Mailrelay...");
 
