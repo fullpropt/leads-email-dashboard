@@ -107,6 +107,8 @@ export const appRouter = router({
             // ===== NOVOS CAMPOS PARA MÚLTIPLOS TIPOS DE ENVIO =====
             sendImmediateEnabled: z.number().min(0).max(1).optional(),
             autoSendOnLeadEnabled: z.number().min(0).max(1).optional(),
+            sendOnLeadDelayEnabled: z.number().min(0).max(1).optional(),
+            delayDaysAfterLeadCreation: z.number().min(0).optional(),
             scheduleEnabled: z.number().min(0).max(1).optional(),
             scheduleTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
             scheduleInterval: z.number().min(1).optional(),

@@ -38,6 +38,7 @@ export const leads = pgTable("leads", {
   dataEnvioEmail: timestamp("data_envio_email"),
   selectedForManualSend: integer("selected_for_manual_send").notNull().default(0),
   status: varchar("status", { length: 20 }).notNull().default("active"), // "active" = compra aprovada, "abandoned" = carrinho abandonado
+  nextEmailSendAt: timestamp("next_email_send_at"), // Próxima data para enviar email com atraso
 });
 
 export type Lead = typeof leads.$inferSelect;
@@ -61,6 +62,11 @@ export const emailTemplates = pgTable("email_templates", {
   // ===== CONTROLES DE ENVIO AUTOMÁTICO POR LEAD =====
   // Quando um novo lead é criado, este template é enviado automaticamente
   autoSendOnLeadEnabled: integer("auto_send_on_lead_enabled").notNull().default(0), // 0 = desativado, 1 = ativado
+  
+  // ===== CONTROLES DE ENVIO ATRASADO POR LEAD =====
+  // Envia o email X dias após o lead ser criado
+  sendOnLeadDelayEnabled: integer("send_on_lead_delay_enabled").notNull().default(0), // 0 = desativado, 1 = ativado
+  delayDaysAfterLeadCreation: integer("delay_days_after_lead_creation").notNull().default(0), // número de dias para aguardar
   
   // ===== CONTROLES DE ENVIO AGENDADO =====
   // Envia o email em horários específicos e intervalos regulares

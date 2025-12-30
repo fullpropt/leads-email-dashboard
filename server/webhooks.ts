@@ -113,12 +113,33 @@ export async function processWebhook(payload: any) {
       await db.insert(leads).values(leadData);
     }
 
-    // ===== NOVO: Verificar se o envio automático está ativado =====
-    const { getAutoSendStatus, getTemplatesWithAutoSendOnLeadEnabled, updateLeadEmailStatus, replaceTemplateVariables } = await import("./db");
+    // ===== ENVIO AUTOMÁTICO: IMEDIATO E/OU ATRASADO =====
+    const { getAutoSendStatus, getTemplatesWithAutoSendOnLeadEnabled, getTemplatesWithDelayedSendEnabled, updateLeadEmailStatus, replaceTemplateVariables } = await import("./db");
     const autoSendEnabled = await getAutoSendStatus();
     
+    // Buscar o lead recém-criado para ter os dados atualizados
+    const createdLead = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.email, customer_email))
+      .limit(1);
+    
+    if (createdLead.length === 0) {
+      console.error(`[Webhook] Lead não encontrado após criação: ${customer_email}`);
+      console.log(`[Webhook] Lead processado com sucesso: ${customer_email}`);
+      return {
+        success: true,
+        message: "Lead processado com sucesso",
+        leadEmail: customer_email,
+        transactionId: transaction_id,
+      };
+    }
+    
+    const lead = createdLead[0];
+    
+    // ===== ENVIO IMEDIATO =====
     if (autoSendEnabled) {
-      console.log(`[Webhook] Auto-envio ativado, buscando templates...`);
+      console.log(`[Webhook] Auto-envio imediato ativado, buscando templates...`);
       const templatesWithAutoSend = await getTemplatesWithAutoSendOnLeadEnabled();
       
       if (templatesWithAutoSend.length > 0) {
@@ -126,21 +147,8 @@ export async function processWebhook(payload: any) {
         
         for (const template of templatesWithAutoSend) {
           try {
-            console.log(`[Webhook] Enviando template '${template.nome}' para ${customer_email}`);
+            console.log(`[Webhook] Enviando template '${template.nome}' para ${customer_email} (IMEDIATO)`);
             
-            // Buscar o lead recém-criado para ter os dados atualizados
-            const createdLead = await db
-              .select()
-              .from(leads)
-              .where(eq(leads.email, customer_email))
-              .limit(1);
-            
-            if (createdLead.length === 0) {
-              console.error(`[Webhook] Lead não encontrado após criação: ${customer_email}`);
-              continue;
-            }
-            
-            const lead = createdLead[0];
             const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
             
             const emailSent = await sendEmail({
@@ -160,10 +168,38 @@ export async function processWebhook(payload: any) {
           }
         }
       } else {
-        console.log(`[Webhook] Nenhum template com auto-envio ativado encontrado`);
+        console.log(`[Webhook] Nenhum template com auto-envio imediato ativado encontrado`);
       }
     } else {
-      console.log(`[Webhook] Auto-envio desativado, email não será enviado automaticamente`);
+      console.log(`[Webhook] Auto-envio imediato desativado`);
+    }
+    
+    // ===== ENVIO ATRASADO =====
+    console.log(`[Webhook] Verificando templates com envio atrasado...`);
+    const templatesWithDelayedSend = await getTemplatesWithDelayedSendEnabled();
+    
+    if (templatesWithDelayedSend.length > 0) {
+      console.log(`[Webhook] Encontrados ${templatesWithDelayedSend.length} template(s) com envio atrasado`);
+      
+      // Usar o primeiro template com envio atrasado
+      const template = templatesWithDelayedSend[0];
+      const delayDays = template.delayDaysAfterLeadCreation || 0;
+      
+      console.log(`[Webhook] Agendando email para ${delayDays} dia(s) após criação do lead`);
+      
+      // Calcular e atualizar nextEmailSendAt
+      const createdAt = new Date(lead.dataCriacao);
+      const nextSendAt = new Date(createdAt);
+      nextSendAt.setDate(nextSendAt.getDate() + delayDays);
+      
+      await db
+        .update(leads)
+        .set({ nextEmailSendAt: nextSendAt })
+        .where(eq(leads.id, lead.id));
+      
+      console.log(`[Webhook] Email agendado para ${nextSendAt.toLocaleString("pt-BR")}`);
+    } else {
+      console.log(`[Webhook] Nenhum template com envio atrasado ativado`);
     }
 
     console.log(`[Webhook] Lead processado com sucesso: ${customer_email}`);

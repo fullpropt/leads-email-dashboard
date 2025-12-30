@@ -8,6 +8,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { processWebhook } from "../webhooks";
+import { startScheduler } from "../scheduler";
 
 function isPortAvailable(port: number ): Promise<boolean> {
   return new Promise(resolve => {
@@ -93,6 +94,9 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/` );
     console.log(`Webhook endpoint: http://localhost:${port}/api/webhooks/perfectpay`);
+    
+    // Inicializar scheduler de envio atrasado
+    startScheduler();
   });
 }
 

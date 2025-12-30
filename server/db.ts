@@ -655,3 +655,125 @@ export async function toggleEmailTemplateActive(templateId: number) {
     return false;
   }
 }
+
+// ========================================================================
+// DELAYED SEND ON LEAD (ENVIO ATRASADO)
+// ========================================================================
+
+/**
+ * Obter todos os templates com envio atrasado ativado
+ */
+export async function getTemplatesWithDelayedSendEnabled() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get templates: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(emailTemplates)
+      .where(eq(emailTemplates.sendOnLeadDelayEnabled, 1));
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get templates with delayed send enabled:", error);
+    return [];
+  }
+}
+
+/**
+ * Obter leads que estão prontos para envio atrasado
+ * Retorna leads com nextEmailSendAt <= agora e emailEnviado = 0
+ */
+export async function getLeadsReadyForDelayedSend() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get leads: database not available");
+    return [];
+  }
+
+  try {
+    const now = new Date();
+    const result = await db
+      .select()
+      .from(leads)
+      .where(
+        and(
+          eq(leads.emailEnviado, 0), // Email não enviado
+          sql`${leads.nextEmailSendAt} IS NOT NULL`, // nextEmailSendAt está definido
+          sql`${leads.nextEmailSendAt} <= ${now}` // Tempo de envio chegou
+        )
+      );
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get leads ready for delayed send:", error);
+    return [];
+  }
+}
+
+/**
+ * Atualizar nextEmailSendAt de um lead
+ * Calcula a data baseado em dataCriacao + delayDays
+ */
+export async function updateLeadNextSendAt(leadId: number, delayDays: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update lead: database not available");
+    return false;
+  }
+
+  try {
+    // Buscar o lead para pegar a data de criação
+    const leadResult = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.id, leadId))
+      .limit(1);
+
+    if (leadResult.length === 0) {
+      console.warn(`[Database] Lead ${leadId} not found`);
+      return false;
+    }
+
+    const lead = leadResult[0];
+    const createdAt = new Date(lead.dataCriacao);
+    const nextSendAt = new Date(createdAt);
+    nextSendAt.setDate(nextSendAt.getDate() + delayDays);
+
+    await db
+      .update(leads)
+      .set({ nextEmailSendAt: nextSendAt })
+      .where(eq(leads.id, leadId));
+
+    return true;
+  } catch (error) {
+    console.error("[Database] Failed to update lead next send at:", error);
+    return false;
+  }
+}
+
+/**
+ * Limpar nextEmailSendAt de um lead (quando email é enviado)
+ */
+export async function clearLeadNextSendAt(leadId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update lead: database not available");
+    return false;
+  }
+
+  try {
+    await db
+      .update(leads)
+      .set({ nextEmailSendAt: null })
+      .where(eq(leads.id, leadId));
+
+    return true;
+  } catch (error) {
+    console.error("[Database] Failed to clear lead next send at:", error);
+    return false;
+  }
+}
