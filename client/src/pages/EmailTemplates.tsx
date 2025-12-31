@@ -720,11 +720,12 @@ export default function EmailTemplates() {
                 </div>
               )}
               {previewHtml && !previewTemplate.isLoading ? (
-                <div className="border rounded-lg p-4 bg-white">
+                <div className="border rounded-lg bg-gray-50 overflow-auto" style={{ maxHeight: "calc(100vh - 300px)" }}>
                   <iframe
                     srcDoc={previewHtml}
                     title="Email Preview"
-                    className="w-full h-96 border rounded"
+                    className="w-full border-0"
+                    style={{ minHeight: "800px" }}
                     sandbox={{ allow: ["same-origin"] }}
                   />
                 </div>

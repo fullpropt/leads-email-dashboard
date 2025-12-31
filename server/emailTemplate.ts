@@ -39,11 +39,11 @@ export function getEmailFooter(): string {
                 <p style="margin: 0 0 10px 0; font-weight: bold; color: #000000;">TubeTools</p>
                 <p style="margin: 0 0 10px 0;">Watch. Vote. Earn.</p>
                 <p style="margin: 0 0 5px 0;">
-                  <strong>Suporte:</strong> 
+                  <strong>Support:</strong> 
                   <a href="mailto:supfullpropt@gmail.com" style="color: #FF0000; text-decoration: none;">supfullpropt@gmail.com</a>
                 </p>
                 <p style="margin: 20px 0 0 0; font-size: 12px; color: #999999;">
-                  © ${new Date().getFullYear()} TubeTools. Todos os direitos reservados.
+                  © ${new Date().getFullYear()} TubeTools. All rights reserved.
                 </p>
               </td>
             </tr>
