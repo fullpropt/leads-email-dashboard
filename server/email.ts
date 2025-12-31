@@ -47,8 +47,8 @@ async function sendWithMailrelay(options: SendEmailOptions): Promise<boolean> {
   try {
     // ✅ CORREÇÃO: Usar variáveis de ambiente em vez de hardcoded
     const apiKey = process.env.MAILRELAY_API_KEY;
-    const apiUrl = process.env.MAILRELAY_API_URL || "https://acessaragora.ipzmarketing.com/api/v1/send_emails";
-    const fromEmail = process.env.MAILRELAY_FROM_EMAIL || "noreply@emails.youtbsupport.online";
+    const apiUrl = process.env.MAILRELAY_API_URL || "https://youtdvsupport.ipzmarketing.com/api/v1/send_emails";
+    const fromEmail = process.env.MAILRELAY_FROM_EMAIL || "noreply@youtdvsupport.online";
     const fromName = process.env.MAILRELAY_FROM_NAME || "TubeTools Support";
 
     // Validar credenciais
