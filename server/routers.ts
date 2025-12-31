@@ -605,7 +605,7 @@ export const appRouter = router({
   }),
 
   // ===== WEBHOOK PARA NOVO CADASTRO (TubeTools) =====
-  router.post("/webhooks.newSignup", async ({ input }) => {
+  router.post("/webhooks/newSignup", async ({ input }) => {
     console.log("[Router] Webhook de novo cadastro recebido");
     
     const { email, name, product = "TubeTools", plan = "Free" } = input;
