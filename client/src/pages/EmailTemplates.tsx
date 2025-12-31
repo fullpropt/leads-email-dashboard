@@ -18,7 +18,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Upload, Eye, Send, Loader2, Plus, Trash2, Clock, Calendar, Code, Zap, Mail, Rocket } from "lucide-react";
 import { TemplateTypeSelector } from "@/components/TemplateTypeSelector";
-import React from "react";
 
 interface TemplateBlock {
   id: number;
