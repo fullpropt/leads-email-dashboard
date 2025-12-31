@@ -405,9 +405,9 @@ export default function EmailTemplates() {
           </div>
           
           <TemplateTypeSelector
-            open={showTypeSelector}
+            isOpen={showTypeSelector}
             onSelect={handleTemplateTypeSelected}
-            onOpenChange={setShowTypeSelector}
+            onClose={() => setShowTypeSelector(false)}
           />
           
           <div className="space-y-4">
