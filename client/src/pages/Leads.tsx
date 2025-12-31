@@ -103,6 +103,22 @@ export default function Leads() {
     },
   });
 
+  // Mutation para sincronizar com TubeTools
+  const syncWithTubetools = trpc.tubetools.syncAll.useMutation({
+    onSuccess: (data) => {
+      console.log("✅ Sincronização com TubeTools concluída:", data);
+      toast.success(`Sincronização concluída: ${data.accessed} acessaram, ${data.notAccessed} não acessaram`);
+      refetch(); // Recarregar dados após sincronização
+    },
+    onError: (error) => {
+      console.error("❌ Erro ao sincronizar com TubeTools:", error);
+      toast.error("Erro ao sincronizar com TubeTools");
+    },
+  });
+
+  // Estado para controlar loading da sincronização
+  const isSyncing = syncWithTubetools.isPending;
+
   const leads = leadsData?.leads || [];
 
   // Carregar o estado inicial de seleção do banco de dados
@@ -198,11 +214,12 @@ export default function Leads() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => refetch()}
+            onClick={() => syncWithTubetools.mutate()}
+            disabled={isSyncing}
             className="gap-2"
           >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            Atualizar
+            <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            {isSyncing ? 'Sincronizando...' : 'Atualizar'}
           </Button>
         </div>
 
