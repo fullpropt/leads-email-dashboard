@@ -1128,9 +1128,9 @@ export async function importAbandonedCartsFromPerfectPay(
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          status: 'abandoned',
-          date_from: dateFrom,
-          date_to: dateTo
+          start_date_sale: dateFrom,
+          end_date_sale: dateTo,
+          sale_status: [12]
         })
       }
     );
@@ -1147,7 +1147,7 @@ export async function importAbandonedCartsFromPerfectPay(
     }
 
     const data = await response.json();
-    const sales = data.sales || [];
+    const sales = data.sales?.data || [];
 
     console.log(`[Import] Total de carrinhos abandonados encontrados: ${sales.length}`);
 
