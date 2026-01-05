@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, RefreshCw, Search, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown, Download } from "lucide-react";
+import { Loader2, RefreshCw, Search, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -38,7 +38,6 @@ export default function Leads() {
   const [platformAccessFilter, setPlatformAccessFilter] = useState<PlatformAccessFilter>('all');
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [importingToken, setImportingToken] = useState(false);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -122,20 +121,6 @@ export default function Leads() {
     },
   });
 
-  const importAbandonedCarts = trpc.leads.importAbandonedCarts.useMutation({
-    onSuccess: (data) => {
-      console.log("✅ Importação concluída:", data);
-      toast.success(data.message);
-      refetch();
-      setImportingToken(false);
-    },
-    onError: (error) => {
-      console.error("❌ Erro ao importar:", error);
-      toast.error("Erro ao importar carrinhos abandonados");
-      setImportingToken(false);
-    },
-  });
-
   const isSyncing = syncWithTubetools.isPending;
 
   const leads = leadsData?.leads || [];
@@ -169,17 +154,6 @@ export default function Leads() {
 
   const handleSortByDate = () => {
     setSortDirection(sortDirection === 'desc' ? 'asc' : 'desc');
-  };
-
-  const handleImportHistorical = () => {
-    const token = prompt("Cole seu token de acesso da API PerfectPay:");
-    if (token && token.trim()) {
-      setImportingToken(true);
-      importAbandonedCarts.mutate({
-        token: token.trim(),
-        daysBack: 7
-      });
-    }
   };
 
   const formatDate = (date: Date | null) => {
@@ -241,16 +215,6 @@ export default function Leads() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleImportHistorical}
-              disabled={importingToken}
-              className="gap-2"
-            >
-              <Download className="h-4 w-4" />
-              {importingToken ? 'Importando...' : 'Importar Histórico'}
-            </Button>
             <Button
               variant="outline"
               size="sm"

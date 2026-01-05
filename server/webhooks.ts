@@ -32,24 +32,18 @@ export async function processWebhook(payload: any) {
     const sale_value = payload.sale_amount;
     const transaction_id = payload.code;
     
-    // Log detalhado de campos de status
+    // Log detalhado de campos de status - CORRIGIDO para campos corretos do PerfectPay
     console.log("[Webhook] ===== CAMPOS DE STATUS =====");
-    console.log("[Webhook] sale_status_enum_key:", payload.sale_status_enum_key);
-    console.log("[Webhook] status:", payload.status);
-    console.log("[Webhook] order_status:", payload.order_status);
-    console.log("[Webhook] checkout_status:", payload.checkout_status);
-    console.log("[Webhook] transaction_status:", payload.transaction_status);
+    console.log("[Webhook] sale_status_enum:", payload.sale_status_enum);
+    console.log("[Webhook] sale_status_detail:", payload.sale_status_detail);
     console.log("[Webhook] ===== FIM DOS CAMPOS DE STATUS =====");
     
-    // Tentar extrair status de múltiplos campos possíveis
-    const status = payload.sale_status_enum_key || 
-                   payload.status || 
-                   payload.order_status || 
-                   payload.checkout_status ||
-                   payload.transaction_status;
+    // Extrair status do webhook PerfectPay - CORRIGIDO
+    const statusEnum = payload.sale_status_enum;
+    const statusDetail = payload.sale_status_detail;
 
-    console.log(`[Webhook] Status final extraído: ${status}`);
-    console.log(`[Webhook] Dados extraídos - Email: ${customer_email}, Nome: ${customer_name}, Status: ${status}`);
+    console.log(`[Webhook] Status enum: ${statusEnum}, Status detail: ${statusDetail}`);
+    console.log(`[Webhook] Dados extraídos - Email: ${customer_email}, Nome: ${customer_name}`);
 
     // Validar campos obrigatórios
     if (!customer_email || !customer_name) {
@@ -61,63 +55,67 @@ export async function processWebhook(payload: any) {
       };
     }
 
-    // Determinar o status do lead baseado no status da transação
+    // Determinar o status do lead baseado no sale_status_enum do PerfectPay
+    // Códigos de status do PerfectPay:
+    // 0 => 'none',
+    // 1 => 'pending',        // boleto pendente
+    // 2 => 'approved',       // venda aprovada boleto ou cartão
+    // 3 => 'in_process',     // em revisão manual
+    // 4 => 'in_mediation',   // em moderação
+    // 5 => 'rejected',       // rejeitado
+    // 6 => 'cancelled',      // cancelado do cartão
+    // 7 => 'refunded',       // devolvido
+    // 8 => 'authorized',     // autorizada
+    // 9 => 'charged_back',   // solicitado charge back
+    // 10 => 'completed',     // 30 dias após a venda aprovada
+    // 11 => 'checkout_error',// erro durante checkout
+    // 12 => 'precheckout',   // ABANDONO
+    // 13 => 'expired',       // boleto expirado
+    // 16 => 'in_review',     // em análise
+    
     let leadStatus = "active"; // padrão: compra aprovada
     
-    // Lista de status possíveis para carrinho abandonado
-    const possibleAbandonedStatuses = [
-      "precheckout",
-      "abandoned",
-      "cart_abandoned",
-      "incomplete",
-      "checkout_abandoned",
-      "pending_payment",
-      "awaiting_payment"
-    ];
-    
-    // Lista de status para compra aprovada
-    const possibleApprovedStatuses = [
-      "approved",
-      "completed",
-      "success",
-      "paid",
-      "confirmed"
-    ];
-    
-    // Lista de status para reembolso/chargeback (será ignorado por enquanto)
-    const possibleChargebackStatuses = [
-      "charged_back",
-      "chargeback",
-      "refunded",
-      "refund",
-      "cancelled",
-      "failed",
-      "declined"
-    ];
-    
-    if (possibleAbandonedStatuses.includes(status)) {
+    // Verificar por número (sale_status_enum) - CORRIGIDO
+    if (statusEnum === 12) {
       leadStatus = "abandoned";
-      console.log(`[Webhook] ✅ Carrinho abandonado detectado para ${customer_email} (status: ${status})`);
-    } else if (possibleApprovedStatuses.includes(status)) {
+      console.log(`[Webhook] ✅ Carrinho abandonado detectado para ${customer_email} (sale_status_enum: ${statusEnum})`);
+    } else if (statusEnum === 2 || statusEnum === 10 || statusEnum === 8) {
       leadStatus = "active";
-      console.log(`[Webhook] ✅ Compra aprovada detectada para ${customer_email} (status: ${status})`);
-    } else if (possibleChargebackStatuses.includes(status)) {
-      console.log(`[Webhook] 💳 Chargeback/Reembolso detectado para ${customer_email} (status: ${status})`);
-      console.log(`[Webhook] ℹ️ Este evento será registrado no banco para análise, mas não será processado como lead.`);
+      console.log(`[Webhook] ✅ Compra aprovada/autorizada detectada para ${customer_email} (sale_status_enum: ${statusEnum})`);
+    } else if (statusEnum === 7 || statusEnum === 9 || statusEnum === 6) {
+      console.log(`[Webhook] 💳 Chargeback/Reembolso/Cancelamento detectado para ${customer_email} (sale_status_enum: ${statusEnum})`);
       return {
         success: true,
-        message: `Chargeback/Reembolso registrado: ${status}`,
-        statusReceived: status,
+        message: `Chargeback/Reembolso registrado: ${statusEnum}`,
+        statusReceived: statusEnum,
         type: "chargeback",
       };
-    } else {
-      console.warn(`[Webhook] ⚠️ Status desconhecido recebido: '${status}'`);
-      console.warn(`[Webhook] ⚠️ Lead não será processado. Verifique se este é um status esperado.`);
+    } else if (statusEnum === 1 || statusEnum === 13) {
+      // Pendente ou Expirado - não processar como lead
+      console.log(`[Webhook] ⏳ Status pendente/expirado para ${customer_email} (sale_status_enum: ${statusEnum})`);
       return {
         success: true,
-        message: `Status desconhecido: ${status}. Não processado.`,
-        statusReceived: status,
+        message: `Status pendente/expirado: ${statusEnum}`,
+        statusReceived: statusEnum,
+        type: "pending",
       };
+    } else {
+      console.warn(`[Webhook] ⚠️ Status desconhecido recebido: sale_status_enum=${statusEnum}, sale_status_detail=${statusDetail}`);
+      // Tentar processar mesmo assim baseado no statusDetail
+      if (statusDetail && (statusDetail.includes("checkout") || statusDetail.includes("precheckout"))) {
+        leadStatus = "abandoned";
+        console.log(`[Webhook] ✅ Detectado como abandono pelo statusDetail: ${statusDetail}`);
+      } else if (statusDetail && (statusDetail.includes("approved") || statusDetail.includes("completed"))) {
+        leadStatus = "active";
+        console.log(`[Webhook] ✅ Detectado como aprovado pelo statusDetail: ${statusDetail}`);
+      } else {
+        console.warn(`[Webhook] ⚠️ Lead não será processado.`);
+        return {
+          success: true,
+          message: `Status desconhecido: ${statusEnum}. Não processado.`,
+          statusReceived: statusEnum,
+        };
+      }
     }
 
     // Determinar o tipo de lead baseado no status
