@@ -1,4 +1,4 @@
-import { asc, desc, eq, and, sql } from "drizzle-orm";
+import { asc, desc, eq, sql, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { autoSendConfig, emailTemplates, InsertEmailTemplate, InsertLead, InsertUser, Lead, leads, users } from "../drizzle/schema_postgresql";
@@ -163,24 +163,8 @@ export async function getLeadsWithPagination(
     if (conditions.length > 0) {
       query = query.where(and(...conditions));
     }
-    
-    // Buscar leads com paginação
-      let result;
-      const orderByClause = sortDirection === 'asc' 
-        ? asc(leads.dataCriacao)  // NOVO: usar asc() do drizzle
-        : desc(leads.dataCriacao); // NOVO: usar desc() do drizzle
-      
-      if (search) {
-        result = await query
-          .orderBy(orderByClause);
-      } else {
-        result = await query
-          .orderBy(orderByClause)
-          .limit(pageSize)
-          .offset(offset);
-      }
-      
-    // Contar total de registros com o filtro (BUSCA EM TODO O BANCO DE DADOS)
+
+    // Contar total de registros com o filtro
     let countQueryWithFilter = db.select({ count: sql`COUNT(*)` }).from(leads);
     
     if (conditions.length > 0) {
@@ -190,26 +174,30 @@ export async function getLeadsWithPagination(
     const [countResult] = await countQueryWithFilter;
     const total = Number(countResult?.count || 0);
 
-    // Buscar leads com paginação (RETORNA TODOS OS RESULTADOS ENCONTRADOS, NÃO APENAS OS 30 DA PÁGINA)
-    // Se houver busca, retorna todos os resultados encontrados sem limitar a 30
-    let result;
+    // Determinar ordenação
+    const orderByClause = sortDirection === 'asc' 
+      ? asc(leads.dataCriacao)
+      : desc(leads.dataCriacao);
+
+    // Buscar leads com paginação
+    let resultData;
     if (search) {
       // Para buscas, retorna todos os resultados encontrados
-      result = await query
-        .orderBy(desc(leads.dataCriacao));
+      resultData = await query
+        .orderBy(orderByClause);
     } else {
       // Para listagem normal, aplica paginação
-      result = await query
-        .orderBy(desc(leads.dataCriacao))
+      resultData = await query
+        .orderBy(orderByClause)
         .limit(pageSize)
         .offset(offset);
     }
 
     return {
-      leads: result,
+      leads: resultData,
       total,
       page,
-      pageSize: search ? result.length : pageSize,
+      pageSize: search ? resultData.length : pageSize,
       totalPages: search ? 1 : Math.ceil(total / pageSize),
     };
   } catch (error) {
