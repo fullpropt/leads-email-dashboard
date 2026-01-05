@@ -5,7 +5,7 @@ export interface SendEmailOptions {
 }
 
 /**
- * Envia um email usando Mailrelay como provedor principal e Mailgun como fallback.
+ * Envia um email usando Brevo como provedor principal e Mailgun como fallback.
  * Automaticamente envolve o conteúdo com header e rodapé padrão TubeTools.
  * 
  * @param options - Opções do email (destinatário, assunto, conteúdo HTML)
@@ -23,14 +23,14 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
       html: processedHtml
     };
     
-    // Tenta enviar com Mailrelay primeiro
-    const mailrelaySuccess = await sendWithMailrelay(processedOptions);
-    if (mailrelaySuccess) {
+    // Tenta enviar com Brevo primeiro (novo provedor principal)
+    const brevoSuccess = await sendWithBrevo(processedOptions);
+    if (brevoSuccess) {
       return true;
     }
 
-    // Se Mailrelay falhar, tenta com Mailgun
-    console.warn("[Email] ⚠️ Mailrelay falhou, tentando com Mailgun...");
+    // Se Brevo falhar, tenta com Mailgun como fallback
+    console.warn("[Email] ⚠️ Brevo falhou, tentando com Mailgun...");
     const mailgunSuccess = await sendWithMailgun(processedOptions);
     return mailgunSuccess;
 
@@ -41,64 +41,72 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
 }
 
 /**
- * Envia um email usando a API da Mailrelay.
+ * Envia um email usando a API da Brevo.
+ * Usa a API REST em vez de SMTP para melhor performance e funcionalidades.
  */
-async function sendWithMailrelay(options: SendEmailOptions): Promise<boolean> {
+async function sendWithBrevo(options: SendEmailOptions): Promise<boolean> {
   try {
-    // ✅ CORREÇÃO: Usar variáveis de ambiente em vez de hardcoded
-    const apiKey = process.env.MAILRELAY_API_KEY;
-    const apiUrl = process.env.MAILRELAY_API_URL || "https://youtdvsupport.ipzmarketing.com/api/v1/send_emails";
-    const fromEmail = process.env.MAILRELAY_FROM_EMAIL || "noreply@youtdvsupport.online";
-    const fromName = process.env.MAILRELAY_FROM_NAME || "TubeTools Support";
+    // ✅ Usar variáveis de ambiente
+    const apiKey = process.env.BREVO_API_KEY;
+    const fromEmail = process.env.BREVO_FROM_EMAIL || "noreply@youtdvsupport.online";
+    const fromName = process.env.BREVO_FROM_NAME || "TubeTools Support";
 
     // Validar credenciais
     if (!apiKey) {
-      console.error("[Mailrelay] ❌ API Key não configurada");
-      console.error("[Mailrelay] ⚠️ Configure a variável de ambiente MAILRELAY_API_KEY");
+      console.error("[Brevo] ❌ API Key não configurada");
+      console.error("[Brevo] ⚠️ Configure a variável de ambiente BREVO_API_KEY");
       return false;
     }
 
-    console.log("[Mailrelay] 📤 Enviando email para:", options.to);
-    console.log("[Mailrelay] 📧 Assunto:", options.subject);
-    console.log("[Mailrelay] 👤 De:", fromEmail);
+    console.log("[Brevo] 📤 Enviando email para:", options.to);
+    console.log("[Brevo] 📧 Assunto:", options.subject);
+    console.log("[Brevo] 👤 De:", fromEmail);
 
-    const response = await fetch(apiUrl, {
+    // Preparar payload para a API do Brevo
+    const payload = {
+      sender: {
+        name: fromName,
+        email: fromEmail,
+      },
+      to: [
+        {
+          email: options.to,
+        },
+      ],
+      subject: options.subject,
+      htmlContent: options.html,
+      // Opcional: adicionar tags para rastreamento
+      tags: ["transactional", "dashboard"],
+    };
+
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-AUTH-TOKEN": apiKey,
+        "api-key": apiKey,
       },
-      body: JSON.stringify({
-        from: {
-          email: fromEmail,
-          name: fromName,
-        },
-        to: [{ email: options.to }],
-        subject: options.subject,
-        html_part: options.html,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Mailrelay] ❌ Erro ao enviar email");
-      console.error("[Mailrelay] Status:", response.status);
-      console.error("[Mailrelay] Resposta:", errorText);
+      console.error("[Brevo] ❌ Erro ao enviar email");
+      console.error("[Brevo] Status:", response.status);
+      console.error("[Brevo] Resposta:", errorText);
       
       try {
         const errorJson = JSON.parse(errorText);
-        console.error("[Mailrelay] Erro detalhado:", errorJson);
+        console.error("[Brevo] Erro detalhado:", errorJson);
         
-        // ✅ CORREÇÃO: Adicionar mensagens de erro específicas
-        if (response.status === 422) {
-          if (errorJson.errors?.from) {
-            console.error("[Mailrelay] ⚠️ AVISO: Email remetente não confirmado!");
-            console.error("[Mailrelay] ⚠️ Confirme o email no painel do Mailrelay: https://app.mailrelay.com");
-          }
+        // Mensagens de erro específicas
+        if (response.status === 400) {
+          console.error("[Brevo] ⚠️ Erro 400: Requisição inválida - verifique os parâmetros");
         } else if (response.status === 401) {
-          console.error("[Mailrelay] ⚠️ Erro 401: API Key inválida ou expirada");
+          console.error("[Brevo] ⚠️ Erro 401: API Key inválida ou expirada");
         } else if (response.status === 403) {
-          console.error("[Mailrelay] ⚠️ Erro 403: Acesso negado");
+          console.error("[Brevo] ⚠️ Erro 403: Acesso negado");
+        } else if (response.status === 429) {
+          console.error("[Brevo] ⚠️ Erro 429: Limite de taxa excedido - tente novamente mais tarde");
         }
       } catch (e) {
         // Não é JSON, ignorar
@@ -108,24 +116,24 @@ async function sendWithMailrelay(options: SendEmailOptions): Promise<boolean> {
     }
 
     const result = await response.json();
-    console.log("[Mailrelay] ✅ Email enviado com sucesso!");
-    console.log("[Mailrelay] Resposta:", result);
+    console.log("[Brevo] ✅ Email enviado com sucesso!");
+    console.log("[Brevo] ID da mensagem:", result.messageId);
     
     return true;
 
   } catch (error) {
-    console.error("[Mailrelay] ❌ Exceção ao enviar email:");
-    console.error("[Mailrelay] Erro:", error);
+    console.error("[Brevo] ❌ Exceção ao enviar email:");
+    console.error("[Brevo] Erro:", error);
     if (error instanceof Error) {
-      console.error("[Mailrelay] Mensagem:", error.message);
-      console.error("[Mailrelay] Stack:", error.stack);
+      console.error("[Brevo] Mensagem:", error.message);
+      console.error("[Brevo] Stack:", error.stack);
     }
     return false;
   }
 }
 
 /**
- * Envia um email usando a API do Mailgun.
+ * Envia um email usando a API do Mailgun (fallback).
  */
 async function sendWithMailgun(options: SendEmailOptions): Promise<boolean> {
   try {
@@ -181,7 +189,6 @@ async function sendWithMailgun(options: SendEmailOptions): Promise<boolean> {
     const result = await response.json();
     console.log("[Mailgun] ✅ Email enviado com sucesso!");
     console.log("[Mailgun] ID da mensagem:", result.id);
-    console.log("[Mailgun] Resposta:", result);
     
     return true;
 
@@ -197,50 +204,49 @@ async function sendWithMailgun(options: SendEmailOptions): Promise<boolean> {
 }
 
 /**
- * Testa a conexão com o Mailrelay
+ * Testa a conexão com o Brevo
  * 
  * @returns Promise<boolean> - true se conectado com sucesso, false caso contrário
  */
-async function testMailrelayConnection(): Promise<boolean> {
+async function testBrevoConnection(): Promise<boolean> {
   try {
-    // ✅ CORREÇÃO: Usar variáveis de ambiente
-    const apiKey = process.env.MAILRELAY_API_KEY;
-    const account = process.env.MAILRELAY_ACCOUNT || "tubetools";
-    const apiUrl = `https://app.${account}.mailrelay.com/api/v1/groups`;
+    const apiKey = process.env.BREVO_API_KEY;
 
     if (!apiKey) {
-      console.error("[Mailrelay] ❌ API Key não configurada para teste");
+      console.error("[Brevo] ❌ API Key não configurada para teste");
       return false;
     }
 
-    console.log("[Mailrelay] 🔍 Testando conexão com Mailrelay...");
+    console.log("[Brevo] 🔍 Testando conexão com Brevo...");
 
-    const response = await fetch(apiUrl, {
+    const response = await fetch("https://api.brevo.com/v3/account", {
       method: "GET",
       headers: {
-        "X-AUTH-TOKEN": apiKey,
+        "api-key": apiKey,
       },
     });
 
     if (response.ok) {
-      console.log("[Mailrelay] ✅ Conexão Mailrelay verificada com sucesso!");
+      const data = await response.json();
+      console.log("[Brevo] ✅ Conexão Brevo verificada com sucesso!");
+      console.log("[Brevo] Conta:", data.email);
       return true;
     } else {
       const errorText = await response.text();
-      console.error("[Mailrelay] ❌ Erro ao verificar conexão");
-      console.error("[Mailrelay] Status:", response.status);
-      console.error("[Mailrelay] Resposta:", errorText);
+      console.error("[Brevo] ❌ Erro ao verificar conexão");
+      console.error("[Brevo] Status:", response.status);
+      console.error("[Brevo] Resposta:", errorText);
       
       if (response.status === 401) {
-        console.error("[Mailrelay] ⚠️ Erro 401: API Key inválida ou expirada");
-      } else if (response.status === 404) {
-        console.error("[Mailrelay] ⚠️ Erro 404: Conta não encontrada");
+        console.error("[Brevo] ⚠️ Erro 401: API Key inválida ou expirada");
+      } else if (response.status === 403) {
+        console.error("[Brevo] ⚠️ Erro 403: Acesso negado");
       }
       
       return false;
     }
   } catch (error) {
-    console.error("[Mailrelay] ❌ Exceção ao testar conexão:", error);
+    console.error("[Brevo] ❌ Exceção ao testar conexão:", error);
     return false;
   }
 }
@@ -313,10 +319,10 @@ export async function testEmailConnection(): Promise<boolean> {
   try {
     console.log("[Email] 🧪 Iniciando testes de conexão...");
     
-    const mailrelayOk = await testMailrelayConnection();
+    const brevoOk = await testBrevoConnection();
     const mailgunOk = await testMailgunConnection();
 
-    if (mailrelayOk || mailgunOk) {
+    if (brevoOk || mailgunOk) {
       console.log("[Email] ✅ Pelo menos um provedor está funcionando!");
       return true;
     } else {
@@ -377,7 +383,7 @@ export async function sendTestEmail(testEmail: string): Promise<boolean> {
             <p>Informações do teste:</p>
             <ul>
               <li>Data/Hora: ${new Date().toLocaleString('pt-BR')}</li>
-              <li>Provedores: Mailrelay (principal) + Mailgun (fallback)</li>
+              <li>Provedores: Brevo (principal) + Mailgun (fallback)</li>
               <li>Status: ✅ Enviado com sucesso</li>
             </ul>
             <p>Atenciosamente,<br>Sistema de Dashboard de Leads</p>
