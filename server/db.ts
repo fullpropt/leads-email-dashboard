@@ -1,4 +1,4 @@
-import { desc, eq, sql, and } from "drizzle-orm";
+import { asc, desc, eq, and, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { autoSendConfig, emailTemplates, InsertEmailTemplate, InsertLead, InsertUser, Lead, leads, users } from "../drizzle/schema_postgresql";
@@ -112,7 +112,8 @@ export async function getLeadsWithPagination(
   emailStatus?: 'pending' | 'sent',
   search?: string,
   leadStatus?: 'active' | 'abandoned',
-  platformAccess?: 'accessed' | 'not_accessed'
+  platformAccess?: 'accessed' | 'not_accessed',
+  sortDirection: 'asc' | 'desc' = 'desc'
 ) {
   const db = await getDb();
   if (!db) {
@@ -162,7 +163,23 @@ export async function getLeadsWithPagination(
     if (conditions.length > 0) {
       query = query.where(and(...conditions));
     }
-
+    
+    // Buscar leads com paginação
+      let result;
+      const orderByClause = sortDirection === 'asc' 
+        ? asc(leads.dataCriacao)  // NOVO: usar asc() do drizzle
+        : desc(leads.dataCriacao); // NOVO: usar desc() do drizzle
+      
+      if (search) {
+        result = await query
+          .orderBy(orderByClause);
+      } else {
+        result = await query
+          .orderBy(orderByClause)
+          .limit(pageSize)
+          .offset(offset);
+      }
+      
     // Contar total de registros com o filtro (BUSCA EM TODO O BANCO DE DADOS)
     let countQueryWithFilter = db.select({ count: sql`COUNT(*)` }).from(leads);
     

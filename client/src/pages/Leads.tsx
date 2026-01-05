@@ -5,6 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -12,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, RefreshCw, Search, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, RefreshCw, Search, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -20,6 +27,7 @@ import { useDebounce } from "@/hooks/use-debounce";
 
 type FilterStatus = 'all' | 'active' | 'abandoned';
 type PlatformAccessFilter = 'all' | 'accessed' | 'not_accessed';
+type SortDirection = 'asc' | 'desc';
 
 export default function Leads() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -29,18 +37,22 @@ export default function Leads() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [platformAccessFilter, setPlatformAccessFilter] = useState<PlatformAccessFilter>('all');
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
+  
+  // Novo estado para ordenação
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm, platformAccessFilter]);
+  }, [debouncedSearchTerm, platformAccessFilter, filterStatus]);
 
   const { data: leadsData, isLoading, refetch } = trpc.leads.listPaginated.useQuery(
     { 
       page: currentPage, 
-      status: 'all', // status de email (pending/sent/all)
+      status: 'all',
       search: debouncedSearchTerm,
-      leadStatus: filterStatus, // status de lead (active/abandoned/all)
-      platformAccess: platformAccessFilter // NOVO: filtro de acesso à plataforma
+      leadStatus: filterStatus,
+      platformAccess: platformAccessFilter,
+      sortDirection: sortDirection, // Novo parâmetro
     },
     {
       staleTime: 5000,
@@ -51,7 +63,6 @@ export default function Leads() {
     }
   );
 
-  // Query para buscar contador global de leads selecionados
   const { data: selectedCount = 0, refetch: refetchSelectedCount } = trpc.leads.getSelectedCount.useQuery(
     undefined,
     {
@@ -63,7 +74,6 @@ export default function Leads() {
     }
   );
 
-  // Query para buscar estatísticas de acesso à plataforma
   const { data: accessStats } = trpc.leads.getAccessStats.useQuery(
     undefined,
     {
@@ -75,16 +85,14 @@ export default function Leads() {
     }
   );
 
-  // Debug: Log do contador global
   useEffect(() => {
     console.log("🔢 Contador global de leads selecionados:", selectedCount);
   }, [selectedCount]);
 
-  // Mutations para gerenciar seleção de leads
   const updateLeadSelection = trpc.leads.updateManualSendSelection.useMutation({
     onSuccess: () => {
       console.log("✅ Lead seleção atualizada com sucesso");
-      refetchSelectedCount(); // Atualizar contador global
+      refetchSelectedCount();
     },
     onError: (error) => {
       console.error("❌ Erro ao atualizar seleção:", error);
@@ -95,7 +103,7 @@ export default function Leads() {
   const updateAllSelection = trpc.leads.updateAllManualSendSelection.useMutation({
     onSuccess: () => {
       console.log("✅ Seleção de todos os leads atualizada com sucesso");
-      refetchSelectedCount(); // Atualizar contador global
+      refetchSelectedCount();
     },
     onError: (error) => {
       console.error("❌ Erro ao atualizar seleção de todos:", error);
@@ -103,12 +111,11 @@ export default function Leads() {
     },
   });
 
-  // Mutation para sincronizar com TubeTools
   const syncWithTubetools = trpc.tubetools.syncAll.useMutation({
     onSuccess: (data) => {
       console.log("✅ Sincronização com TubeTools concluída:", data);
       toast.success(`Sincronização concluída: ${data.accessed} acessaram, ${data.notAccessed} não acessaram`);
-      refetch(); // Recarregar dados após sincronização
+      refetch();
     },
     onError: (error) => {
       console.error("❌ Erro ao sincronizar com TubeTools:", error);
@@ -116,12 +123,9 @@ export default function Leads() {
     },
   });
 
-  // Estado para controlar loading da sincronização
   const isSyncing = syncWithTubetools.isPending;
-
   const leads = leadsData?.leads || [];
 
-  // Carregar o estado inicial de seleção do banco de dados
   useEffect(() => {
     if (leads && leads.length > 0) {
       const selectedSet = new Set<number>();
@@ -149,12 +153,17 @@ export default function Leads() {
     setCurrentPage(newPage);
   };
 
+  // Novo: Função para alternar ordenação
+  const handleToggleSort = () => {
+    setSortDirection(sortDirection === 'desc' ? 'asc' : 'desc');
+    setCurrentPage(1);
+  };
+
   const formatDate = (date: Date | null) => {
     if (!date) return "-";
     return format(new Date(date), "dd/MM/yyyy HH:mm", { locale: ptBR });
   };
 
-  // Função para toggle individual de lead
   const handleToggleLead = (leadId: number) => {
     console.log("🔄 Toggle lead:", leadId);
     
@@ -172,14 +181,12 @@ export default function Leads() {
     setSelectedLeads(newSelected);
     console.log("📊 Leads selecionados agora:", Array.from(newSelected));
     
-    // Atualizar no banco de dados
     updateLeadSelection.mutate({
       leadId,
       selected: !isCurrentlySelected
     });
   };
 
-  // Função para toggle de todos os leads (seleciona/deseleciona)
   const handleToggleAll = () => {
     const allSelected = selectedLeads.size === leads.length && leads.length > 0;
     console.log("🔄 Toggle all - Todos selecionados?", allSelected);
@@ -192,7 +199,6 @@ export default function Leads() {
       console.log("➕ Todos os leads adicionados à seleção");
     }
     
-    // Atualizar no banco de dados
     updateAllSelection.mutate({
       selected: !allSelected
     });
@@ -204,6 +210,7 @@ export default function Leads() {
   return (
     <div className="space-y-6">
       <div className="space-y-4">
+        {/* Cabeçalho com título e botão de sincronização */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Leads</h2>
@@ -223,7 +230,8 @@ export default function Leads() {
           </Button>
         </div>
 
-        <div className="flex items-center gap-4">
+        {/* Barra de busca */}
+        <div className="flex items-center gap-2">
           <div className="flex-1 max-w-md relative">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -238,66 +246,54 @@ export default function Leads() {
               variant="ghost"
               size="sm"
               onClick={() => setSearchTerm("")}
+              className="text-muted-foreground hover:text-foreground"
             >
-              Limpar
+              ✕
             </Button>
           )}
         </div>
 
-        <div className="flex gap-2">
-          <Button
-            variant={filterStatus === 'all' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => handleFilterChange('all')}
-          >
-            Todos
-          </Button>
-          <Button
-            variant={filterStatus === 'active' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => handleFilterChange('active')}
-          >
-            Ativo
-          </Button>
-          <Button
-            variant={filterStatus === 'abandoned' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => handleFilterChange('abandoned')}
-          >
-            Carrinho Abandonado
-          </Button>
-        </div>
+        {/* Filtros minimalistas em uma única linha */}
+        <div className="flex gap-3 items-end flex-wrap">
+          {/* Filtro de Status do Lead */}
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-muted-foreground">
+              Status do Lead
+            </label>
+            <Select value={filterStatus} onValueChange={(value) => handleFilterChange(value as FilterStatus)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="active">Ativo</SelectItem>
+                <SelectItem value="abandoned">Carrinho Abandonado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        {/* NOVO: Filtros de acesso à plataforma */}
-        <div className="flex gap-2 border-t pt-4">
-          <span className="text-sm font-medium text-muted-foreground mr-2 flex items-center">
-            Acesso à Plataforma:
-          </span>
-          <Button
-            variant={platformAccessFilter === 'all' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => handlePlatformAccessFilterChange('all')}
-          >
-            Todos {accessStats && `(${accessStats.total})`}
-          </Button>
-          <Button
-            variant={platformAccessFilter === 'accessed' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => handlePlatformAccessFilterChange('accessed')}
-            className="gap-2"
-          >
-            <CheckCircle2 className="h-4 w-4" />
-            Acessaram {accessStats && `(${accessStats.accessed})`}
-          </Button>
-          <Button
-            variant={platformAccessFilter === 'not_accessed' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => handlePlatformAccessFilterChange('not_accessed')}
-            className="gap-2"
-          >
-            <XCircle className="h-4 w-4" />
-            Não Acessaram {accessStats && `(${accessStats.notAccessed})`}
-          </Button>
+          {/* Filtro de Acesso à Plataforma */}
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-muted-foreground">
+              Acesso à Plataforma
+            </label>
+            <Select value={platformAccessFilter} onValueChange={(value) => handlePlatformAccessFilterChange(value as PlatformAccessFilter)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  Todos {accessStats && `(${accessStats.total})`}
+                </SelectItem>
+                <SelectItem value="accessed">
+                  Acessaram {accessStats && `(${accessStats.accessed})`}
+                </SelectItem>
+                <SelectItem value="not_accessed">
+                  Não Acessaram {accessStats && `(${accessStats.notAccessed})`}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Indicador de seleção */}
@@ -308,6 +304,7 @@ export default function Leads() {
         )}
       </div>
 
+      {/* Tabela de Leads */}
       <div className="rounded-lg border bg-card">
         <Table>
           <TableHeader>
@@ -327,7 +324,22 @@ export default function Leads() {
               <TableHead>Email</TableHead>
               <TableHead>Status Plataforma</TableHead>
               <TableHead>Situação</TableHead>
-              <TableHead>Data de Criação</TableHead>
+              
+              {/* Cabeçalho clicável para ordenação por Data de Criação */}
+              <TableHead 
+                className="cursor-pointer hover:bg-muted transition-colors"
+                onClick={handleToggleSort}
+                title="Clique para ordenar por data"
+              >
+                <div className="flex items-center gap-2">
+                  <span>Data de Criação</span>
+                  {sortDirection === 'desc' ? (
+                    <ArrowDown className="h-4 w-4 text-primary" />
+                  ) : (
+                    <ArrowUp className="h-4 w-4 text-primary" />
+                  )}
+                </div>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -344,8 +356,6 @@ export default function Leads() {
               leads.map((lead) => {
                 const situation = lead.status === 'abandoned' ? 'Carrinho Abandonado' : 'Ativo';
                 const situationColor = lead.status === 'abandoned' ? 'text-orange-600' : 'text-green-600';
-                
-                // NOVO: Badge de acesso à plataforma
                 const hasAccessed = lead.hasAccessedPlatform === 1;
                 
                 return (
@@ -363,7 +373,7 @@ export default function Leads() {
                     <TableCell>{lead.nome}</TableCell>
                     <TableCell className="font-mono text-sm">{lead.email}</TableCell>
                     
-                    {/* NOVO: Coluna de status da plataforma com badge */}
+                    {/* Status da plataforma com badge */}
                     <TableCell>
                       {hasAccessed ? (
                         <Badge variant="default" className="gap-1 bg-green-600 hover:bg-green-700">
@@ -406,6 +416,7 @@ export default function Leads() {
         </Table>
       </div>
 
+      {/* Paginação */}
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
           {leadsData && leadsData.total > 0 ? (
