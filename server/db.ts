@@ -1,4 +1,4 @@
-import { asc, desc, eq, sql, and } from "drizzle-orm";
+import { desc, eq, sql, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { autoSendConfig, emailTemplates, InsertEmailTemplate, InsertLead, InsertUser, Lead, leads, users } from "../drizzle/schema_postgresql";
@@ -112,8 +112,7 @@ export async function getLeadsWithPagination(
   emailStatus?: 'pending' | 'sent',
   search?: string,
   leadStatus?: 'active' | 'abandoned',
-  platformAccess?: 'accessed' | 'not_accessed',
-  sortDirection: 'asc' | 'desc' = 'desc'
+  platformAccess?: 'accessed' | 'not_accessed'
 ) {
   const db = await getDb();
   if (!db) {
@@ -164,7 +163,7 @@ export async function getLeadsWithPagination(
       query = query.where(and(...conditions));
     }
 
-    // Contar total de registros com o filtro
+    // Contar total de registros com o filtro (BUSCA EM TODO O BANCO DE DADOS)
     let countQueryWithFilter = db.select({ count: sql`COUNT(*)` }).from(leads);
     
     if (conditions.length > 0) {
@@ -174,30 +173,26 @@ export async function getLeadsWithPagination(
     const [countResult] = await countQueryWithFilter;
     const total = Number(countResult?.count || 0);
 
-    // Determinar ordenação
-    const orderByClause = sortDirection === 'asc' 
-      ? asc(leads.dataCriacao)
-      : desc(leads.dataCriacao);
-
-    // Buscar leads com paginação
-    let resultData;
+    // Buscar leads com paginação (RETORNA TODOS OS RESULTADOS ENCONTRADOS, NÃO APENAS OS 30 DA PÁGINA)
+    // Se houver busca, retorna todos os resultados encontrados sem limitar a 30
+    let result;
     if (search) {
       // Para buscas, retorna todos os resultados encontrados
-      resultData = await query
-        .orderBy(orderByClause);
+      result = await query
+        .orderBy(desc(leads.dataCriacao));
     } else {
       // Para listagem normal, aplica paginação
-      resultData = await query
-        .orderBy(orderByClause)
+      result = await query
+        .orderBy(desc(leads.dataCriacao))
         .limit(pageSize)
         .offset(offset);
     }
 
     return {
-      leads: resultData,
+      leads: result,
       total,
       page,
-      pageSize: search ? resultData.length : pageSize,
+      pageSize: search ? result.length : pageSize,
       totalPages: search ? 1 : Math.ceil(total / pageSize),
     };
   } catch (error) {
@@ -1092,5 +1087,53 @@ export async function updateTemplateAppliedAt(leadId: number) {
   } catch (error) {
     console.error("[Database] Failed to update templateAppliedAt:", error);
     return false;
+  }
+}
+
+// ========================================================================
+// CHARGEBACKS QUERIES
+// ========================================================================
+
+/**
+ * Obtém estatísticas de chargebacks/reembolsos
+ */
+export async function getChargebackStats() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get chargeback stats: database not available");
+    return { total: 0, chargebacks: 0, chargebackAmount: 0, chargebackPercentage: 0 };
+  }
+
+  try {
+    // Contar total de leads
+    const [totalResult] = await db.select({ count: sql`COUNT(*)` }).from(leads);
+    const total = Number(totalResult?.count || 0);
+    
+    // Contar chargebacks (leads com status "charged_back")
+    const [chargebackResult] = await db
+      .select({ count: sql`COUNT(*)` })
+      .from(leads)
+      .where(eq(leads.status, 'charged_back'));
+    const chargebacks = Number(chargebackResult?.count || 0);
+    
+    // Somar valor total de chargebacks
+    const [amountResult] = await db
+      .select({ total: sql`SUM(${leads.valor})` })
+      .from(leads)
+      .where(eq(leads.status, 'charged_back'));
+    const chargebackAmount = Number(amountResult?.total || 0);
+    
+    // Calcular percentual de chargebacks
+    const chargebackPercentage = total > 0 ? (chargebacks / total) * 100 : 0;
+    
+    return {
+      total,
+      chargebacks,
+      chargebackAmount,
+      chargebackPercentage: Math.round(chargebackPercentage * 100) / 100,
+    };
+  } catch (error) {
+    console.error("[Database] Failed to get chargeback stats:", error);
+    return { total: 0, chargebacks: 0, chargebackAmount: 0, chargebackPercentage: 0 };
   }
 }

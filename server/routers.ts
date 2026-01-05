@@ -30,15 +30,14 @@ export const appRouter = router({
         status: z.enum(['pending', 'sent', 'all']).default('all'),
         search: z.string().optional(),
         leadStatus: z.enum(['active', 'abandoned', 'all']).default('all'),
-        platformAccess: z.enum(['all', 'accessed', 'not_accessed']).default('all'),
-        sortDirection: z.enum(['asc', 'desc']).default('desc') // NOVO
+        platformAccess: z.enum(['all', 'accessed', 'not_accessed']).default('all')
       }))
       .query(async ({ input }) => {
         const { getLeadsWithPagination } = await import("./db");
         const emailStatus = input.status === 'all' ? undefined : input.status;
         const leadStatus = input.leadStatus === 'all' ? undefined : input.leadStatus;
         const platformAccess = input.platformAccess === 'all' ? undefined : input.platformAccess;
-        return getLeadsWithPagination(input.page, emailStatus, input.search, leadStatus, platformAccess, input.sortDirection); // Passar sortDirection
+        return getLeadsWithPagination(input.page, emailStatus, input.search, leadStatus, platformAccess);
       }),
     updateEmailStatus: publicProcedure
       .input(z.object({ leadId: z.number(), enviado: z.boolean() }))
@@ -76,6 +75,12 @@ export const appRouter = router({
       .query(async () => {
         const { getLeadsAccessStats } = await import("./db");
         return getLeadsAccessStats();
+
+    getChargebackStats: publicProcedure
+      .query(async () => {
+        const { getChargebackStats } = await import("./db");
+        return getChargebackStats();
+      }),
       }),
   }),
 

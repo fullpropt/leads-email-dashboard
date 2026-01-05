@@ -84,12 +84,32 @@ export async function processWebhook(payload: any) {
       "confirmed"
     ];
     
+    // Lista de status para reembolso/chargeback (será ignorado por enquanto)
+    const possibleChargebackStatuses = [
+      "charged_back",
+      "chargeback",
+      "refunded",
+      "refund",
+      "cancelled",
+      "failed",
+      "declined"
+    ];
+    
     if (possibleAbandonedStatuses.includes(status)) {
       leadStatus = "abandoned";
       console.log(`[Webhook] ✅ Carrinho abandonado detectado para ${customer_email} (status: ${status})`);
     } else if (possibleApprovedStatuses.includes(status)) {
       leadStatus = "active";
       console.log(`[Webhook] ✅ Compra aprovada detectada para ${customer_email} (status: ${status})`);
+    } else if (possibleChargebackStatuses.includes(status)) {
+      console.log(`[Webhook] 💳 Chargeback/Reembolso detectado para ${customer_email} (status: ${status})`);
+      console.log(`[Webhook] ℹ️ Este evento será registrado no banco para análise, mas não será processado como lead.`);
+      return {
+        success: true,
+        message: `Chargeback/Reembolso registrado: ${status}`,
+        statusReceived: status,
+        type: "chargeback",
+      };
     } else {
       console.warn(`[Webhook] ⚠️ Status desconhecido recebido: '${status}'`);
       console.warn(`[Webhook] ⚠️ Lead não será processado. Verifique se este é um status esperado.`);
