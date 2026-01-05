@@ -2,11 +2,13 @@ import { InsertLead } from "../drizzle/schema_postgresql";
 
 /**
  * Processa webhooks recebidos do PerfectPay
- * Esperado receber um payload com informações de transação aprovada
+ * Esperado receber um payload com informações de transação aprovada ou carrinho abandonado
  */
 export async function processWebhook(payload: any) {
   try {
-    console.log("[Webhook] Processando payload:", JSON.stringify(payload, null, 2));
+    console.log("[Webhook] ===== PAYLOAD COMPLETO RECEBIDO =====");
+    console.log(JSON.stringify(payload, null, 2));
+    console.log("[Webhook] ===== FIM DO PAYLOAD =====");
 
     // Validar se o payload contém os dados necessários
     if (!payload) {
@@ -29,8 +31,24 @@ export async function processWebhook(payload: any) {
     const plan_name = plan.name;
     const sale_value = payload.sale_amount;
     const transaction_id = payload.code;
-    const status = payload.sale_status_enum_key; // PerfectPay usa "approved" como valor
+    
+    // Log detalhado de campos de status
+    console.log("[Webhook] ===== CAMPOS DE STATUS =====");
+    console.log("[Webhook] sale_status_enum_key:", payload.sale_status_enum_key);
+    console.log("[Webhook] status:", payload.status);
+    console.log("[Webhook] order_status:", payload.order_status);
+    console.log("[Webhook] checkout_status:", payload.checkout_status);
+    console.log("[Webhook] transaction_status:", payload.transaction_status);
+    console.log("[Webhook] ===== FIM DOS CAMPOS DE STATUS =====");
+    
+    // Tentar extrair status de múltiplos campos possíveis
+    const status = payload.sale_status_enum_key || 
+                   payload.status || 
+                   payload.order_status || 
+                   payload.checkout_status ||
+                   payload.transaction_status;
 
+    console.log(`[Webhook] Status final extraído: ${status}`);
     console.log(`[Webhook] Dados extraídos - Email: ${customer_email}, Nome: ${customer_name}, Status: ${status}`);
 
     // Validar campos obrigatórios
@@ -46,15 +64,39 @@ export async function processWebhook(payload: any) {
     // Determinar o status do lead baseado no status da transação
     let leadStatus = "active"; // padrão: compra aprovada
     
-    if (status === "precheckout") {
-      leadStatus = "abandoned"; // carrinho abandonado
-      console.log(`[Webhook] Carrinho abandonado detectado para ${customer_email}`);
-    } else if (status && status !== "approved" && status !== "completed") {
-      // Ignorar outros status que não são aprovados nem carrinho abandonado
-      console.log(`[Webhook] Transação com status '${status}' ignorada`);
+    // Lista de status possíveis para carrinho abandonado
+    const possibleAbandonedStatuses = [
+      "precheckout",
+      "abandoned",
+      "cart_abandoned",
+      "incomplete",
+      "checkout_abandoned",
+      "pending_payment",
+      "awaiting_payment"
+    ];
+    
+    // Lista de status para compra aprovada
+    const possibleApprovedStatuses = [
+      "approved",
+      "completed",
+      "success",
+      "paid",
+      "confirmed"
+    ];
+    
+    if (possibleAbandonedStatuses.includes(status)) {
+      leadStatus = "abandoned";
+      console.log(`[Webhook] ✅ Carrinho abandonado detectado para ${customer_email} (status: ${status})`);
+    } else if (possibleApprovedStatuses.includes(status)) {
+      leadStatus = "active";
+      console.log(`[Webhook] ✅ Compra aprovada detectada para ${customer_email} (status: ${status})`);
+    } else {
+      console.warn(`[Webhook] ⚠️ Status desconhecido recebido: '${status}'`);
+      console.warn(`[Webhook] ⚠️ Lead não será processado. Verifique se este é um status esperado.`);
       return {
         success: true,
-        message: `Transação com status '${status}' não processada`,
+        message: `Status desconhecido: ${status}. Não processado.`,
+        statusReceived: status,
       };
     }
 
@@ -76,8 +118,8 @@ export async function processWebhook(payload: any) {
       dataCriacao: new Date(),
       emailEnviado: 0, // Marcar como não enviado para envio posterior
       status: leadStatus, // "active" ou "abandoned"
-      leadType: leadType, // ← NOVO: tipo de lead
-      isNewLeadAfterUpdate: 1, // ← NOVO: marcar como novo lead
+      leadType: leadType, // tipo de lead
+      isNewLeadAfterUpdate: 1, // marcar como novo lead
     };
 
     // Importar função de banco de dados dinamicamente
@@ -113,17 +155,19 @@ export async function processWebhook(payload: any) {
           valor: leadData.valor,
           dataAprovacao: leadData.dataAprovacao,
           status: leadData.status, // Atualizar status
-          leadType: leadType, // ← NOVO: atualizar tipo de lead
+          leadType: leadType, // atualizar tipo de lead
         })
         .where(eq(leads.email, customer_email));
+      console.log(`[Webhook] ✅ Lead ${customer_email} atualizado com status: ${leadStatus}`);
     } else {
       console.log(`[Webhook] Criando novo lead: ${customer_email}`);
       // Inserir novo lead
       await db.insert(leads).values(leadData);
+      console.log(`[Webhook] ✅ Novo lead ${customer_email} criado com status: ${leadStatus}`);
     }
 
     // ===== ENVIO AUTOMÁTICO: IMEDIATO E/OU ATRASADO =====
-    const { getAutoSendStatus, getTemplatesWithAutoSendOnLeadEnabled, getTemplatesWithDelayedSendEnabled, updateLeadEmailStatus, replaceTemplateVariables, getTemplatesByTypeAndSendType } = await import("./db");
+    const { getAutoSendStatus, getTemplatesByTypeAndSendType, updateLeadEmailStatus, replaceTemplateVariables } = await import("./db");
     const autoSendEnabled = await getAutoSendStatus();
     
     // Buscar o lead recém-criado para ter os dados atualizados
@@ -141,6 +185,7 @@ export async function processWebhook(payload: any) {
         message: "Lead processado com sucesso",
         leadEmail: customer_email,
         transactionId: transaction_id,
+        leadStatus: leadStatus,
       };
     }
     
@@ -169,9 +214,9 @@ export async function processWebhook(payload: any) {
             
             if (emailSent) {
               await updateLeadEmailStatus(lead.id, true);
-              console.log(`[Webhook] Email enviado automaticamente para ${customer_email}`);
+              console.log(`[Webhook] ✅ Email enviado automaticamente para ${customer_email}`);
             } else {
-              console.error(`[Webhook] Falha ao enviar email para ${customer_email}`);
+              console.error(`[Webhook] ❌ Falha ao enviar email para ${customer_email}`);
             }
           } catch (templateError) {
             console.error(`[Webhook] Erro ao processar template ${template.id}:`, templateError);
@@ -198,26 +243,27 @@ export async function processWebhook(payload: any) {
       console.log(`[Webhook] Agendando email para ${delayDays} dia(s) após criação do lead`);
       
       // Calcular e atualizar nextEmailSendAt baseado em dataCriacao do lead
-      const createdAt = new Date(lead.dataCriacao);
-      const nextSendAt = new Date(createdAt);
-      nextSendAt.setDate(nextSendAt.getDate() + delayDays);
-
+      const nextSendDate = new Date(lead.dataCriacao);
+      nextSendDate.setDate(nextSendDate.getDate() + delayDays);
+      
       await db
         .update(leads)
-        .set({ nextEmailSendAt: nextSendAt.toISOString() as any })
+        .set({ nextEmailSendAt: nextSendDate })
         .where(eq(leads.id, lead.id));
       
-      console.log(`[Webhook] Email agendado para ${nextSendAt.toLocaleString("pt-BR")}`);
+      console.log(`[Webhook] ✅ Email agendado para ${nextSendDate.toISOString()}`);
     } else {
       console.log(`[Webhook] Nenhum template com envio atrasado do tipo '${leadType}' encontrado`);
     }
 
-    console.log(`[Webhook] Lead processado com sucesso: ${customer_email}`);
+    console.log(`[Webhook] ✅ Lead processado com sucesso: ${customer_email}`);
     return {
       success: true,
       message: "Lead processado com sucesso",
       leadEmail: customer_email,
       transactionId: transaction_id,
+      leadStatus: leadStatus,
+      leadType: leadType,
     };
   } catch (error) {
     console.error("[Webhook] Erro ao processar webhook:", error);
@@ -230,38 +276,24 @@ export async function processWebhook(payload: any) {
 }
 
 /**
- * Converte valor para centavos
- * Aceita formatos: "100.00", "100,00", "10000" (já em centavos), 100.00 (número)
+ * Converte um valor para centavos
+ * @param value - Valor em reais (pode ser string ou número)
+ * @returns Valor em centavos (inteiro)
  */
 function convertValueToCents(value: any): number {
   if (!value) return 0;
-
-  // Se já é um número
+  
+  // Se for string, remover símbolos de moeda e converter
+  if (typeof value === "string") {
+    const cleaned = value.replace(/[^\d.,]/g, "").replace(",", ".");
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : Math.round(num * 100);
+  }
+  
+  // Se for número, converter diretamente
   if (typeof value === "number") {
-    // Se for maior que 10000, assumir que já está em centavos
-    if (value > 10000) return Math.round(value);
-    // Caso contrário, converter para centavos
     return Math.round(value * 100);
   }
-
-  // Se é string
-  if (typeof value === "string") {
-    // Remover símbolos de moeda
-    let cleanValue = value.replace(/[R$\s]/g, "");
-
-    // Converter vírgula para ponto
-    cleanValue = cleanValue.replace(",", ".");
-
-    const numValue = parseFloat(cleanValue);
-
-    if (isNaN(numValue)) return 0;
-
-    // Se for maior que 10000, assumir que já está em centavos
-    if (numValue > 10000) return Math.round(numValue);
-
-    // Caso contrário, converter para centavos
-    return Math.round(numValue * 100);
-  }
-
+  
   return 0;
 }
