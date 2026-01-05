@@ -1091,121 +1091,49 @@ export async function updateTemplateAppliedAt(leadId: number) {
 }
 
 // ========================================================================
-// IMPORTAÇÃO DE DADOS HISTÓRICOS
+// CHARGEBACKS QUERIES
 // ========================================================================
 
 /**
- * Importar carrinhos abandonados históricos da API PerfectPay
+ * Obtém estatísticas de chargebacks/reembolsos
  */
-export async function importAbandonedCartsFromPerfectPay(
-  token: string,
-  daysBack: number = 7
-) {
+export async function getChargebackStats() {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot import abandoned carts: database not available");
-    return { success: false, imported: 0, errors: 0, message: "Database not available" };
+    console.warn("[Database] Cannot get chargeback stats: database not available");
+    return { total: 0, chargebacks: 0, chargebackAmount: 0, chargebackPercentage: 0 };
   }
 
   try {
-    // Calcular datas
-    const today = new Date();
-    const startDate = new Date(today);
-    startDate.setDate(startDate.getDate() - daysBack);
-
-    const dateFrom = startDate.toISOString().split('T')[0];
-    const dateTo = today.toISOString().split('T')[0];
-
-    console.log(`[Import] Importando carrinhos abandonados de ${dateFrom} a ${dateTo}`);
-
-    // Chamar API da PerfectPay
-    const response = await fetch(
-      `https://api.perfectpay.com.br/v1/sales?token=${token}&status=abandoned&date_from=${dateFrom}&date_to=${dateTo}`
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Import] Erro ao chamar API PerfectPay:", response.statusText, errorText);
-      return { 
-        success: false, 
-        imported: 0, 
-        errors: 1,
-        message: `Erro na API PerfectPay: ${response.statusText}`
-      };
-    }
-
-    const data = await response.json();
-    const sales = data.sales || [];
-
-    console.log(`[Import] Total de carrinhos abandonados encontrados: ${sales.length}`);
-
-    let imported = 0;
-    let errors = 0;
-    let skipped = 0;
-
-    // Processar cada carrinho abandonado
-    for (const sale of sales) {
-      try {
-        const customerEmail = sale.customer?.email;
-        
-        if (!customerEmail) {
-          console.warn("[Import] ⚠️ Carrinho sem email, pulando...");
-          skipped++;
-          continue;
-        }
-
-        // Verificar se já existe
-        const existing = await db
-          .select()
-          .from(leads)
-          .where(eq(leads.email, customerEmail))
-          .limit(1);
-
-        if (existing.length === 0) {
-          // Inserir novo lead
-          const leadData: InsertLead = {
-            nome: sale.customer?.full_name || "Sem nome",
-            email: customerEmail,
-            produto: sale.product?.name || "Produto não especificado",
-            plano: sale.plan?.name || "Plano não especificado",
-            valor: Math.round((sale.sale_amount || 0) * 100), // Converter para centavos
-            dataCriacao: new Date(sale.date_created || new Date()),
-            emailEnviado: 0,
-            status: "abandoned",
-            leadType: "carrinho_abandonado",
-            isNewLeadAfterUpdate: 1,
-          };
-
-          await db.insert(leads).values(leadData);
-          imported++;
-          console.log(`[Import] ✅ Lead importado: ${customerEmail}`);
-        } else {
-          console.log(`[Import] ℹ️ Lead já existe: ${customerEmail}`);
-          skipped++;
-        }
-      } catch (error) {
-        console.error(`[Import] ❌ Erro ao importar lead:`, error);
-        errors++;
-      }
-    }
-
-    const message = `Importação concluída: ${imported} importados, ${skipped} já existentes, ${errors} erros`;
-    console.log(`[Import] ${message}`);
+    // Contar total de leads
+    const [totalResult] = await db.select({ count: sql`COUNT(*)` }).from(leads);
+    const total = Number(totalResult?.count || 0);
     
-    return { 
-      success: true, 
-      imported, 
-      errors,
-      skipped,
-      message
+    // Contar chargebacks (leads com status "charged_back")
+    const [chargebackResult] = await db
+      .select({ count: sql`COUNT(*)` })
+      .from(leads)
+      .where(eq(leads.status, 'charged_back'));
+    const chargebacks = Number(chargebackResult?.count || 0);
+    
+    // Somar valor total de chargebacks
+    const [amountResult] = await db
+      .select({ total: sql`SUM(${leads.valor})` })
+      .from(leads)
+      .where(eq(leads.status, 'charged_back'));
+    const chargebackAmount = Number(amountResult?.total || 0);
+    
+    // Calcular percentual de chargebacks
+    const chargebackPercentage = total > 0 ? (chargebacks / total) * 100 : 0;
+    
+    return {
+      total,
+      chargebacks,
+      chargebackAmount,
+      chargebackPercentage: Math.round(chargebackPercentage * 100) / 100,
     };
   } catch (error) {
-    console.error("[Database] Failed to import abandoned carts:", error);
-    return { 
-      success: false, 
-      imported: 0, 
-      errors: 1,
-      message: `Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
-    };
+    console.error("[Database] Failed to get chargeback stats:", error);
+    return { total: 0, chargebacks: 0, chargebackAmount: 0, chargebackPercentage: 0 };
   }
 }

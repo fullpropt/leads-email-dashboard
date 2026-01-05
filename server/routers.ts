@@ -82,16 +82,6 @@ export const appRouter = router({
         const { getChargebackStats } = await import("./db");
         return getChargebackStats();
       }),
-
-    importAbandonedCarts: publicProcedure
-      .input(z.object({ 
-        token: z.string().min(1),
-        daysBack: z.number().min(1).max(30).default(7)
-      }))
-      .mutation(async ({ input }) => {
-        const { importAbandonedCartsFromPerfectPay } = await import("./db");
-        return importAbandonedCartsFromPerfectPay(input.token, input.daysBack);
-      }),
   }),
 
   // Routers para gerenciamento de templates de email
