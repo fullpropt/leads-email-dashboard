@@ -396,7 +396,7 @@ export default function Leads() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(lead.createdAt)}
+                    {formatDate(lead.dataCriacao)}
                   </TableCell>
                 </TableRow>
               ))
