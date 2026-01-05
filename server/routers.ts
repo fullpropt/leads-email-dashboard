@@ -75,12 +75,12 @@ export const appRouter = router({
       .query(async () => {
         const { getLeadsAccessStats } = await import("./db");
         return getLeadsAccessStats();
+      }),
 
     getChargebackStats: publicProcedure
       .query(async () => {
         const { getChargebackStats } = await import("./db");
         return getChargebackStats();
-      }),
       }),
   }),
 
