@@ -378,7 +378,7 @@ export default function Leads() {
                   <TableCell>{lead.name}</TableCell>
                   <TableCell className="text-sm">{lead.email}</TableCell>
                   <TableCell>
-                    {lead.platformAccess === 1 ? (
+                    {lead.hasAccessedPlatform === 1 ? (
                       <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
                         <CheckCircle2 className="h-3 w-3 mr-1" />
                         Ativo
