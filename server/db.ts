@@ -142,9 +142,9 @@ export async function getLeadsWithPagination(
     }
     
     // Filtro de acesso à plataforma
-    if (hasAccessedPlatform === 1) {
+    if (platformAccess === 'accessed') {
       conditions.push(eq(leads.hasAccessedPlatform, 1));
-    } else if (hasAccessedPlatform === 0) {
+    } else if (platformAccess === 'not_accessed') {
       conditions.push(eq(leads.hasAccessedPlatform, 0));
     }
 
