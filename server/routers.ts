@@ -29,7 +29,7 @@ export const appRouter = router({
         page: z.number().min(1).default(1), 
         status: z.enum(['pending', 'sent', 'all']).default('all'),
         search: z.string().optional(),
-        leadStatus: z.enum(['active', 'abandoned', 'all']).default('all'),
+        leadStatus: z.enum(['active', 'abandoned', 'none', 'all']).default('all'),
         platformAccess: z.enum(['all', 'accessed', 'not_accessed']).default('all'),
         sortDirection: z.enum(['asc', 'desc']).default('desc')
       }))
@@ -106,6 +106,13 @@ export const appRouter = router({
           targetStatusPlataforma: z.enum(["all", "accessed", "not_accessed"]).default("all"),
           targetSituacao: z.enum(["all", "active", "abandoned"]).default("all"),
           sendMode: z.enum(["automatic", "scheduled", "manual"]).default("manual"),
+          // ===== CAMPOS PARA AGENDAMENTO =====
+          sendOnLeadDelayEnabled: z.number().min(0).max(1).optional(),
+          delayDaysAfterLeadCreation: z.number().min(0).optional(),
+          scheduleEnabled: z.number().min(0).max(1).optional(),
+          scheduleTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+          scheduleInterval: z.number().min(1).optional(),
+          scheduleIntervalType: z.enum(["days", "weeks"]).optional(),
         })
       )
       .mutation(async ({ input }) => {

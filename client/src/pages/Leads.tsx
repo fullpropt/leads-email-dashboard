@@ -19,7 +19,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useDebounce } from "@/hooks/use-debounce";
 
-type FilterStatus = 'all' | 'active' | 'abandoned';
+type FilterStatus = 'all' | 'active' | 'abandoned' | 'none';
 type PlatformAccessFilter = 'all' | 'accessed' | 'not_accessed';
 type SortDirection = 'asc' | 'desc';
 
@@ -234,9 +234,13 @@ export default function Leads() {
     });
   };
 
-  // Função para obter o label da situação
-  const getSituacaoLabel = (status: string) => {
-    return status === 'active' ? 'Compra Aprovada' : 'Carrinho Abandonado';
+  // Função para obter o label da situação baseado em lead_type
+  const getSituacaoLabel = (leadType: string) => {
+    switch (leadType) {
+      case 'compra_aprovada': return 'Compra Aprovada';
+      case 'carrinho_abandonado': return 'Carrinho Abandonado';
+      default: return 'Nenhum'; // leads migrados (lead, novo_cadastro)
+    }
   };
 
   // Função para obter o label do filtro de situação atual
@@ -244,6 +248,7 @@ export default function Leads() {
     switch (filterStatus) {
       case 'active': return 'Compra Aprovada';
       case 'abandoned': return 'Carrinho Abandonado';
+      case 'none': return 'Nenhum';
       default: return 'Situação';
     }
   };
@@ -442,6 +447,12 @@ export default function Leads() {
                       >
                         Carrinho Abandonado
                       </button>
+                      <button
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${filterStatus === 'none' ? 'bg-muted font-medium' : ''}`}
+                        onClick={() => handleFilterChange('none')}
+                      >
+                        Nenhum
+                      </button>
                     </div>
                   </div>,
                   document.body
@@ -502,8 +513,11 @@ export default function Leads() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">
-                      {getSituacaoLabel(lead.status)}
+                    <Badge 
+                      variant="secondary"
+                      className={lead.leadType === 'compra_aprovada' ? 'bg-blue-100 text-blue-800' : lead.leadType === 'carrinho_abandonado' ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-600'}
+                    >
+                      {getSituacaoLabel(lead.leadType)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">

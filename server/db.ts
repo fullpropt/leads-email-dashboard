@@ -111,7 +111,7 @@ export async function getLeadsWithPagination(
   page: number = 1,
   emailStatus?: 'pending' | 'sent',
   search?: string,
-  leadStatus?: 'active' | 'abandoned',
+  leadStatus?: 'active' | 'abandoned' | 'none',
   platformAccess?: 'accessed' | 'not_accessed',
   sortDirection: 'asc' | 'desc' = 'desc'
 ) {
@@ -135,11 +135,18 @@ export async function getLeadsWithPagination(
       conditions.push(eq(leads.emailEnviado, 1));
     }
     
-    // Filtro de status de lead (ativo vs carrinho abandonado)
+    // Filtro de situação do lead (baseado em lead_type)
     if (leadStatus === 'active') {
-      conditions.push(eq(leads.status, 'active'));
+      // Compra Aprovada = lead_type é 'compra_aprovada'
+      conditions.push(eq(leads.leadType, 'compra_aprovada'));
     } else if (leadStatus === 'abandoned') {
-      conditions.push(eq(leads.status, 'abandoned'));
+      // Carrinho Abandonado = lead_type é 'carrinho_abandonado'
+      conditions.push(eq(leads.leadType, 'carrinho_abandonado'));
+    } else if (leadStatus === 'none') {
+      // Nenhum = lead_type não é 'compra_aprovada' nem 'carrinho_abandonado' (leads migrados)
+      conditions.push(
+        sql`${leads.leadType} NOT IN ('compra_aprovada', 'carrinho_abandonado')`
+      );
     }
     
     // Filtro de acesso à plataforma
