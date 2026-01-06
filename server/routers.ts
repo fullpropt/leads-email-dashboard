@@ -116,7 +116,7 @@ export const appRouter = router({
           templateType: z.enum(["compra_aprovada", "novo_cadastro", "programado", "carrinho_abandonado"]).default("compra_aprovada"),
           // ===== NOVOS CAMPOS PARA FILTROS E MODO DE ENVIO =====
           targetStatusPlataforma: z.enum(["all", "accessed", "not_accessed"]).default("all"),
-          targetSituacao: z.enum(["all", "active", "abandoned"]).default("all"),
+          targetSituacao: z.enum(["all", "active", "abandoned", "none"]).default("all"),
           sendMode: z.enum(["automatic", "scheduled", "manual"]).default("manual"),
           // ===== CAMPOS PARA AGENDAMENTO =====
           sendOnLeadDelayEnabled: z.number().min(0).max(1).optional(),
@@ -145,7 +145,7 @@ export const appRouter = router({
             htmlContent: z.string().min(1).optional(),
             // ===== NOVOS CAMPOS PARA FILTROS E MODO DE ENVIO =====
             targetStatusPlataforma: z.enum(["all", "accessed", "not_accessed"]).optional(),
-            targetSituacao: z.enum(["all", "active", "abandoned"]).optional(),
+            targetSituacao: z.enum(["all", "active", "abandoned", "none"]).optional(),
             sendMode: z.enum(["automatic", "scheduled", "manual"]).optional(),
             // ===== CAMPOS EXISTENTES PARA MÚLTIPLOS TIPOS DE ENVIO =====
             sendImmediateEnabled: z.number().min(0).max(1).optional(),
@@ -225,6 +225,19 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const { getTemplatesByType } = await import("./db");
         return getTemplatesByType(input.templateType);
+      }),
+    // Obter contagem de emails enviados por template
+    getEmailSentCount: publicProcedure
+      .input(z.object({ templateId: z.number() }))
+      .query(async ({ input }) => {
+        const { getEmailSentCountByTemplate } = await import("./db");
+        return { count: await getEmailSentCountByTemplate(input.templateId) };
+      }),
+    // Obter contagem de emails enviados para todos os templates
+    getAllEmailSentCounts: publicProcedure
+      .query(async () => {
+        const { getAllTemplatesEmailSentCounts } = await import("./db");
+        return await getAllTemplatesEmailSentCounts();
       }),
   }),
   
@@ -424,22 +437,26 @@ export const appRouter = router({
       }),
     
     // Enviar email imediato para todos os leads pendentes usando um template específico
+    // Aplica os filtros de targetStatusPlataforma e targetSituacao do template
     sendImmediateToAllPending: publicProcedure
       .input(z.object({ templateId: z.number() }))
       .mutation(async ({ input }) => {
-        const { getAllLeads, updateLeadEmailStatus, replaceTemplateVariables, getEmailTemplateById } = await import("./db");
+        const { updateLeadEmailStatus, replaceTemplateVariables, getEmailTemplateById, getLeadsForTemplateFilters, recordEmailSend } = await import("./db");
         const { sendEmail } = await import("./email");
-
-        const leads = await getAllLeads();
-        const pendingLeads = leads.filter((l) => l.emailEnviado === 0);
-
-        if (pendingLeads.length === 0) {
-          return { success: true, sent: 0, failed: 0, message: "Nenhum lead pendente" };
-        }
 
         const template = await getEmailTemplateById(input.templateId);
         if (!template) {
           return { success: false, sent: 0, failed: 0, message: "Template não encontrado" };
+        }
+
+        // Usar os filtros do template para buscar leads
+        const targetStatusPlataforma = (template.targetStatusPlataforma || "all") as "all" | "accessed" | "not_accessed";
+        const targetSituacao = (template.targetSituacao || "all") as "all" | "active" | "abandoned" | "none";
+        
+        const pendingLeads = await getLeadsForTemplateFilters(targetStatusPlataforma, targetSituacao, true);
+
+        if (pendingLeads.length === 0) {
+          return { success: true, sent: 0, failed: 0, message: "Nenhum lead pendente com os filtros selecionados" };
         }
 
         let sent = 0;
@@ -456,8 +473,10 @@ export const appRouter = router({
 
           if (success) {
             await updateLeadEmailStatus(lead.id, true);
+            await recordEmailSend(input.templateId, lead.id, "immediate", "sent");
             sent++;
           } else {
+            await recordEmailSend(input.templateId, lead.id, "immediate", "failed");
             failed++;
           }
 
@@ -530,7 +549,7 @@ export const appRouter = router({
     sendToSelectedLeads: publicProcedure
       .input(z.object({ templateId: z.number() }))
       .mutation(async ({ input }) => {
-        const { getSelectedLeadsForManualSend, updateLeadEmailStatus, replaceTemplateVariables, getEmailTemplateById } = await import("./db");
+        const { getSelectedLeadsForManualSend, updateLeadEmailStatus, replaceTemplateVariables, getEmailTemplateById, recordEmailSend } = await import("./db");
         const { sendEmail } = await import("./email");
 
         const selectedLeads = await getSelectedLeadsForManualSend();
@@ -558,12 +577,15 @@ export const appRouter = router({
 
             if (success) {
               await updateLeadEmailStatus(lead.id, true);
+              await recordEmailSend(input.templateId, lead.id, "manual", "sent");
               sent++;
             } else {
+              await recordEmailSend(input.templateId, lead.id, "manual", "failed");
               failed++;
             }
           } catch (error) {
             console.error(`Erro ao enviar email para lead ${lead.id}:`, error);
+            await recordEmailSend(input.templateId, lead.id, "manual", "failed", String(error));
             failed++;
           }
         }

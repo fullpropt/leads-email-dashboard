@@ -3,7 +3,7 @@ import { X, Check, ChevronDown } from "lucide-react";
 
 interface TemplateConfig {
   targetStatusPlataforma: "all" | "accessed" | "not_accessed";
-  targetSituacao: "all" | "active" | "abandoned";
+  targetSituacao: "all" | "active" | "abandoned" | "none";
   sendMode: "automatic" | "scheduled" | "manual";
 }
 
@@ -23,6 +23,7 @@ const SITUACAO_OPTIONS = [
   { value: "all", label: "Todos", description: "Todas as situações" },
   { value: "active", label: "Compra Aprovada", description: "Leads com compra aprovada" },
   { value: "abandoned", label: "Carrinho Abandonado", description: "Leads com carrinho abandonado" },
+  { value: "none", label: "Nenhum", description: "Leads sem situação definida (migrados)" },
 ];
 
 const SEND_MODE_OPTIONS = [

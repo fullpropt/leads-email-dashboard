@@ -1315,3 +1315,163 @@ export async function importAbandonedCartsFromPerfectPay(
     };
   }
 }
+
+
+// ========================================================================
+// FUNÇÕES PARA FILTROS DE TEMPLATE E CONTADOR DE EMAILS
+// ========================================================================
+
+/**
+ * Buscar leads filtrados pelos critérios do template
+ * @param targetStatusPlataforma - Filtro de status da plataforma ("all", "accessed", "not_accessed")
+ * @param targetSituacao - Filtro de situação ("all", "active", "abandoned", "none")
+ * @param onlyPending - Se true, retorna apenas leads com email não enviado
+ */
+export async function getLeadsForTemplateFilters(
+  targetStatusPlataforma: "all" | "accessed" | "not_accessed",
+  targetSituacao: "all" | "active" | "abandoned" | "none",
+  onlyPending: boolean = true
+) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get leads for template filters: database not available");
+    return [];
+  }
+
+  try {
+    const conditions = [];
+
+    // Filtro de email pendente
+    if (onlyPending) {
+      conditions.push(eq(leads.emailEnviado, 0));
+    }
+
+    // Filtro de status da plataforma
+    if (targetStatusPlataforma === "accessed") {
+      conditions.push(eq(leads.hasAccessedPlatform, 1));
+    } else if (targetStatusPlataforma === "not_accessed") {
+      conditions.push(eq(leads.hasAccessedPlatform, 0));
+    }
+
+    // Filtro de situação (baseado em leadType)
+    if (targetSituacao === "active") {
+      conditions.push(eq(leads.leadType, "compra_aprovada"));
+    } else if (targetSituacao === "abandoned") {
+      conditions.push(eq(leads.leadType, "carrinho_abandonado"));
+    } else if (targetSituacao === "none") {
+      // Leads sem situação definida (migrados ou outros tipos)
+      conditions.push(
+        sql`${leads.leadType} NOT IN ('compra_aprovada', 'carrinho_abandonado')`
+      );
+    }
+
+    // Executar query
+    if (conditions.length > 0) {
+      return await db.select().from(leads).where(and(...conditions));
+    } else {
+      return await db.select().from(leads);
+    }
+  } catch (error) {
+    console.error("[Database] Failed to get leads for template filters:", error);
+    return [];
+  }
+}
+
+/**
+ * Contar emails enviados por template
+ * @param templateId - ID do template
+ */
+export async function getEmailSentCountByTemplate(templateId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get email sent count: database not available");
+    return 0;
+  }
+
+  try {
+    const { emailSendHistory } = await import("../drizzle/schema_postgresql");
+    const [result] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(emailSendHistory)
+      .where(
+        and(
+          eq(emailSendHistory.templateId, templateId),
+          eq(emailSendHistory.status, "sent")
+        )
+      );
+    return Number(result?.count || 0);
+  } catch (error) {
+    console.error("[Database] Failed to get email sent count:", error);
+    return 0;
+  }
+}
+
+/**
+ * Obter contagem de emails enviados para todos os templates
+ */
+export async function getAllTemplatesEmailSentCounts(): Promise<Record<number, number>> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get all templates email sent counts: database not available");
+    return {};
+  }
+
+  try {
+    const { emailSendHistory } = await import("../drizzle/schema_postgresql");
+    const results = await db
+      .select({
+        templateId: emailSendHistory.templateId,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(emailSendHistory)
+      .where(eq(emailSendHistory.status, "sent"))
+      .groupBy(emailSendHistory.templateId);
+
+    const counts: Record<number, number> = {};
+    for (const row of results) {
+      counts[row.templateId] = Number(row.count);
+    }
+    return counts;
+  } catch (error) {
+    console.error("[Database] Failed to get all templates email sent counts:", error);
+    return {};
+  }
+}
+
+/**
+ * Registrar envio de email no histórico
+ * @param templateId - ID do template usado
+ * @param leadId - ID do lead que recebeu o email
+ * @param sendType - Tipo de envio ("immediate", "auto_lead", "scheduled", "manual")
+ * @param status - Status do envio ("sent", "failed", "bounced")
+ * @param errorMessage - Mensagem de erro (opcional)
+ */
+export async function recordEmailSend(
+  templateId: number,
+  leadId: number,
+  sendType: string,
+  status: "sent" | "failed" | "bounced",
+  errorMessage?: string
+) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot record email send: database not available");
+    return false;
+  }
+
+  try {
+    const { emailSendHistory } = await import("../drizzle/schema_postgresql");
+    await db.insert(emailSendHistory).values({
+      templateId,
+      leadId,
+      sendType,
+      status,
+      errorMessage: errorMessage || null,
+      sentAt: new Date(),
+    });
+    return true;
+  } catch (error) {
+    console.error("[Database] Failed to record email send:", error);
+    return false;
+  }
+}

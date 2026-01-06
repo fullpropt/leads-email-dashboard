@@ -21,7 +21,7 @@ import { TemplateTypeSelector } from "@/components/TemplateTypeSelector";
 
 interface TemplateConfig {
   targetStatusPlataforma: "all" | "accessed" | "not_accessed";
-  targetSituacao: "all" | "active" | "abandoned";
+  targetSituacao: "all" | "active" | "abandoned" | "none";
   sendMode: "automatic" | "scheduled" | "manual";
 }
 
@@ -33,7 +33,7 @@ interface TemplateBlock {
   ativo: number;
   // Novos campos para filtros e modo de envio
   targetStatusPlataforma: "all" | "accessed" | "not_accessed";
-  targetSituacao: "all" | "active" | "abandoned";
+  targetSituacao: "all" | "active" | "abandoned" | "none";
   sendMode: "automatic" | "scheduled" | "manual";
   // Campos existentes para múltiplos tipos de envio
   sendImmediateEnabled: number;
@@ -41,7 +41,7 @@ interface TemplateBlock {
   sendOnLeadDelayEnabled: number;
   delayDaysAfterLeadCreation: number;
   scheduleEnabled: number;
-  scheduleTime: string;
+  scheduleTime: string | null;
   scheduleInterval: number;
   scheduleIntervalType: "days" | "weeks";
   templateType: "compra_aprovada" | "novo_cadastro" | "programado" | "carrinho_abandonado";
@@ -60,6 +60,7 @@ const SITUACAO_LABELS: Record<string, string> = {
   all: "Todos",
   active: "Compra Aprovada",
   abandoned: "Carrinho Abandonado",
+  none: "Nenhum",
 };
 
 const SEND_MODE_LABELS: Record<string, string> = {
@@ -86,6 +87,9 @@ export default function EmailTemplates() {
 
   const { data: allTemplates, refetch: refetchTemplates } =
     trpc.emailTemplates.list.useQuery();
+
+  // Query para obter contagem de emails enviados por template
+  const { data: emailSentCounts } = trpc.emailTemplates.getAllEmailSentCounts.useQuery();
 
   const createTemplate = trpc.emailTemplates.create.useMutation({
     onSuccess: (data) => {
@@ -187,8 +191,9 @@ export default function EmailTemplates() {
         ...t,
         scheduleIntervalType: t.scheduleIntervalType as "days" | "weeks",
         targetStatusPlataforma: (t.targetStatusPlataforma || "all") as "all" | "accessed" | "not_accessed",
-        targetSituacao: (t.targetSituacao || "all") as "all" | "active" | "abandoned",
+        targetSituacao: (t.targetSituacao || "all") as "all" | "active" | "abandoned" | "none",
         sendMode: (t.sendMode || "manual") as "automatic" | "scheduled" | "manual",
+        templateType: t.templateType as "compra_aprovada" | "novo_cadastro" | "programado" | "carrinho_abandonado",
       })));
     }
   }, [allTemplates]);
@@ -463,6 +468,7 @@ export default function EmailTemplates() {
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
                             template.targetSituacao === 'active' ? 'bg-green-100 text-green-700' :
                             template.targetSituacao === 'abandoned' ? 'bg-orange-100 text-orange-700' :
+                            template.targetSituacao === 'none' ? 'bg-yellow-100 text-yellow-700' :
                             'bg-gray-100 text-gray-700'
                           }`}>
                             {SITUACAO_LABELS[template.targetSituacao]}
@@ -473,6 +479,11 @@ export default function EmailTemplates() {
                             'bg-gray-100 text-gray-700'
                           }`}>
                             {STATUS_PLATAFORMA_LABELS[template.targetStatusPlataforma]}
+                          </span>
+                          {/* Contador de Emails Enviados */}
+                          <span className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 flex items-center gap-1">
+                            <Mail className="h-3 w-3" />
+                            {emailSentCounts?.[template.id] || 0} enviados
                           </span>
                         </div>
                       </div>
