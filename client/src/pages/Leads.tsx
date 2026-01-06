@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { trpc } from "@/lib/trpc";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -348,8 +349,15 @@ export default function Leads() {
                     <span className="ml-1 w-2 h-2 bg-primary rounded-full"></span>
                   )}
                 </div>
-                {showStatusPlataformaDropdown && (
-                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-md shadow-lg min-w-[160px]" style={{ zIndex: 9999 }}>
+                {showStatusPlataformaDropdown && statusPlataformaDropdownRef.current && createPortal(
+                  <div 
+                    className="bg-popover border rounded-md shadow-lg min-w-[160px] fixed"
+                    style={{ 
+                      zIndex: 9999,
+                      top: statusPlataformaDropdownRef.current.getBoundingClientRect().bottom + 4,
+                      left: statusPlataformaDropdownRef.current.getBoundingClientRect().left
+                    }}
+                  >
                     <div className="py-1">
                       <button
                         className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${platformAccessFilter === 'all' ? 'bg-muted font-medium' : ''}`}
@@ -370,7 +378,8 @@ export default function Leads() {
                         Inativo {accessStats && `(${accessStats.notAccessed})`}
                       </button>
                     </div>
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </TableHead>
               
@@ -389,8 +398,15 @@ export default function Leads() {
                     <span className="ml-1 w-2 h-2 bg-primary rounded-full"></span>
                   )}
                 </div>
-                {showSituacaoDropdown && (
-                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-md shadow-lg min-w-[180px]" style={{ zIndex: 9999 }}>
+                {showSituacaoDropdown && situacaoDropdownRef.current && createPortal(
+                  <div 
+                    className="bg-popover border rounded-md shadow-lg min-w-[180px] fixed"
+                    style={{ 
+                      zIndex: 9999,
+                      top: situacaoDropdownRef.current.getBoundingClientRect().bottom + 4,
+                      left: situacaoDropdownRef.current.getBoundingClientRect().left
+                    }}
+                  >
                     <div className="py-1">
                       <button
                         className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${filterStatus === 'all' ? 'bg-muted font-medium' : ''}`}
@@ -411,7 +427,8 @@ export default function Leads() {
                         Carrinho Abandonado
                       </button>
                     </div>
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </TableHead>
               
