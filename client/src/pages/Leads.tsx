@@ -38,23 +38,37 @@ export default function Leads() {
   const [showStatusPlataformaDropdown, setShowStatusPlataformaDropdown] = useState(false);
   
   // Refs para detectar cliques fora dos dropdowns
-  const situacaoDropdownRef = useRef<HTMLDivElement>(null);
-  const statusPlataformaDropdownRef = useRef<HTMLDivElement>(null);
+  const situacaoDropdownRef = useRef<HTMLTableCellElement>(null);
+  const statusPlataformaDropdownRef = useRef<HTMLTableCellElement>(null);
+  const situacaoMenuRef = useRef<HTMLDivElement>(null);
+  const statusPlataformaMenuRef = useRef<HTMLDivElement>(null);
 
   // Fechar dropdowns ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (situacaoDropdownRef.current && !situacaoDropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      
+      // Verificar se o clique foi dentro do cabeçalho ou menu de Situação
+      const isInsideSituacao = 
+        (situacaoDropdownRef.current && situacaoDropdownRef.current.contains(target)) ||
+        (situacaoMenuRef.current && situacaoMenuRef.current.contains(target));
+      
+      // Verificar se o clique foi dentro do cabeçalho ou menu de Status Plataforma
+      const isInsideStatusPlataforma = 
+        (statusPlataformaDropdownRef.current && statusPlataformaDropdownRef.current.contains(target)) ||
+        (statusPlataformaMenuRef.current && statusPlataformaMenuRef.current.contains(target));
+      
+      if (!isInsideSituacao && showSituacaoDropdown) {
         setShowSituacaoDropdown(false);
       }
-      if (statusPlataformaDropdownRef.current && !statusPlataformaDropdownRef.current.contains(event.target as Node)) {
+      if (!isInsideStatusPlataforma && showStatusPlataformaDropdown) {
         setShowStatusPlataformaDropdown(false);
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [showSituacaoDropdown, showStatusPlataformaDropdown]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -351,6 +365,7 @@ export default function Leads() {
                 </div>
                 {showStatusPlataformaDropdown && statusPlataformaDropdownRef.current && createPortal(
                   <div 
+                    ref={statusPlataformaMenuRef}
                     className="bg-popover border rounded-md shadow-lg min-w-[160px] fixed"
                     style={{ 
                       zIndex: 9999,
@@ -400,6 +415,7 @@ export default function Leads() {
                 </div>
                 {showSituacaoDropdown && situacaoDropdownRef.current && createPortal(
                   <div 
+                    ref={situacaoMenuRef}
                     className="bg-popover border rounded-md shadow-lg min-w-[180px] fixed"
                     style={{ 
                       zIndex: 9999,
