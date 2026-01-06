@@ -319,7 +319,7 @@ export default function Leads() {
         )}
       </div>
 
-      <div className="rounded-lg border bg-card">
+      <div className="rounded-lg border bg-card overflow-visible">
         <Table>
           <TableHeader>
             <TableRow>
@@ -349,7 +349,7 @@ export default function Leads() {
                   )}
                 </div>
                 {showStatusPlataformaDropdown && (
-                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-md shadow-lg z-50 min-w-[160px]">
+                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-md shadow-lg min-w-[160px]" style={{ zIndex: 9999 }}>
                     <div className="py-1">
                       <button
                         className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${platformAccessFilter === 'all' ? 'bg-muted font-medium' : ''}`}
@@ -390,7 +390,7 @@ export default function Leads() {
                   )}
                 </div>
                 {showSituacaoDropdown && (
-                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-md shadow-lg z-50 min-w-[180px]">
+                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-md shadow-lg min-w-[180px]" style={{ zIndex: 9999 }}>
                     <div className="py-1">
                       <button
                         className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${filterStatus === 'all' ? 'bg-muted font-medium' : ''}`}
