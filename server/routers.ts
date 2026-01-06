@@ -59,10 +59,22 @@ export const appRouter = router({
       }),
 
     updateAllManualSendSelection: publicProcedure
-      .input(z.object({ selected: z.boolean() }))
+      .input(z.object({ 
+        selected: z.boolean(),
+        leadStatus: z.enum(['active', 'abandoned', 'none', 'all']).default('all'),
+        platformAccess: z.enum(['all', 'accessed', 'not_accessed']).default('all'),
+        search: z.string().optional()
+      }))
       .mutation(async ({ input }) => {
         const { updateAllLeadsManualSendSelection } = await import("./db");
-        const success = await updateAllLeadsManualSendSelection(input.selected);
+        const leadStatus = input.leadStatus === 'all' ? undefined : input.leadStatus;
+        const platformAccess = input.platformAccess === 'all' ? undefined : input.platformAccess;
+        const success = await updateAllLeadsManualSendSelection(
+          input.selected,
+          leadStatus,
+          platformAccess,
+          input.search
+        );
         return { success };
       }),
 

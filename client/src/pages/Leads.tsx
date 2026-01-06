@@ -133,6 +133,7 @@ export default function Leads() {
     onSuccess: () => {
       console.log("✅ Seleção de todos os leads atualizada com sucesso");
       refetchSelectedCount();
+      refetch(); // Recarregar a lista para atualizar o estado visual dos checkboxes
     },
     onError: (error) => {
       console.error("❌ Erro ao atualizar seleção de todos:", error);
@@ -220,6 +221,7 @@ export default function Leads() {
   const handleToggleAll = () => {
     const allSelected = selectedLeads.size === leads.length && leads.length > 0;
     console.log("🔄 Toggle all - Todos selecionados?", allSelected);
+    console.log("🔍 Filtros ativos - leadStatus:", filterStatus, "platformAccess:", platformAccessFilter, "search:", debouncedSearchTerm);
     
     if (allSelected) {
       setSelectedLeads(new Set());
@@ -229,8 +231,12 @@ export default function Leads() {
       console.log("➕ Todos os leads adicionados à seleção");
     }
     
+    // Passar os filtros atuais para o backend para que a seleção respeite os filtros
     updateAllSelection.mutate({
-      selected: !allSelected
+      selected: !allSelected,
+      leadStatus: filterStatus,
+      platformAccess: platformAccessFilter,
+      search: debouncedSearchTerm || undefined
     });
   };
 

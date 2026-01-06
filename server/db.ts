@@ -608,13 +608,59 @@ export async function updateLeadManualSendSelection(leadId: number, selected: bo
   }
 }
 
-export async function updateAllLeadsManualSendSelection(selected: boolean) {
+export async function updateAllLeadsManualSendSelection(
+  selected: boolean,
+  leadStatus?: 'active' | 'abandoned' | 'none',
+  platformAccess?: 'accessed' | 'not_accessed',
+  search?: string
+) {
   const db = await getDb();
   if (!db) return false;
   
   try {
-    await db.update(leads)
-      .set({ selectedForManualSend: selected ? 1 : 0 });
+    // Construir condições de filtro (mesma lógica de getLeadsWithPagination)
+    const conditions = [];
+    
+    // Filtro de situação do lead (baseado em lead_type)
+    if (leadStatus === 'active') {
+      // Compra Aprovada = lead_type é 'compra_aprovada'
+      conditions.push(eq(leads.leadType, 'compra_aprovada'));
+    } else if (leadStatus === 'abandoned') {
+      // Carrinho Abandonado = lead_type é 'carrinho_abandonado'
+      conditions.push(eq(leads.leadType, 'carrinho_abandonado'));
+    } else if (leadStatus === 'none') {
+      // Nenhum = lead_type não é 'compra_aprovada' nem 'carrinho_abandonado' (leads migrados)
+      conditions.push(
+        sql`${leads.leadType} NOT IN ('compra_aprovada', 'carrinho_abandonado')`
+      );
+    }
+    
+    // Filtro de acesso à plataforma
+    if (platformAccess === 'accessed') {
+      conditions.push(eq(leads.hasAccessedPlatform, 1));
+    } else if (platformAccess === 'not_accessed') {
+      conditions.push(eq(leads.hasAccessedPlatform, 0));
+    }
+
+    // Filtro de busca por nome ou email
+    if (search) {
+      const searchPattern = `%${search}%`;
+      conditions.push(
+        sql`(${leads.nome} LIKE ${searchPattern} OR ${leads.email} LIKE ${searchPattern} OR ${leads.produto} LIKE ${searchPattern})`
+      );
+    }
+
+    // Executar update com ou sem filtros
+    if (conditions.length > 0) {
+      await db.update(leads)
+        .set({ selectedForManualSend: selected ? 1 : 0 })
+        .where(and(...conditions));
+    } else {
+      // Sem filtros, atualiza todos os leads
+      await db.update(leads)
+        .set({ selectedForManualSend: selected ? 1 : 0 });
+    }
+    
     return true;
   } catch (error) {
     console.error("[Database] Erro ao atualizar seleção de todos os leads:", error);
