@@ -102,6 +102,10 @@ export const appRouter = router({
           assunto: z.string().min(1),
           htmlContent: z.string().min(1),
           templateType: z.enum(["compra_aprovada", "novo_cadastro", "programado", "carrinho_abandonado"]).default("compra_aprovada"),
+          // ===== NOVOS CAMPOS PARA FILTROS E MODO DE ENVIO =====
+          targetStatusPlataforma: z.enum(["all", "accessed", "not_accessed"]).default("all"),
+          targetSituacao: z.enum(["all", "active", "abandoned"]).default("all"),
+          sendMode: z.enum(["automatic", "scheduled", "manual"]).default("manual"),
         })
       )
       .mutation(async ({ input }) => {
@@ -120,7 +124,11 @@ export const appRouter = router({
             nome: z.string().min(1).optional(),
             assunto: z.string().min(1).optional(),
             htmlContent: z.string().min(1).optional(),
-            // ===== NOVOS CAMPOS PARA MÚLTIPLOS TIPOS DE ENVIO =====
+            // ===== NOVOS CAMPOS PARA FILTROS E MODO DE ENVIO =====
+            targetStatusPlataforma: z.enum(["all", "accessed", "not_accessed"]).optional(),
+            targetSituacao: z.enum(["all", "active", "abandoned"]).optional(),
+            sendMode: z.enum(["automatic", "scheduled", "manual"]).optional(),
+            // ===== CAMPOS EXISTENTES PARA MÚLTIPLOS TIPOS DE ENVIO =====
             sendImmediateEnabled: z.number().min(0).max(1).optional(),
             autoSendOnLeadEnabled: z.number().min(0).max(1).optional(),
             sendOnLeadDelayEnabled: z.number().min(0).max(1).optional(),
