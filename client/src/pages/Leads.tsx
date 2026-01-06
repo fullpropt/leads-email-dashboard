@@ -1,16 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -19,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, RefreshCw, Search, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader2, RefreshCw, Search, CheckCircle2, XCircle, ArrowUp, ArrowDown, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -38,6 +31,29 @@ export default function Leads() {
   const [platformAccessFilter, setPlatformAccessFilter] = useState<PlatformAccessFilter>('all');
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  
+  // Estados para os dropdowns nos cabeçalhos
+  const [showSituacaoDropdown, setShowSituacaoDropdown] = useState(false);
+  const [showStatusPlataformaDropdown, setShowStatusPlataformaDropdown] = useState(false);
+  
+  // Refs para detectar cliques fora dos dropdowns
+  const situacaoDropdownRef = useRef<HTMLDivElement>(null);
+  const statusPlataformaDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fechar dropdowns ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (situacaoDropdownRef.current && !situacaoDropdownRef.current.contains(event.target as Node)) {
+        setShowSituacaoDropdown(false);
+      }
+      if (statusPlataformaDropdownRef.current && !statusPlataformaDropdownRef.current.contains(event.target as Node)) {
+        setShowStatusPlataformaDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -141,11 +157,13 @@ export default function Leads() {
   const handleFilterChange = (status: FilterStatus) => {
     setFilterStatus(status);
     setCurrentPage(1);
+    setShowSituacaoDropdown(false);
   };
 
   const handlePlatformAccessFilterChange = (filter: PlatformAccessFilter) => {
     setPlatformAccessFilter(filter);
     setCurrentPage(1);
+    setShowStatusPlataformaDropdown(false);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -201,6 +219,29 @@ export default function Leads() {
     });
   };
 
+  // Função para obter o label da situação
+  const getSituacaoLabel = (status: string) => {
+    return status === 'active' ? 'Compra Aprovada' : 'Carrinho Abandonado';
+  };
+
+  // Função para obter o label do filtro de situação atual
+  const getSituacaoFilterLabel = () => {
+    switch (filterStatus) {
+      case 'active': return 'Compra Aprovada';
+      case 'abandoned': return 'Carrinho Abandonado';
+      default: return 'Situação';
+    }
+  };
+
+  // Função para obter o label do filtro de status plataforma atual
+  const getStatusPlataformaFilterLabel = () => {
+    switch (platformAccessFilter) {
+      case 'accessed': return 'Ativo';
+      case 'not_accessed': return 'Inativo';
+      default: return 'Status Plataforma';
+    }
+  };
+
   const totalPages = leadsData?.totalPages || 1;
   const total = leadsData?.total || 0;
 
@@ -249,34 +290,26 @@ export default function Leads() {
           )}
         </div>
 
-        <div className="flex gap-4 items-end">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Status do Lead</label>
-            <Select value={filterStatus} onValueChange={(value) => handleFilterChange(value as FilterStatus)}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="active">Ativo</SelectItem>
-                <SelectItem value="abandoned">Carrinho Abandonado</SelectItem>
-              </SelectContent>
-            </Select>
+        {/* Contador total de leads */}
+        <div className="flex items-center gap-4">
+          <div className="text-sm font-medium bg-muted px-4 py-2 rounded-lg">
+            Total de Leads: <span className="font-bold text-primary">{total}</span>
+            {(filterStatus !== 'all' || platformAccessFilter !== 'all' || debouncedSearchTerm) && (
+              <span className="text-muted-foreground ml-2">(filtrados)</span>
+            )}
           </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Acesso à Plataforma</label>
-            <Select value={platformAccessFilter} onValueChange={(value) => handlePlatformAccessFilterChange(value as PlatformAccessFilter)}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos {accessStats && `(${accessStats.total})`}</SelectItem>
-                <SelectItem value="accessed">Acessaram {accessStats && `(${accessStats.accessed})`}</SelectItem>
-                <SelectItem value="not_accessed">Não Acessaram {accessStats && `(${accessStats.notAccessed})`}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {(filterStatus !== 'all' || platformAccessFilter !== 'all') && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFilterStatus('all');
+                setPlatformAccessFilter('all');
+              }}
+            >
+              Limpar filtros
+            </Button>
+          )}
         </div>
 
         {selectedCount > 0 && (
@@ -299,8 +332,89 @@ export default function Leads() {
               <TableHead>ID</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Status Plataforma</TableHead>
-              <TableHead>Situação</TableHead>
+              
+              {/* Status Plataforma com Dropdown */}
+              <TableHead className="relative" ref={statusPlataformaDropdownRef}>
+                <div 
+                  className="flex items-center gap-1 cursor-pointer hover:text-primary transition-colors"
+                  onClick={() => {
+                    setShowStatusPlataformaDropdown(!showStatusPlataformaDropdown);
+                    setShowSituacaoDropdown(false);
+                  }}
+                >
+                  {getStatusPlataformaFilterLabel()}
+                  <ChevronDown className={`h-4 w-4 transition-transform ${showStatusPlataformaDropdown ? 'rotate-180' : ''}`} />
+                  {platformAccessFilter !== 'all' && (
+                    <span className="ml-1 w-2 h-2 bg-primary rounded-full"></span>
+                  )}
+                </div>
+                {showStatusPlataformaDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-md shadow-lg z-50 min-w-[160px]">
+                    <div className="py-1">
+                      <button
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${platformAccessFilter === 'all' ? 'bg-muted font-medium' : ''}`}
+                        onClick={() => handlePlatformAccessFilterChange('all')}
+                      >
+                        Todos {accessStats && `(${accessStats.total})`}
+                      </button>
+                      <button
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${platformAccessFilter === 'accessed' ? 'bg-muted font-medium' : ''}`}
+                        onClick={() => handlePlatformAccessFilterChange('accessed')}
+                      >
+                        Ativo {accessStats && `(${accessStats.accessed})`}
+                      </button>
+                      <button
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${platformAccessFilter === 'not_accessed' ? 'bg-muted font-medium' : ''}`}
+                        onClick={() => handlePlatformAccessFilterChange('not_accessed')}
+                      >
+                        Inativo {accessStats && `(${accessStats.notAccessed})`}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </TableHead>
+              
+              {/* Situação com Dropdown */}
+              <TableHead className="relative" ref={situacaoDropdownRef}>
+                <div 
+                  className="flex items-center gap-1 cursor-pointer hover:text-primary transition-colors"
+                  onClick={() => {
+                    setShowSituacaoDropdown(!showSituacaoDropdown);
+                    setShowStatusPlataformaDropdown(false);
+                  }}
+                >
+                  {getSituacaoFilterLabel()}
+                  <ChevronDown className={`h-4 w-4 transition-transform ${showSituacaoDropdown ? 'rotate-180' : ''}`} />
+                  {filterStatus !== 'all' && (
+                    <span className="ml-1 w-2 h-2 bg-primary rounded-full"></span>
+                  )}
+                </div>
+                {showSituacaoDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-md shadow-lg z-50 min-w-[180px]">
+                    <div className="py-1">
+                      <button
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${filterStatus === 'all' ? 'bg-muted font-medium' : ''}`}
+                        onClick={() => handleFilterChange('all')}
+                      >
+                        Todos
+                      </button>
+                      <button
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${filterStatus === 'active' ? 'bg-muted font-medium' : ''}`}
+                        onClick={() => handleFilterChange('active')}
+                      >
+                        Compra Aprovada
+                      </button>
+                      <button
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${filterStatus === 'abandoned' ? 'bg-muted font-medium' : ''}`}
+                        onClick={() => handleFilterChange('abandoned')}
+                      >
+                        Carrinho Abandonado
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </TableHead>
+              
               <TableHead className="cursor-pointer hover:bg-muted/50" onClick={handleSortByDate}>
                 <div className="flex items-center gap-2">
                   Data de Criação
@@ -339,7 +453,7 @@ export default function Leads() {
                     />
                   </TableCell>
                   <TableCell className="font-medium">{lead.id}</TableCell>
-                  <TableCell>{lead.name}</TableCell>
+                  <TableCell>{lead.nome}</TableCell>
                   <TableCell className="text-sm">{lead.email}</TableCell>
                   <TableCell>
                     {lead.hasAccessedPlatform === 1 ? (
@@ -356,7 +470,7 @@ export default function Leads() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">
-                      {lead.status === 'active' ? 'Ativo' : 'Inativo'}
+                      {getSituacaoLabel(lead.status)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
@@ -377,6 +491,7 @@ export default function Leads() {
               <span className="font-semibold">{leadsData.total}</span> leads
               {debouncedSearchTerm && ` (filtrados por busca)`}
               {platformAccessFilter !== 'all' && ` (filtrados por acesso)`}
+              {filterStatus !== 'all' && ` (filtrados por situação)`}
             </>
           ) : (
             <>
