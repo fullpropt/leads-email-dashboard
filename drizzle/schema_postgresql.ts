@@ -59,8 +59,19 @@ export const emailTemplates = pgTable("email_templates", {
   assunto: varchar("assunto", { length: 500 }).notNull(),
   htmlContent: text("html_content").notNull(),
   
+  // ===== CONTROLE DE ATIVAÇÃO INDIVIDUAL =====
+  ativo: integer("ativo").notNull().default(1), // 0 = inativo, 1 = ativo (INDEPENDENTE POR TEMPLATE)
+  
+  // ===== FILTROS DE DESTINATÁRIOS =====
+  // Define quais leads receberão este template
+  targetStatusPlataforma: varchar("target_status_plataforma", { length: 20 }).notNull().default("all"), // "all", "accessed", "not_accessed"
+  targetSituacao: varchar("target_situacao", { length: 20 }).notNull().default("all"), // "all", "active", "abandoned"
+  
+  // ===== MODO DE ENVIO =====
+  // Define como o template será enviado
+  sendMode: varchar("send_mode", { length: 20 }).notNull().default("manual"), // "automatic", "scheduled", "manual"
+  
   // ===== CONTROLES DE ENVIO IMEDIATO =====
-  ativo: integer("ativo").notNull().default(1), // 0 = inativo, 1 = ativo
   // Permite enviar o email manualmente para todos os leads pendentes
   sendImmediateEnabled: integer("send_immediate_enabled").notNull().default(0), // 0 = desativado, 1 = ativado
   
@@ -82,7 +93,7 @@ export const emailTemplates = pgTable("email_templates", {
   lastSentAt: timestamp("last_sent_at"), // última vez que foi enviado
   nextSendAt: timestamp("next_send_at"), // próxima data de envio
   
-  // ===== NOVOS CAMPOS PARA TIPOS DE TEMPLATES =====
+  // ===== TIPO DE TEMPLATE (LEGADO - mantido para compatibilidade) =====
   templateType: varchar("template_type", { length: 50 }).notNull().default("compra_aprovada"), // "compra_aprovada", "novo_cadastro", "programado", "carrinho_abandonado"
   
   // ===== METADADOS =====
