@@ -1,4 +1,4 @@
-import { desc, eq, sql, and } from "drizzle-orm";
+import { asc, desc, eq, sql, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { autoSendConfig, emailTemplates, InsertEmailTemplate, InsertLead, InsertUser, Lead, leads, users } from "../drizzle/schema_postgresql";
@@ -112,7 +112,8 @@ export async function getLeadsWithPagination(
   emailStatus?: 'pending' | 'sent',
   search?: string,
   leadStatus?: 'active' | 'abandoned',
-  platformAccess?: 'accessed' | 'not_accessed'
+  platformAccess?: 'accessed' | 'not_accessed',
+  sortDirection: 'asc' | 'desc' = 'desc'
 ) {
   const db = await getDb();
   if (!db) {
@@ -173,17 +174,20 @@ export async function getLeadsWithPagination(
     const [countResult] = await countQueryWithFilter;
     const total = Number(countResult?.count || 0);
 
+    // Definir ordenação baseada no parâmetro sortDirection
+    const orderByClause = sortDirection === 'asc' ? asc(leads.dataCriacao) : desc(leads.dataCriacao);
+
     // Buscar leads com paginação (RETORNA TODOS OS RESULTADOS ENCONTRADOS, NÃO APENAS OS 30 DA PÁGINA)
     // Se houver busca, retorna todos os resultados encontrados sem limitar a 30
     let result;
     if (search) {
       // Para buscas, retorna todos os resultados encontrados
       result = await query
-        .orderBy(desc(leads.dataCriacao));
+        .orderBy(orderByClause);
     } else {
       // Para listagem normal, aplica paginação
       result = await query
-        .orderBy(desc(leads.dataCriacao))
+        .orderBy(orderByClause)
         .limit(pageSize)
         .offset(offset);
     }
