@@ -3,6 +3,9 @@ import { InsertLead } from "../drizzle/schema_postgresql";
 /**
  * Processa webhooks recebidos do PerfectPay
  * Esperado receber um payload com informações de transação aprovada ou carrinho abandonado
+ * 
+ * CORREÇÃO: Agora verifica se o lead é novo antes de enviar email automático
+ * e também verifica o histórico de envios para evitar duplicações
  */
 export async function processWebhook(payload: any) {
   try {
@@ -142,8 +145,8 @@ export async function processWebhook(payload: any) {
 
     // Importar função de banco de dados dinamicamente
     const { getDb } = await import("./db");
-    const { leads } = await import("../drizzle/schema_postgresql");
-    const { eq } = await import("drizzle-orm");
+    const { leads, emailSendHistory } = await import("../drizzle/schema_postgresql");
+    const { eq, and } = await import("drizzle-orm");
 
     const db = await getDb();
     if (!db) {
@@ -160,6 +163,9 @@ export async function processWebhook(payload: any) {
       .from(leads)
       .where(eq(leads.email, customer_email))
       .limit(1);
+
+    // ===== CORREÇÃO: Guardar se é um lead novo =====
+    const isNewLead = existingLead.length === 0;
 
     if (existingLead.length > 0) {
       console.log(`[Webhook] Lead com email ${customer_email} já existe, atualizando...`);
@@ -185,7 +191,7 @@ export async function processWebhook(payload: any) {
     }
 
     // ===== ENVIO AUTOMÁTICO: IMEDIATO E/OU ATRASADO =====
-    const { getAutoSendStatus, getTemplatesByTypeAndSendType, updateLeadEmailStatus, replaceTemplateVariables } = await import("./db");
+    const { getAutoSendStatus, getTemplatesForAutoSend, updateLeadEmailStatus, replaceTemplateVariables, recordEmailSend, hasEmailBeenSentForTemplate } = await import("./db");
     const autoSendEnabled = await getAutoSendStatus();
     
     // Buscar o lead recém-criado para ter os dados atualizados
@@ -209,17 +215,27 @@ export async function processWebhook(payload: any) {
     
     const lead = createdLead[0];
     
-    // ===== ENVIO IMEDIATO =====
-    if (autoSendEnabled) {
-      console.log(`[Webhook] Auto-envio imediato ativado, buscando templates do tipo '${leadType}'...`);
-      // Buscar templates de envio imediato do tipo de lead
-      const templatesWithAutoSend = await getTemplatesByTypeAndSendType(leadType, "immediate");
+    // ===== ENVIO IMEDIATO (APENAS PARA NOVOS LEADS) =====
+    // CORREÇÃO: Só envia email automático se for um lead NOVO
+    if (autoSendEnabled && isNewLead) {
+      console.log(`[Webhook] Auto-envio imediato ativado para NOVO lead, buscando templates do tipo '${leadType}'...`);
+      
+      // CORREÇÃO: Usar nova função que busca por sendMode = "automatic"
+      const templatesWithAutoSend = await getTemplatesForAutoSend(leadType);
       
       if (templatesWithAutoSend.length > 0) {
         const { sendEmail } = await import("./email");
         
         for (const template of templatesWithAutoSend) {
           try {
+            // CORREÇÃO: Verificar se já foi enviado para este template
+            const alreadySent = await hasEmailBeenSentForTemplate(template.id, lead.id);
+            
+            if (alreadySent) {
+              console.log(`[Webhook] ⏭️ Email já foi enviado para ${customer_email} com template '${template.nome}', pulando...`);
+              continue;
+            }
+            
             console.log(`[Webhook] Enviando template '${template.nome}' para ${customer_email} (IMEDIATO)`);
             
             const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
@@ -232,46 +248,60 @@ export async function processWebhook(payload: any) {
             
             if (emailSent) {
               await updateLeadEmailStatus(lead.id, true);
+              // CORREÇÃO: Registrar no histórico de envios
+              await recordEmailSend(template.id, lead.id, "auto_lead", "sent");
               console.log(`[Webhook] ✅ Email enviado automaticamente para ${customer_email}`);
             } else {
+              // CORREÇÃO: Registrar falha no histórico
+              await recordEmailSend(template.id, lead.id, "auto_lead", "failed");
               console.error(`[Webhook] ❌ Falha ao enviar email para ${customer_email}`);
             }
           } catch (templateError) {
             console.error(`[Webhook] Erro ao processar template ${template.id}:`, templateError);
+            // CORREÇÃO: Registrar erro no histórico
+            await recordEmailSend(template.id, lead.id, "auto_lead", "failed", String(templateError));
           }
         }
       } else {
-        console.log(`[Webhook] Nenhum template de envio imediato do tipo '${leadType}' encontrado`);
+        console.log(`[Webhook] Nenhum template automático do tipo '${leadType}' encontrado`);
       }
+    } else if (!isNewLead) {
+      console.log(`[Webhook] ⏭️ Lead já existente, NÃO enviando email automático para ${customer_email}`);
     } else {
       console.log(`[Webhook] Auto-envio imediato desativado`);
     }
     
-    // ===== ENVIO ATRASADO =====
-    console.log(`[Webhook] Verificando templates com envio atrasado do tipo '${leadType}'...`);
-    const templatesWithDelayedSend = await getTemplatesByTypeAndSendType(leadType, "delayed");
-    
-    if (templatesWithDelayedSend.length > 0) {
-      console.log(`[Webhook] Encontrados ${templatesWithDelayedSend.length} template(s) com envio atrasado`);
+    // ===== ENVIO ATRASADO (APENAS PARA NOVOS LEADS) =====
+    // CORREÇÃO: Só agenda envio atrasado se for um lead NOVO
+    if (isNewLead) {
+      console.log(`[Webhook] Verificando templates com envio atrasado do tipo '${leadType}'...`);
+      const { getTemplatesForDelayedSend } = await import("./db");
+      const templatesWithDelayedSend = await getTemplatesForDelayedSend(leadType);
       
-      // Usar o primeiro template com envio atrasado
-      const template = templatesWithDelayedSend[0];
-      const delayDays = template.delayDaysAfterLeadCreation || 0;
-      
-      console.log(`[Webhook] Agendando email para ${delayDays} dia(s) após criação do lead`);
-      
-      // Calcular e atualizar nextEmailSendAt baseado em dataCriacao do lead
-      const nextSendDate = new Date(lead.dataCriacao);
-      nextSendDate.setDate(nextSendDate.getDate() + delayDays);
-      
-      await db
-        .update(leads)
-        .set({ nextEmailSendAt: nextSendDate })
-        .where(eq(leads.id, lead.id));
-      
-      console.log(`[Webhook] ✅ Email agendado para ${nextSendDate.toISOString()}`);
+      if (templatesWithDelayedSend.length > 0) {
+        console.log(`[Webhook] Encontrados ${templatesWithDelayedSend.length} template(s) com envio atrasado`);
+        
+        // Usar o primeiro template com envio atrasado
+        const template = templatesWithDelayedSend[0];
+        const delayDays = template.delayDaysAfterLeadCreation || 0;
+        
+        console.log(`[Webhook] Agendando email para ${delayDays} dia(s) após criação do lead`);
+        
+        // Calcular e atualizar nextEmailSendAt baseado em dataCriacao do lead
+        const nextSendDate = new Date(lead.dataCriacao);
+        nextSendDate.setDate(nextSendDate.getDate() + delayDays);
+        
+        await db
+          .update(leads)
+          .set({ nextEmailSendAt: nextSendDate })
+          .where(eq(leads.id, lead.id));
+        
+        console.log(`[Webhook] ✅ Email agendado para ${nextSendDate.toISOString()}`);
+      } else {
+        console.log(`[Webhook] Nenhum template com envio atrasado do tipo '${leadType}' encontrado`);
+      }
     } else {
-      console.log(`[Webhook] Nenhum template com envio atrasado do tipo '${leadType}' encontrado`);
+      console.log(`[Webhook] ⏭️ Lead já existente, NÃO agendando envio atrasado para ${customer_email}`);
     }
 
     console.log(`[Webhook] ✅ Lead processado com sucesso: ${customer_email}`);
@@ -282,6 +312,7 @@ export async function processWebhook(payload: any) {
       transactionId: transaction_id,
       leadStatus: leadStatus,
       leadType: leadType,
+      isNewLead: isNewLead,
     };
   } catch (error) {
     console.error("[Webhook] Erro ao processar webhook:", error);

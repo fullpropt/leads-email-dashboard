@@ -1475,3 +1475,111 @@ export async function recordEmailSend(
     return false;
   }
 }
+
+// ========================================================================
+// NOVAS FUNÇÕES PARA CORRIGIR ENVIO DUPLICADO (ADICIONADAS)
+// ========================================================================
+
+/**
+ * Verificar se um email já foi enviado para um lead com um template específico
+ * @param templateId - ID do template
+ * @param leadId - ID do lead
+ * @returns true se já foi enviado, false caso contrário
+ */
+export async function hasEmailBeenSentForTemplate(
+  templateId: number,
+  leadId: number
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot check email sent status: database not available");
+    return false;
+  }
+
+  try {
+    const { emailSendHistory } = await import("../drizzle/schema_postgresql");
+    const result = await db
+      .select()
+      .from(emailSendHistory)
+      .where(
+        and(
+          eq(emailSendHistory.templateId, templateId),
+          eq(emailSendHistory.leadId, leadId),
+          eq(emailSendHistory.status, "sent")
+        )
+      )
+      .limit(1);
+
+    return result.length > 0;
+  } catch (error) {
+    console.error("[Database] Failed to check email sent status:", error);
+    return false;
+  }
+}
+
+/**
+ * Buscar templates para envio automático (sendMode = "automatic")
+ * CORREÇÃO: Usa sendMode em vez de sendImmediateEnabled
+ * @param templateType - Tipo do template (compra_aprovada, carrinho_abandonado, etc.)
+ * @returns Lista de templates ativos com sendMode = "automatic"
+ */
+export async function getTemplatesForAutoSend(templateType: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get templates for auto send: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(emailTemplates)
+      .where(
+        and(
+          eq(emailTemplates.templateType, templateType),
+          eq(emailTemplates.sendMode, "automatic"),
+          eq(emailTemplates.ativo, 1)
+        )
+      )
+      .orderBy(desc(emailTemplates.atualizadoEm));
+
+    console.log(`[Database] Encontrados ${result.length} template(s) automáticos para tipo '${templateType}'`);
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get templates for auto send:", error);
+    return [];
+  }
+}
+
+/**
+ * Buscar templates para envio atrasado (sendMode = "scheduled" com delay)
+ * @param templateType - Tipo do template (compra_aprovada, carrinho_abandonado, etc.)
+ * @returns Lista de templates ativos com sendMode = "scheduled" e sendOnLeadDelayEnabled = 1
+ */
+export async function getTemplatesForDelayedSend(templateType: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get templates for delayed send: database not available");
+    return [];
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(emailTemplates)
+      .where(
+        and(
+          eq(emailTemplates.templateType, templateType),
+          eq(emailTemplates.sendOnLeadDelayEnabled, 1),
+          eq(emailTemplates.ativo, 1)
+        )
+      )
+      .orderBy(desc(emailTemplates.atualizadoEm));
+
+    console.log(`[Database] Encontrados ${result.length} template(s) com envio atrasado para tipo '${templateType}'`);
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get templates for delayed send:", error);
+    return [];
+  }
+}
