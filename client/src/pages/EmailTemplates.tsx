@@ -69,10 +69,11 @@ const SEND_MODE_LABELS: Record<string, string> = {
   manual: "Normal",
 };
 
+// Cores minimalistas em tons de cinza
 const SEND_MODE_COLORS: Record<string, string> = {
-  automatic: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
-  scheduled: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
-  manual: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  automatic: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+  scheduled: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+  manual: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
 };
 
 export default function EmailTemplates() {
@@ -302,14 +303,9 @@ export default function EmailTemplates() {
     return names[type] || type;
   };
   
+  // Cores minimalistas para tipos de template
   const getTemplateTypeColor = (type: string): string => {
-    const colors: Record<string, string> = {
-      compra_aprovada: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
-      novo_cadastro: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-      programado: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
-      carrinho_abandonado: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
-    };
-    return colors[type] || "bg-gray-100 text-gray-700";
+    return "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
   };
 
   const handleRemoveTemplate = (templateId: number) => {
@@ -424,21 +420,20 @@ export default function EmailTemplates() {
 
         <TabsContent value="templates" className="space-y-6">
           <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-semibold">Templates de Email</h3>
-              <p className="text-sm text-muted-foreground">Gerencie seus templates por tipo</p>
-            </div>
+            <p className="text-sm text-slate-500">Gerencie seus templates</p>
             <Button
               onClick={handleAddTemplate}
               disabled={createTemplate.isPending}
-              className="gap-2"
+              variant="outline"
+              size="sm"
+              className="text-slate-600"
             >
               {createTemplate.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Plus className="h-4 w-4" />
+                <Plus className="h-4 w-4 mr-1" />
               )}
-              Novo Template
+              Novo
             </Button>
           </div>
           
@@ -463,26 +458,17 @@ export default function EmailTemplates() {
                             className="text-lg font-semibold border-0 p-0 h-auto focus-visible:ring-0"
                           />
                         </CardTitle>
-                        {/* Badge de Filtros */}
-                        <div className="flex items-center gap-1">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            template.targetSituacao === 'active' ? 'bg-green-100 text-green-700' :
-                            template.targetSituacao === 'abandoned' ? 'bg-orange-100 text-orange-700' :
-                            template.targetSituacao === 'none' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
+                        {/* Badges minimalistas */}
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
                             {SITUACAO_LABELS[template.targetSituacao]}
                           </span>
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            template.targetStatusPlataforma === 'accessed' ? 'bg-green-100 text-green-700' :
-                            template.targetStatusPlataforma === 'not_accessed' ? 'bg-red-100 text-red-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
+                          <span className="text-slate-300">•</span>
+                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
                             {STATUS_PLATAFORMA_LABELS[template.targetStatusPlataforma]}
                           </span>
-                          {/* Contador de Emails Enviados */}
-                          <span className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 flex items-center gap-1">
-                            <Mail className="h-3 w-3" />
+                          <span className="text-slate-300">•</span>
+                          <span className="text-slate-400">
                             {emailSentCounts?.[template.id] || 0} enviados
                           </span>
                         </div>
@@ -496,57 +482,48 @@ export default function EmailTemplates() {
                         />
                       </CardDescription>
                     </div>
-                    <div className="flex items-center gap-2">
+                    {/* Botões minimalistas */}
+                    <div className="flex items-center gap-1.5">
                       {/* Modo de Envio Badge */}
-                      <div className={`px-3 py-1 rounded-full text-xs font-semibold ${SEND_MODE_COLORS[template.sendMode]}`}>
+                      <span className="px-2 py-0.5 rounded text-xs text-slate-500 bg-slate-100 dark:bg-slate-800">
                         {SEND_MODE_LABELS[template.sendMode]}
-                      </div>
+                      </span>
                       
-                      {/* Botão de Configurações */}
+                      {/* Botões de ação */}
                       <Button
                         onClick={() => setEditingTemplateId(editingTemplateId === template.id ? null : template.id)}
-                        size="sm"
-                        variant="outline"
-                        title="Editar configurações"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        title="Configurações"
                       >
-                        <Settings className="h-4 w-4" />
+                        <Settings className="h-4 w-4 text-slate-400" />
                       </Button>
                       
-                      <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg">
-                        <Checkbox
-                          checked={selectedTemplateId === template.id}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedTemplateId(template.id);
-                            } else {
-                              setSelectedTemplateId(null);
-                            }
-                          }}
-                          title="Selecionar para editar HTML"
-                        />
-                        <span className="text-xs text-muted-foreground">Editar HTML</span>
-                      </div>
                       <Button
                         onClick={() => handleSaveTemplate(template.id)}
-                        size="sm"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
                         disabled={updateTemplate.isPending}
-                        title="Salvar alterações"
-                        className="gap-2"
+                        title="Salvar"
                       >
                         {updateTemplate.isPending ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <Send className="h-4 w-4" />
+                          <Send className="h-4 w-4 text-slate-400" />
                         )}
                       </Button>
+                      
                       {templates.length > 1 && (
                         <Button
                           onClick={() => handleRemoveTemplate(template.id)}
-                          variant="destructive"
-                          size="sm"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
                           title="Remover"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4 text-slate-400 hover:text-red-500" />
                         </Button>
                       )}
                     </div>
@@ -684,118 +661,94 @@ export default function EmailTemplates() {
                     </div>
                   )}
                   
-                  {/* Cabeçalho com botões de envio */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-blue-600" />
-                      <Label className="font-medium">Enviar Email</Label>
-                      {template.sendMode === "automatic" && (
-                        <span className="text-xs text-muted-foreground">(Automático ao criar novo lead)</span>
-                      )}
-                    </div>
+                  {/* Seção de envio minimalista */}
+                  <div className="flex items-center justify-between py-3 border-b">
                     <div className="flex items-center gap-3">
-                      {/* Toggle INDIVIDUAL para ativar/desativar este template */}
-                      <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 rounded-lg border">
-                        <Zap className="h-4 w-4 text-yellow-600" />
-                        <Switch
-                          checked={template.ativo === 1}
-                          onCheckedChange={() => handleToggleTemplateActive(template.id)}
-                          disabled={toggleTemplateActive.isPending}
-                          title="Ativar/desativar este template"
-                        />
-                        <span className="text-xs text-muted-foreground ml-1">
-                          {template.ativo === 1 ? "Ativado" : "Desativado"}
-                        </span>
-                      </div>
-                      
-                      {/* Botões de envio manual (apenas para modo normal/manual) */}
-                      {template.sendMode === "manual" && (
-                        <>
-                          <Button
-                            onClick={() => handleSendToSelected(template.id)}
-                            disabled={sendToSelectedLeads.isPending || template.ativo === 0}
-                            size="sm"
-                            variant="secondary"
-                            className="gap-2"
-                            title="Enviar para leads selecionados"
-                          >
-                            {sendToSelectedLeads.isPending ? (
-                              <>
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Enviando...
-                              </>
-                            ) : (
-                              <>
-                                <Send className="h-4 w-4" />
-                                Enviar Selecionados
-                              </>
-                            )}
-                          </Button>
-
-                          <Button
-                            onClick={() => handleSendImmediate(template.id)}
-                            disabled={sendImmediateEmail.isPending || template.ativo === 0}
-                            size="sm"
-                            className="gap-2 bg-blue-600 hover:bg-blue-700"
-                            title="Enviar para todos os leads pendentes"
-                          >
-                            {sendImmediateEmail.isPending ? (
-                              <>
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Enviando...
-                              </>
-                            ) : (
-                              <>
-                                <Send className="h-4 w-4" />
-                                Enviar Todos
-                              </>
-                            )}
-                          </Button>
-                        </>
-                      )}
+                      <span className="text-sm text-slate-600 dark:text-slate-400">
+                        {template.sendMode === "automatic" ? "Envio automático" : "Envio manual"}
+                      </span>
+                      <Switch
+                        checked={template.ativo === 1}
+                        onCheckedChange={() => handleToggleTemplateActive(template.id)}
+                        disabled={toggleTemplateActive.isPending}
+                      />
+                      <span className="text-xs text-slate-400">
+                        {template.ativo === 1 ? "Ativo" : "Inativo"}
+                      </span>
                     </div>
+                    
+                    {/* Botões de envio (apenas para modo manual) */}
+                    {template.sendMode === "manual" && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          onClick={() => handleSendToSelected(template.id)}
+                          disabled={sendToSelectedLeads.isPending || template.ativo === 0}
+                          size="sm"
+                          variant="ghost"
+                          className="text-slate-600 hover:text-slate-900"
+                        >
+                          {sendToSelectedLeads.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            "Enviar Selecionados"
+                          )}
+                        </Button>
+
+                        <Button
+                          onClick={() => handleSendImmediate(template.id)}
+                          disabled={sendImmediateEmail.isPending || template.ativo === 0}
+                          size="sm"
+                          variant="default"
+                          className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900"
+                        >
+                          {sendImmediateEmail.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            "Enviar Todos"
+                          )}
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Seção de Conteúdo HTML */}
-                  <div className="border rounded-lg p-4">
-                    <div className="mb-4">
-                      <Label className="font-medium">Conteúdo do Email</Label>
-                    </div>
-
+                  {/* Seção de Conteúdo HTML - Minimalista */}
+                  <div className="pt-3">
                     {template.htmlContent ? (
-                      <div className="space-y-3">
-                        <div className="bg-muted p-3 rounded text-xs text-muted-foreground">
-                          HTML carregado ({template.htmlContent.length} caracteres)
-                        </div>
-                        <div className="flex gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-400">
+                          {template.htmlContent.length} caracteres
+                        </span>
+                        <div className="flex gap-1">
                           <Button
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
                             onClick={() => openHtmlEditor(template.id)}
-                            className="gap-1"
+                            className="text-xs text-slate-500 hover:text-slate-900"
                           >
-                            <Code className="h-3 w-3" />
-                            Editar Código
+                            <Code className="h-3 w-3 mr-1" />
+                            Editar
                           </Button>
                           <Button
                             size="sm"
-                            variant="outline"
+                            variant="ghost"
                             onClick={() => handlePreview(template.id)}
                             disabled={previewTemplate.isLoading}
-                            className="gap-1"
+                            className="text-xs text-slate-500 hover:text-slate-900"
                           >
                             {previewTemplate.isLoading ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             ) : (
-                              <Eye className="h-3 w-3" />
+                              <>
+                                <Eye className="h-3 w-3 mr-1" />
+                                Visualizar
+                              </>
                             )}
-                            Visualizar Email
                           </Button>
                         </div>
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Nenhum HTML carregado. Faça upload de um arquivo ou clique em "Editar Código".
+                      <p className="text-xs text-slate-400">
+                        Nenhum HTML carregado
                       </p>
                     )}
                   </div>
@@ -804,8 +757,12 @@ export default function EmailTemplates() {
             ))}
           </div>
 
-          <Button onClick={handleAddTemplate} className="gap-2">
-            <Plus className="h-4 w-4" />
+          <Button 
+            onClick={handleAddTemplate} 
+            variant="outline"
+            className="text-slate-600 border-dashed"
+          >
+            <Plus className="h-4 w-4 mr-1" />
             Novo Template
           </Button>
         </TabsContent>
