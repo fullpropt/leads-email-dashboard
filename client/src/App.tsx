@@ -8,6 +8,7 @@ import DashboardLayout from "./components/DashboardLayout";
 import Leads from "./pages/Leads";
 import EmailTemplates from "./pages/EmailTemplates";
 import Analytics from "./pages/Analytics";
+import LeadLookup from "./pages/LeadLookup";
 
 function Router() {
   return (
@@ -30,6 +31,11 @@ function Router() {
       <Route path={"/analytics"}>
         <DashboardLayout>
           <Analytics />
+        </DashboardLayout>
+      </Route>
+      <Route path={"/lead-lookup"}>
+        <DashboardLayout>
+          <LeadLookup />
         </DashboardLayout>
       </Route>
       <Route path={"/404"} component={NotFound} />

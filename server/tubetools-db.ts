@@ -479,3 +479,151 @@ export async function getTemporalAnalytics() {
     };
   }
 }
+
+
+/**
+ * Buscar informações completas de um usuário específico por email
+ * Inclui saldo, histórico de transações, votos, saques e estatísticas
+ */
+export async function getFullUserDetailsByEmail(email: string) {
+  try {
+    const sql = getTubetoolsDb();
+    
+    if (!sql) {
+      console.warn("[TubeTools DB] Banco não disponível");
+      return null;
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Buscar dados do usuário
+    const [user] = await sql`
+      SELECT 
+        id, email, name, balance, created_at, updated_at,
+        first_earn_at, voting_streak, last_voted_at, 
+        last_vote_date_reset, voting_days_count, daily_votes_left,
+        daily_videos_watched, last_daily_reset
+      FROM users 
+      WHERE email = ${normalizedEmail}
+      LIMIT 1
+    `;
+
+    if (!user) {
+      return null;
+    }
+
+    // Buscar histórico de transações
+    const transactions = await sql`
+      SELECT id, type, amount, description, status, created_at
+      FROM transactions
+      WHERE user_id = ${user.id}
+      ORDER BY created_at DESC
+      LIMIT 50
+    `;
+
+    // Buscar histórico de votos com detalhes dos vídeos
+    const votes = await sql`
+      SELECT v.id, v.video_id, v.vote_type, v.reward_amount, v.created_at,
+             vi.title as video_title
+      FROM votes v
+      LEFT JOIN videos vi ON v.video_id = vi.id
+      WHERE v.user_id = ${user.id}
+      ORDER BY v.created_at DESC
+      LIMIT 50
+    `;
+
+    // Buscar histórico de saques
+    const withdrawals = await sql`
+      SELECT id, amount, status, requested_at, processed_at, bank_details
+      FROM withdrawals
+      WHERE user_id = ${user.id}
+      ORDER BY requested_at DESC
+    `;
+
+    // Calcular estatísticas
+    const [stats] = await sql`
+      SELECT 
+        COUNT(*) as total_votes,
+        COALESCE(SUM(reward_amount), 0) as total_earned,
+        MIN(created_at) as first_vote_at,
+        MAX(created_at) as last_vote_at
+      FROM votes
+      WHERE user_id = ${user.id}
+    `;
+
+    // Calcular total de saques aprovados
+    const [withdrawalStats] = await sql`
+      SELECT 
+        COUNT(*) as total_withdrawals,
+        COALESCE(SUM(CASE WHEN status = 'completed' THEN amount ELSE 0 END), 0) as total_withdrawn,
+        COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as pending_withdrawals
+      FROM withdrawals
+      WHERE user_id = ${user.id}
+    `;
+
+    // Calcular dias ativos (dias únicos com votos)
+    const [activeDays] = await sql`
+      SELECT COUNT(DISTINCT DATE(created_at)) as active_days
+      FROM votes
+      WHERE user_id = ${user.id}
+    `;
+
+    console.log(`[TubeTools DB] ✅ Detalhes completos recuperados para ${normalizedEmail}`);
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        balance: Number(user.balance),
+        createdAt: user.created_at,
+        updatedAt: user.updated_at,
+        firstEarnAt: user.first_earn_at,
+        votingStreak: Number(user.voting_streak),
+        lastVotedAt: user.last_voted_at,
+        lastVoteDateReset: user.last_vote_date_reset,
+        votingDaysCount: Number(user.voting_days_count),
+        dailyVotesLeft: Number(user.daily_votes_left),
+        dailyVideosWatched: Number(user.daily_videos_watched),
+        lastDailyReset: user.last_daily_reset,
+      },
+      stats: {
+        totalVotes: Number(stats.total_votes),
+        totalEarned: Number(stats.total_earned),
+        firstVoteAt: stats.first_vote_at,
+        lastVoteAt: stats.last_vote_at,
+        activeDays: Number(activeDays.active_days),
+        totalWithdrawals: Number(withdrawalStats.total_withdrawals),
+        totalWithdrawn: Number(withdrawalStats.total_withdrawn),
+        pendingWithdrawals: Number(withdrawalStats.pending_withdrawals),
+      },
+      transactions: transactions.map((t: any) => ({
+        id: t.id,
+        type: t.type,
+        amount: Number(t.amount),
+        description: t.description,
+        status: t.status,
+        createdAt: t.created_at,
+      })),
+      votes: votes.map((v: any) => ({
+        id: v.id,
+        videoId: v.video_id,
+        videoTitle: v.video_title,
+        voteType: v.vote_type,
+        rewardAmount: Number(v.reward_amount),
+        createdAt: v.created_at,
+      })),
+      withdrawals: withdrawals.map((w: any) => ({
+        id: w.id,
+        amount: Number(w.amount),
+        status: w.status,
+        requestedAt: w.requested_at,
+        processedAt: w.processed_at,
+        bankDetails: w.bank_details,
+      })),
+    };
+  } catch (error) {
+    console.error("[TubeTools DB] Erro ao buscar detalhes completos do usuário:", error);
+    return null;
+  }
+}

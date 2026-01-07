@@ -95,6 +95,44 @@ export const appRouter = router({
         const { getChargebackStats } = await import("./db");
         return getChargebackStats();
       }),
+
+    // Consulta detalhada de um lead por email (integra dados MailMKT + TubeTools)
+    getDetailedByEmail: publicProcedure
+      .input(z.object({ email: z.string().email() }))
+      .query(async ({ input }) => {
+        const { getLeadByEmail, getEmailHistoryByLeadId } = await import("./db");
+        const { getFullUserDetailsByEmail } = await import("./tubetools-db");
+
+        // Buscar lead no banco MailMKT
+        const lead = await getLeadByEmail(input.email);
+        
+        // Buscar histórico de emails enviados
+        const emailHistory = lead ? await getEmailHistoryByLeadId(lead.id) : [];
+        
+        // Buscar dados completos do TubeTools
+        const tubetoolsData = await getFullUserDetailsByEmail(input.email);
+
+        return {
+          found: !!lead || !!tubetoolsData,
+          mailmkt: lead ? {
+            id: lead.id,
+            nome: lead.nome,
+            email: lead.email,
+            produto: lead.produto,
+            plano: lead.plano,
+            valor: lead.valor,
+            dataAprovacao: lead.dataAprovacao,
+            dataCriacao: lead.dataCriacao,
+            emailEnviado: lead.emailEnviado === 1,
+            dataEnvioEmail: lead.dataEnvioEmail,
+            status: lead.status,
+            leadType: lead.leadType,
+            hasAccessedPlatform: lead.hasAccessedPlatform === 1,
+            emailHistory,
+          } : null,
+          tubetools: tubetoolsData,
+        };
+      }),
   }),
 
   // Routers para gerenciamento de templates de email

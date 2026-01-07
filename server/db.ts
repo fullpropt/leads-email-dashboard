@@ -107,6 +107,66 @@ export async function getAllLeads() {
   return result;
 }
 
+/**
+ * Buscar um lead específico por email
+ */
+export async function getLeadByEmail(email: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get lead: database not available");
+    return null;
+  }
+
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    const result = await db
+      .select()
+      .from(leads)
+      .where(sql`LOWER(${leads.email}) = ${normalizedEmail}`)
+      .limit(1);
+
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error("[Database] Failed to get lead by email:", error);
+    return null;
+  }
+}
+
+/**
+ * Buscar histórico de emails enviados para um lead específico
+ */
+export async function getEmailHistoryByLeadId(leadId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get email history: database not available");
+    return [];
+  }
+
+  try {
+    const { emailSendHistory, emailTemplates } = await import("../drizzle/schema_postgresql");
+    
+    const result = await db
+      .select({
+        id: emailSendHistory.id,
+        templateId: emailSendHistory.templateId,
+        templateName: emailTemplates.nome,
+        sendType: emailSendHistory.sendType,
+        sentAt: emailSendHistory.sentAt,
+        status: emailSendHistory.status,
+        errorMessage: emailSendHistory.errorMessage,
+      })
+      .from(emailSendHistory)
+      .leftJoin(emailTemplates, eq(emailSendHistory.templateId, emailTemplates.id))
+      .where(eq(emailSendHistory.leadId, leadId))
+      .orderBy(desc(emailSendHistory.sentAt));
+
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get email history:", error);
+    return [];
+  }
+}
+
 export async function getLeadsWithPagination(
   page: number = 1,
   emailStatus?: 'pending' | 'sent',
@@ -1581,5 +1641,47 @@ export async function getTemplatesForDelayedSend(templateType: string) {
   } catch (error) {
     console.error("[Database] Failed to get templates for delayed send:", error);
     return [];
+  }
+}
+
+
+/**
+ * Obter estatísticas de chargebacks (leads com status abandonado)
+ */
+export async function getChargebackStats() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get chargeback stats: database not available");
+    return { total: 0, recent: 0 };
+  }
+
+  try {
+    // Total de chargebacks/abandonados
+    const [totalResult] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(leads)
+      .where(eq(leads.leadType, "carrinho_abandonado"));
+
+    // Chargebacks nos últimos 7 dias
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const [recentResult] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(leads)
+      .where(
+        and(
+          eq(leads.leadType, "carrinho_abandonado"),
+          sql`${leads.dataCriacao} >= ${sevenDaysAgo}`
+        )
+      );
+
+    return {
+      total: Number(totalResult?.count || 0),
+      recent: Number(recentResult?.count || 0),
+    };
+  } catch (error) {
+    console.error("[Database] Failed to get chargeback stats:", error);
+    return { total: 0, recent: 0 };
   }
 }
