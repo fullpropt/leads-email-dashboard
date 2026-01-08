@@ -633,7 +633,7 @@ export function replaceTemplateVariables(htmlContent: string, lead: Lead): strin
   result = result.replace(/\{\{email\}\}/g, lead.email || "");
   result = result.replace(/\{\{produto\}\}/g, lead.produto || "");
   result = result.replace(/\{\{plano\}\}/g, lead.plano || "");
-  result = result.replace(/\{\{valor\}\}/g, lead.valor ? `R$ ${Number(lead.valor).toFixed(2).replace(".", ",")}` : "R$ 0,00");
+  result = result.replace(/\{\{valor\}\}/g, lead.valor ? `$${Number(lead.valor).toFixed(2)}` : "$0.00");
   result = result.replace(/\{\{data_compra\}\}/g, lead.dataAprovacao ? new Date(lead.dataAprovacao).toLocaleDateString("pt-BR") : "");
   result = result.replace(/\{\{year\}\}/g, currentYear.toString());
   
@@ -642,7 +642,7 @@ export function replaceTemplateVariables(htmlContent: string, lead: Lead): strin
   result = result.replace(/\{CUSTOMER_EMAIL\}/g, lead.email || "");
   result = result.replace(/\{PRODUCT_NAME\}/g, lead.produto || "");
   result = result.replace(/\{PLAN_NAME\}/g, lead.plano || "");
-  result = result.replace(/\{SALE_VALUE\}/g, lead.valor ? `R$ ${Number(lead.valor).toFixed(2).replace(".", ",")}` : "R$ 0,00");
+  result = result.replace(/\{SALE_VALUE\}/g, lead.valor ? `$${Number(lead.valor).toFixed(2)}` : "$0.00");
   result = result.replace(/\{PURCHASE_DATE\}/g, lead.dataAprovacao ? new Date(lead.dataAprovacao).toLocaleDateString("pt-BR") : "");
   result = result.replace(/\{YEAR\}/g, currentYear.toString());
   

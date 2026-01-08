@@ -270,7 +270,7 @@ export default function Analytics() {
               <CardContent>
                 <div className="text-2xl font-bold text-red-600">{chargebackStats?.chargebacks || 0}</div>
                 <p className="text-xs text-muted-foreground">
-                  {chargebackStats?.chargebackPercentage || 0}% do total • R$ {((chargebackStats?.chargebackAmount || 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  {chargebackStats?.chargebackPercentage || 0}% do total • ${((chargebackStats?.chargebackAmount || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </CardContent>
             </Card>
@@ -313,9 +313,9 @@ export default function Analytics() {
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">R$ {stats.totalBalance.toFixed(2)}</div>
+                <div className="text-2xl font-bold">${stats.totalBalance.toFixed(2)}</div>
                 <p className="text-xs text-muted-foreground">
-                  Média: R$ {stats.avgBalance.toFixed(2)}
+                  Média: ${stats.avgBalance.toFixed(2)}
                 </p>
               </CardContent>
             </Card>
@@ -329,7 +329,7 @@ export default function Analytics() {
               <CardContent>
                 <div className="text-2xl font-bold">{votes.totalVotes}</div>
                 <p className="text-xs text-muted-foreground">
-                  Recompensas: R$ {votes.totalRewardsDistributed.toFixed(2)}
+                  Recompensas: ${votes.totalRewardsDistributed.toFixed(2)}
                 </p>
               </CardContent>
             </Card>
@@ -383,7 +383,7 @@ export default function Analytics() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right font-mono">
-                          R$ {Number(user.balance).toFixed(2)}
+                          ${Number(user.balance).toFixed(2)}
                         </TableCell>
                         <TableCell className="text-right">
                           <Badge variant="secondary">{user.voting_streak} dias</Badge>
@@ -537,10 +537,10 @@ export default function Analytics() {
                   <YAxis />
                   <Tooltip 
                     labelFormatter={(value) => format(new Date(value), "dd/MM/yyyy", { locale: ptBR })}
-                    formatter={(value: any) => `R$ ${Number(value).toFixed(2)}`}
+                    formatter={(value: any) => `$${Number(value).toFixed(2)}`}
                   />
                   <Legend />
-                  <Line type="monotone" dataKey="totalRewards" stroke="#82ca9d" name="Ganhos (R$)" />
+                  <Line type="monotone" dataKey="totalRewards" stroke="#82ca9d" name="Ganhos ($)" />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
@@ -651,7 +651,7 @@ export default function Analytics() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Recompensas Distribuídas</span>
-                  <Badge variant="outline">R$ {votes.totalRewardsDistributed.toFixed(2)}</Badge>
+                  <Badge variant="outline">${votes.totalRewardsDistributed.toFixed(2)}</Badge>
                 </div>
               </div>
             </CardContent>
