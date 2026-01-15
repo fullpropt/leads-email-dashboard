@@ -1,7 +1,7 @@
 import { asc, desc, eq, sql, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { autoSendConfig, emailTemplates, InsertEmailTemplate, InsertLead, InsertUser, Lead, leads, users } from "../drizzle/schema_postgresql";
+import { autoSendConfig, emailTemplates, InsertEmailTemplate, InsertLead, InsertUser, Lead, leads, users, funnels, funnelTemplates, funnelLeadProgress, Funnel, FunnelTemplate, FunnelLeadProgress, InsertFunnel, InsertFunnelTemplate, InsertFunnelLeadProgress } from "../drizzle/schema_postgresql";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -1223,9 +1223,9 @@ export async function updateIsNewLeadAfterUpdate(leadId: number, isNew: boolean)
 }
 
 /**
- * Atualizar templateAppliedAt
+ * Atualizar data de envio de email do lead
  */
-export async function updateTemplateAppliedAt(leadId: number) {
+export async function updateLeadEmailSentDate(leadId: number) {
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot update lead: database not available");
@@ -1235,11 +1235,11 @@ export async function updateTemplateAppliedAt(leadId: number) {
   try {
     await db
       .update(leads)
-      .set({ templateAppliedAt: new Date() })
+      .set({ dataEnvioEmail: new Date(), emailEnviado: 1 })
       .where(eq(leads.id, leadId));
     return true;
   } catch (error) {
-    console.error("[Database] Failed to update templateAppliedAt:", error);
+    console.error("[Database] Failed to update lead email sent date:", error);
     return false;
   }
 }
@@ -1683,5 +1683,328 @@ export async function getChargebackStats() {
   } catch (error) {
     console.error("[Database] Failed to get chargeback stats:", error);
     return { total: 0, recent: 0 };
+  }
+}
+
+
+// ==================== FUNÇÕES DE FUNIS ====================
+
+/**
+ * Listar todos os funis
+ */
+export async function getAllFunnels() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get funnels: database not available");
+    return [];
+  }
+
+  try {
+    return await db.select().from(funnels).orderBy(desc(funnels.criadoEm));
+  } catch (error) {
+    console.error("[Database] Failed to get funnels:", error);
+    return [];
+  }
+}
+
+/**
+ * Criar um novo funil
+ */
+export async function createFunnel(data: {
+  nome: string;
+  targetStatusPlataforma: string;
+  targetSituacao: string;
+}) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create funnel: database not available");
+    return null;
+  }
+
+  try {
+    const [newFunnel] = await db.insert(funnels).values({
+      nome: data.nome,
+      targetStatusPlataforma: data.targetStatusPlataforma,
+      targetSituacao: data.targetSituacao,
+    }).returning();
+
+    // Criar primeiro template vazio automaticamente
+    await db.insert(funnelTemplates).values({
+      funnelId: newFunnel.id,
+      nome: "Primeiro Email",
+      assunto: "Assunto do email",
+      htmlContent: "<p>Conteúdo do email</p>",
+      posicao: 1,
+      delayValue: 0,
+      delayUnit: "days",
+    });
+
+    return newFunnel;
+  } catch (error) {
+    console.error("[Database] Failed to create funnel:", error);
+    return null;
+  }
+}
+
+/**
+ * Obter funil por ID
+ */
+export async function getFunnelById(funnelId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get funnel: database not available");
+    return null;
+  }
+
+  try {
+    const [funnel] = await db.select().from(funnels).where(eq(funnels.id, funnelId));
+    return funnel || null;
+  } catch (error) {
+    console.error("[Database] Failed to get funnel:", error);
+    return null;
+  }
+}
+
+/**
+ * Obter funil com seus templates
+ */
+export async function getFunnelWithTemplates(funnelId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get funnel with templates: database not available");
+    return { funnel: null, templates: [] };
+  }
+
+  try {
+    const [funnel] = await db.select().from(funnels).where(eq(funnels.id, funnelId));
+    const templates = await db.select()
+      .from(funnelTemplates)
+      .where(eq(funnelTemplates.funnelId, funnelId))
+      .orderBy(asc(funnelTemplates.posicao));
+    return { funnel: funnel || null, templates };
+  } catch (error) {
+    console.error("[Database] Failed to get funnel with templates:", error);
+    return { funnel: null, templates: [] };
+  }
+}
+
+/**
+ * Toggle ativo do funil
+ */
+export async function toggleFunnelActive(funnelId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot toggle funnel: database not available");
+    return { success: false };
+  }
+
+  try {
+    const [current] = await db.select().from(funnels).where(eq(funnels.id, funnelId));
+    if (!current) return { success: false };
+
+    await db.update(funnels)
+      .set({ ativo: current.ativo === 1 ? 0 : 1, atualizadoEm: new Date() })
+      .where(eq(funnels.id, funnelId));
+    return { success: true };
+  } catch (error) {
+    console.error("[Database] Failed to toggle funnel:", error);
+    return { success: false };
+  }
+}
+
+/**
+ * Deletar funil
+ */
+export async function deleteFunnel(funnelId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete funnel: database not available");
+    return { success: false };
+  }
+
+  try {
+    await db.delete(funnels).where(eq(funnels.id, funnelId));
+    return { success: true };
+  } catch (error) {
+    console.error("[Database] Failed to delete funnel:", error);
+    return { success: false };
+  }
+}
+
+/**
+ * Atualizar funil
+ */
+export async function updateFunnel(funnelId: number, updates: Partial<{
+  nome: string;
+  descricao: string;
+  targetStatusPlataforma: string;
+  targetSituacao: string;
+}>) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update funnel: database not available");
+    return { success: false };
+  }
+
+  try {
+    await db.update(funnels)
+      .set({ ...updates, atualizadoEm: new Date() })
+      .where(eq(funnels.id, funnelId));
+    return { success: true };
+  } catch (error) {
+    console.error("[Database] Failed to update funnel:", error);
+    return { success: false };
+  }
+}
+
+// ==================== FUNÇÕES DE TEMPLATES DE FUNIL ====================
+
+/**
+ * Criar template no funil
+ */
+export async function createFunnelTemplate(data: {
+  funnelId: number;
+  delayValue: number;
+  delayUnit: string;
+  sendTime?: string;
+}) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create funnel template: database not available");
+    return null;
+  }
+
+  try {
+    // Obter maior posição atual
+    const result = await db.select({ maxPosicao: sql<number>`COALESCE(MAX(posicao), 0)` })
+      .from(funnelTemplates)
+      .where(eq(funnelTemplates.funnelId, data.funnelId));
+
+    const newPosicao = (result[0]?.maxPosicao ?? 0) + 1;
+
+    const [newTemplate] = await db.insert(funnelTemplates).values({
+      funnelId: data.funnelId,
+      nome: `Email ${newPosicao}`,
+      assunto: "Assunto do email",
+      htmlContent: "<p>Conteúdo do email</p>",
+      posicao: newPosicao,
+      delayValue: data.delayValue,
+      delayUnit: data.delayUnit,
+      sendTime: data.sendTime || null,
+    }).returning();
+
+    return newTemplate;
+  } catch (error) {
+    console.error("[Database] Failed to create funnel template:", error);
+    return null;
+  }
+}
+
+/**
+ * Atualizar template do funil
+ */
+export async function updateFunnelTemplate(templateId: number, updates: Partial<{
+  nome: string;
+  assunto: string;
+  htmlContent: string;
+  delayValue: number;
+  delayUnit: string;
+  sendTime: string;
+}>) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update funnel template: database not available");
+    return { success: false };
+  }
+
+  try {
+    await db.update(funnelTemplates)
+      .set({ ...updates, atualizadoEm: new Date() })
+      .where(eq(funnelTemplates.id, templateId));
+    return { success: true };
+  } catch (error) {
+    console.error("[Database] Failed to update funnel template:", error);
+    return { success: false };
+  }
+}
+
+/**
+ * Toggle ativo do template do funil
+ */
+export async function toggleFunnelTemplateActive(templateId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot toggle funnel template: database not available");
+    return { success: false };
+  }
+
+  try {
+    const [current] = await db.select().from(funnelTemplates).where(eq(funnelTemplates.id, templateId));
+    if (!current) return { success: false };
+
+    await db.update(funnelTemplates)
+      .set({ ativo: current.ativo === 1 ? 0 : 1, atualizadoEm: new Date() })
+      .where(eq(funnelTemplates.id, templateId));
+    return { success: true };
+  } catch (error) {
+    console.error("[Database] Failed to toggle funnel template:", error);
+    return { success: false };
+  }
+}
+
+/**
+ * Deletar template do funil
+ */
+export async function deleteFunnelTemplate(templateId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete funnel template: database not available");
+    return { success: false };
+  }
+
+  try {
+    await db.delete(funnelTemplates).where(eq(funnelTemplates.id, templateId));
+    return { success: true };
+  } catch (error) {
+    console.error("[Database] Failed to delete funnel template:", error);
+    return { success: false };
+  }
+}
+
+/**
+ * Obter template do funil por ID
+ */
+export async function getFunnelTemplateById(templateId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get funnel template: database not available");
+    return null;
+  }
+
+  try {
+    const [template] = await db.select().from(funnelTemplates).where(eq(funnelTemplates.id, templateId));
+    return template || null;
+  } catch (error) {
+    console.error("[Database] Failed to get funnel template:", error);
+    return null;
+  }
+}
+
+/**
+ * Obter primeiro lead para preview
+ */
+export async function getFirstLead() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get first lead: database not available");
+    return null;
+  }
+
+  try {
+    const [lead] = await db.select().from(leads).limit(1);
+    return lead || null;
+  } catch (error) {
+    console.error("[Database] Failed to get first lead:", error);
+    return null;
   }
 }

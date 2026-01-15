@@ -703,5 +703,138 @@ export const appRouter = router({
     }),
   }),
 
+  // ==================== ROUTER DE FUNIS ====================
+  funnels: router({
+    list: publicProcedure.query(async () => {
+      const { getAllFunnels } = await import("./db");
+      return getAllFunnels();
+    }),
+
+    create: publicProcedure
+      .input(z.object({
+        nome: z.string(),
+        targetStatusPlataforma: z.enum(["all", "accessed", "not_accessed"]),
+        targetSituacao: z.enum(["all", "active", "abandoned"]),
+      }))
+      .mutation(async ({ input }) => {
+        const { createFunnel } = await import("./db");
+        const funnel = await createFunnel(input);
+        return { success: !!funnel, funnel };
+      }),
+
+    getById: publicProcedure
+      .input(z.object({ funnelId: z.number() }))
+      .query(async ({ input }) => {
+        const { getFunnelById } = await import("./db");
+        return getFunnelById(input.funnelId);
+      }),
+
+    getWithTemplates: publicProcedure
+      .input(z.object({ funnelId: z.number() }))
+      .query(async ({ input }) => {
+        const { getFunnelWithTemplates } = await import("./db");
+        return getFunnelWithTemplates(input.funnelId);
+      }),
+
+    update: publicProcedure
+      .input(z.object({
+        funnelId: z.number(),
+        updates: z.object({
+          nome: z.string().optional(),
+          descricao: z.string().optional(),
+          targetStatusPlataforma: z.string().optional(),
+          targetSituacao: z.string().optional(),
+        }),
+      }))
+      .mutation(async ({ input }) => {
+        const { updateFunnel } = await import("./db");
+        return updateFunnel(input.funnelId, input.updates);
+      }),
+
+    toggleActive: publicProcedure
+      .input(z.object({ funnelId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { toggleFunnelActive } = await import("./db");
+        return toggleFunnelActive(input.funnelId);
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ funnelId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { deleteFunnel } = await import("./db");
+        return deleteFunnel(input.funnelId);
+      }),
+  }),
+
+  // ==================== ROUTER DE TEMPLATES DE FUNIL ====================
+  funnelTemplates: router({
+    create: publicProcedure
+      .input(z.object({
+        funnelId: z.number(),
+        delayValue: z.number(),
+        delayUnit: z.enum(["days", "weeks"]),
+        sendTime: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { createFunnelTemplate } = await import("./db");
+        const template = await createFunnelTemplate(input);
+        return { success: !!template, template };
+      }),
+
+    update: publicProcedure
+      .input(z.object({
+        templateId: z.number(),
+        updates: z.object({
+          nome: z.string().optional(),
+          assunto: z.string().optional(),
+          htmlContent: z.string().optional(),
+          delayValue: z.number().optional(),
+          delayUnit: z.enum(["days", "weeks"]).optional(),
+          sendTime: z.string().optional(),
+        }),
+      }))
+      .mutation(async ({ input }) => {
+        const { updateFunnelTemplate } = await import("./db");
+        return updateFunnelTemplate(input.templateId, input.updates);
+      }),
+
+    toggleActive: publicProcedure
+      .input(z.object({ templateId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { toggleFunnelTemplateActive } = await import("./db");
+        return toggleFunnelTemplateActive(input.templateId);
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ templateId: z.number() }))
+      .mutation(async ({ input }) => {
+        const { deleteFunnelTemplate } = await import("./db");
+        return deleteFunnelTemplate(input.templateId);
+      }),
+
+    getById: publicProcedure
+      .input(z.object({ templateId: z.number() }))
+      .query(async ({ input }) => {
+        const { getFunnelTemplateById } = await import("./db");
+        return getFunnelTemplateById(input.templateId);
+      }),
+
+    previewWithFirstLead: publicProcedure
+      .input(z.object({ templateId: z.number() }))
+      .query(async ({ input }) => {
+        const { getFunnelTemplateById, getFirstLead } = await import("./db");
+        const template = await getFunnelTemplateById(input.templateId);
+        const lead = await getFirstLead();
+
+        let html = template?.htmlContent || "";
+        if (lead) {
+          html = html.replace(/\{\{nome\}\}/g, lead.nome);
+          html = html.replace(/\{\{email\}\}/g, lead.email);
+        }
+
+        return { success: true, html };
+      }),
+  }),
+
 });
 export type AppRouter = typeof appRouter;

@@ -9,6 +9,7 @@ import Leads from "./pages/Leads";
 import EmailTemplates from "./pages/EmailTemplates";
 import Analytics from "./pages/Analytics";
 import LeadLookup from "./pages/LeadLookup";
+import FunnelDetail from "./pages/FunnelDetail";
 
 function Router() {
   return (
@@ -26,6 +27,11 @@ function Router() {
       <Route path={"/email-templates"}>
         <DashboardLayout>
           <EmailTemplates />
+        </DashboardLayout>
+      </Route>
+      <Route path={"/email-templates/funil/:funnelId"}>
+        <DashboardLayout>
+          <FunnelDetail />
         </DashboardLayout>
       </Route>
       <Route path={"/analytics"}>

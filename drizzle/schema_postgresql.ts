@@ -134,3 +134,67 @@ export const autoSendConfig = pgTable("auto_send_config", {
 
 export type AutoSendConfig = typeof autoSendConfig.$inferSelect;
 export type InsertAutoSendConfig = typeof autoSendConfig.$inferInsert;
+
+
+// ==================== TABELAS DE FUNIS ====================
+
+/**
+ * Tabela de Funis de Email
+ * Um funil é um agrupamento de templates programados em sequência
+ */
+export const funnels = pgTable("funnels", {
+  id: serial("id").primaryKey(),
+  nome: varchar("nome", { length: 255 }).notNull(),
+  descricao: text("descricao"),
+  targetStatusPlataforma: varchar("target_status_plataforma", { length: 20 }).notNull().default("all"),
+  targetSituacao: varchar("target_situacao", { length: 20 }).notNull().default("all"),
+  ativo: integer("ativo").notNull().default(1),
+  criadoEm: timestamp("criado_em").defaultNow().notNull(),
+  atualizadoEm: timestamp("atualizado_em").defaultNow().notNull(),
+});
+
+export type Funnel = typeof funnels.$inferSelect;
+export type InsertFunnel = typeof funnels.$inferInsert;
+
+/**
+ * Templates dentro de um Funil
+ * Cada template tem uma posição na sequência e um delay em relação ao anterior
+ */
+export const funnelTemplates = pgTable("funnel_templates", {
+  id: serial("id").primaryKey(),
+  funnelId: integer("funnel_id").notNull(),
+  nome: varchar("nome", { length: 255 }).notNull(),
+  assunto: varchar("assunto", { length: 500 }).notNull(),
+  htmlContent: text("html_content").notNull(),
+  posicao: integer("posicao").notNull().default(1), // posição na sequência do funil
+  delayValue: integer("delay_value").notNull().default(0),
+  delayUnit: varchar("delay_unit", { length: 10 }).notNull().default("days"),
+  sendTime: varchar("send_time", { length: 5 }),
+  ativo: integer("ativo").notNull().default(1),
+  criadoEm: timestamp("criado_em").defaultNow().notNull(),
+  atualizadoEm: timestamp("atualizado_em").defaultNow().notNull(),
+});
+
+export type FunnelTemplate = typeof funnelTemplates.$inferSelect;
+export type InsertFunnelTemplate = typeof funnelTemplates.$inferInsert;
+
+/**
+ * Progresso do Lead no Funil
+ * Rastreia em qual etapa do funil cada lead está
+ */
+export const funnelLeadProgress = pgTable("funnel_lead_progress", {
+  id: serial("id").primaryKey(),
+  funnelId: integer("funnel_id").notNull(),
+  leadId: integer("lead_id").notNull(),
+  currentTemplateId: integer("current_template_id"),
+  nextTemplateId: integer("next_template_id"),
+  nextSendAt: timestamp("next_send_at"),
+  status: varchar("status", { length: 20 }).notNull().default("active"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  criadoEm: timestamp("criado_em").defaultNow().notNull(),
+  atualizadoEm: timestamp("atualizado_em").defaultNow().notNull(),
+});
+
+export type FunnelLeadProgress = typeof funnelLeadProgress.$inferSelect;
+export type InsertFunnelLeadProgress = typeof funnelLeadProgress.$inferInsert;
