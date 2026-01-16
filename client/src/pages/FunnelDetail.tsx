@@ -43,6 +43,7 @@ export default function FunnelDetail() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [previewHtml, setPreviewHtml] = useState("");
   const [localTemplates, setLocalTemplates] = useState<FunnelTemplateBlock[]>([]);
+  const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
 
   // Query para obter funil com templates
   const { data: funnelData, refetch: refetchFunnel, isLoading } = trpc.funnels.getWithTemplates.useQuery(
@@ -93,7 +94,7 @@ export default function FunnelDetail() {
 
   const previewTemplate = trpc.funnelTemplates.previewWithFirstLead.useQuery(
     { templateId: selectedTemplateId! },
-    { enabled: selectedTemplateId !== null && selectedTemplateId > 0 }
+    { enabled: selectedTemplateId !== null && selectedTemplateId > 0 && activeTab === "preview" }
   );
 
   // Sincronizar templates locais com dados do servidor
@@ -109,7 +110,6 @@ export default function FunnelDetail() {
   useEffect(() => {
     if (previewTemplate.data?.success) {
       setPreviewHtml(previewTemplate.data.html);
-      setActiveTab("preview");
     }
   }, [previewTemplate.data]);
 
@@ -165,6 +165,7 @@ export default function FunnelDetail() {
 
   const handlePreview = (templateId: number) => {
     setSelectedTemplateId(templateId);
+    setActiveTab("preview");
   };
 
   const openHtmlEditor = (templateId: number) => {
@@ -204,19 +205,7 @@ export default function FunnelDetail() {
 
   return (
     <div className="space-y-6">
-      {/* Header com navegação */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={handleBack} size="sm" className="gap-2">
-          <ArrowLeft className="h-4 w-4" />
-          Voltar
-        </Button>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>Funil</span>
-          <ChevronRight className="h-4 w-4" />
-          <span className="font-medium text-foreground">{funnel.nome}</span>
-        </div>
-      </div>
-
+      {/* Header */}
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Automação de Emails</h2>
         <p className="text-muted-foreground mt-1">
@@ -224,10 +213,14 @@ export default function FunnelDetail() {
         </p>
       </div>
 
-      {/* Breadcrumb do Funil */}
-      <div className="flex items-center gap-2 text-sm border-b pb-4">
-        <span className="text-muted-foreground">Funil</span>
-        <span className="font-medium">{funnel.nome}</span>
+      {/* Breadcrumb do Funil - estilo do design */}
+      <div className="flex items-center gap-3 text-sm border-b pb-4">
+        <Button variant="ghost" onClick={handleBack} size="sm" className="gap-1 px-2 h-7 text-slate-500 hover:text-slate-700">
+          <ArrowLeft className="h-3.5 w-3.5" />
+        </Button>
+        <span className="text-slate-400">Funil</span>
+        <span className="text-slate-300">|</span>
+        <span className="font-medium text-slate-700 dark:text-slate-300">{funnel.nome}</span>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -245,130 +238,154 @@ export default function FunnelDetail() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="templates" className="space-y-6">
+        <TabsContent value="templates" className="space-y-4">
           <div className="text-sm text-muted-foreground">Templates</div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {localTemplates.map((template, index) => (
-              <Card key={template.id} className={`relative ${template.ativo === 0 ? 'opacity-60' : ''}`}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-sm font-medium">
-                        Template
-                      </div>
+              <div 
+                key={template.id} 
+                className={`bg-white dark:bg-slate-950 rounded-xl border shadow-sm ${template.ativo === 0 ? 'opacity-60' : ''}`}
+              >
+                <div className="px-4 py-3">
+                  <div className="flex items-center gap-4">
+                    {/* Badge de tipo */}
+                    <div className="px-4 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-400 min-w-[90px] text-center">
+                      Template
+                    </div>
+                    
+                    {/* Nome do template */}
+                    <div className="flex-1">
                       <Input
                         value={template.nome}
                         onChange={(e) => updateTemplateField(template.id, "nome", e.target.value)}
-                        className="text-base font-medium border-0 p-0 h-auto focus-visible:ring-0 max-w-xs"
+                        onBlur={() => handleSaveTemplate(template.id)}
+                        className="text-sm font-medium border-0 p-0 h-auto focus-visible:ring-0 bg-transparent shadow-none"
                         placeholder="Nome do Template"
                       />
                     </div>
+                    
+                    {/* Ações */}
                     <div className="flex items-center gap-2">
+                      {/* Botão de configurações */}
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => openHtmlEditor(template.id)}
-                        className="h-8 w-8"
+                        onClick={() => setEditingTemplateId(editingTemplateId === template.id ? null : template.id)}
+                        className="h-8 w-8 text-slate-400 hover:text-slate-600"
                       >
-                        <Settings className="h-4 w-4 text-slate-400" />
+                        <Settings className="h-4 w-4" />
                       </Button>
-                      <div className="flex items-center gap-1 px-2">
-                        <span className="text-xs text-muted-foreground">Off</span>
+                      
+                      {/* Toggle Off/On */}
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-slate-200 dark:border-slate-700">
+                        <span className="text-xs text-slate-400">Off</span>
                         <Switch
                           checked={template.ativo === 1}
                           onCheckedChange={() => handleToggleActive(template.id)}
+                          className="data-[state=checked]:bg-cyan-500"
                         />
-                        <span className="text-xs text-primary">On</span>
+                        <span className={`text-xs ${template.ativo === 1 ? 'text-cyan-500 font-medium' : 'text-slate-400'}`}>On</span>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-slate-400" />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0 space-y-4">
-                  {/* Informações de delay */}
-                  {index > 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      Enviar após {template.delayValue} {template.delayUnit === "days" ? "dias" : "semanas"}
-                      {template.sendTime && ` às ${template.sendTime}`}
-                    </div>
-                  )}
-                  {index === 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      Enviado imediatamente quando o lead entra no funil
-                    </div>
-                  )}
-
-                  {/* Assunto */}
-                  <div className="space-y-2">
-                    <Label className="text-xs">Assunto</Label>
-                    <Input
-                      value={template.assunto}
-                      onChange={(e) => updateTemplateField(template.id, "assunto", e.target.value)}
-                      placeholder="Assunto do email"
-                      className="text-sm"
-                    />
-                  </div>
-
-                  {/* Ações */}
-                  <div className="flex items-center justify-between pt-2 border-t">
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                      
+                      {/* Seta para detalhes */}
+                      <ChevronRight 
+                        className="h-5 w-5 text-slate-300 cursor-pointer hover:text-slate-500" 
                         onClick={() => handlePreview(template.id)}
-                        disabled={previewTemplate.isLoading}
-                        className="text-xs"
-                      >
-                        <Eye className="h-3 w-3 mr-1" />
-                        Visualizar
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openHtmlEditor(template.id)}
-                        className="text-xs"
-                      >
-                        <Code className="h-3 w-3 mr-1" />
-                        Editar HTML
-                      </Button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSaveTemplate(template.id)}
-                        disabled={updateFunnelTemplate.isPending}
-                      >
-                        {updateFunnelTemplate.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Send className="h-4 w-4" />
-                        )}
-                      </Button>
-                      {localTemplates.length > 1 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteTemplate(template.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-slate-400 hover:text-red-500" />
-                        </Button>
-                      )}
+                      />
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+
+                  {/* Painel de edição expandido */}
+                  {editingTemplateId === template.id && (
+                    <div className="mt-4 pt-4 border-t space-y-4">
+                      {/* Informações de delay */}
+                      {index > 0 && (
+                        <div className="text-xs text-muted-foreground bg-slate-50 dark:bg-slate-900 rounded-lg p-3">
+                          Enviar após {template.delayValue} {template.delayUnit === "days" ? "dias" : "semanas"}
+                          {template.sendTime && ` às ${template.sendTime}`} do template anterior
+                        </div>
+                      )}
+                      {index === 0 && (
+                        <div className="text-xs text-muted-foreground bg-slate-50 dark:bg-slate-900 rounded-lg p-3">
+                          Enviado imediatamente quando o lead entra no funil
+                        </div>
+                      )}
+
+                      {/* Assunto */}
+                      <div className="space-y-2">
+                        <Label className="text-xs">Assunto</Label>
+                        <Input
+                          value={template.assunto}
+                          onChange={(e) => updateTemplateField(template.id, "assunto", e.target.value)}
+                          placeholder="Assunto do email"
+                          className="text-sm"
+                        />
+                      </div>
+
+                      {/* Ações */}
+                      <div className="flex items-center justify-between pt-2">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handlePreview(template.id)}
+                            disabled={previewTemplate.isLoading}
+                            className="text-xs"
+                          >
+                            <Eye className="h-3 w-3 mr-1" />
+                            Visualizar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openHtmlEditor(template.id)}
+                            className="text-xs"
+                          >
+                            <Code className="h-3 w-3 mr-1" />
+                            Editar HTML
+                          </Button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              handleSaveTemplate(template.id);
+                              setEditingTemplateId(null);
+                            }}
+                            disabled={updateFunnelTemplate.isPending}
+                          >
+                            {updateFunnelTemplate.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              "Salvar"
+                            )}
+                          </Button>
+                          {localTemplates.length > 1 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteTemplate(template.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-slate-400 hover:text-red-500" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
 
           {/* Botão para adicionar novo template */}
-          <div className="flex justify-center">
+          <div className="flex justify-center pt-4">
             <Button
               variant="outline"
               onClick={() => setShowCreateModal(true)}
               disabled={createFunnelTemplate.isPending}
-              className="border-dashed"
+              className="border-dashed border-cyan-300 text-cyan-600 hover:bg-cyan-50 dark:border-cyan-700 dark:text-cyan-400 dark:hover:bg-cyan-950"
             >
               {createFunnelTemplate.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -381,14 +398,27 @@ export default function FunnelDetail() {
         </TabsContent>
 
         <TabsContent value="preview" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Pré-visualização do Email</CardTitle>
-              <CardDescription>
-                Visualize como o email será exibido
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+          {/* Breadcrumb do template selecionado */}
+          {selectedTemplate && (
+            <div className="flex items-center gap-2 text-sm">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setActiveTab("templates")}
+                className="gap-1 px-2 h-7 text-slate-500 hover:text-slate-700"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+              </Button>
+              <span className="text-slate-400">Template</span>
+              <span className="text-slate-300">|</span>
+              <span className="font-medium text-slate-700 dark:text-slate-300">{selectedTemplate.nome}</span>
+            </div>
+          )}
+
+          <div className="text-sm text-muted-foreground">Pré-visualização</div>
+
+          <Card className="border-0 shadow-none">
+            <CardContent className="p-0">
               {previewTemplate.isLoading && (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -406,7 +436,7 @@ export default function FunnelDetail() {
               ) : !previewTemplate.isLoading && (
                 <div className="text-center py-12 text-muted-foreground">
                   <Eye className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Selecione um template e clique em "Visualizar" para ver a pré-visualização</p>
+                  <p>Selecione um template e clique na seta para ver a pré-visualização</p>
                 </div>
               )}
             </CardContent>
@@ -414,22 +444,34 @@ export default function FunnelDetail() {
         </TabsContent>
 
         <TabsContent value="editor" className="space-y-6">
+          {/* Breadcrumb do template selecionado */}
+          {selectedTemplate && (
+            <div className="flex items-center gap-2 text-sm">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setActiveTab("templates")}
+                className="gap-1 px-2 h-7 text-slate-500 hover:text-slate-700"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+              </Button>
+              <span className="text-slate-400">Template</span>
+              <span className="text-slate-300">|</span>
+              <span className="font-medium text-slate-700 dark:text-slate-300">{selectedTemplate.nome}</span>
+            </div>
+          )}
+
+          <div className="text-sm text-muted-foreground">Código HTML</div>
+
           {selectedTemplate ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Editor HTML - {selectedTemplate.nome}</CardTitle>
-                <CardDescription>
-                  Edite o código HTML do seu template
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <Card className="border-0 shadow-none">
+              <CardContent className="p-0 space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="html-editor">Código HTML</Label>
                   <Textarea
                     id="html-editor"
                     value={selectedTemplate.htmlContent}
                     onChange={(e) => updateTemplateField(selectedTemplate.id, "htmlContent", e.target.value)}
-                    className="font-mono text-sm h-96"
+                    className="font-mono text-sm h-[500px] bg-slate-50 dark:bg-slate-900 border rounded-lg"
                     placeholder="Cole seu código HTML aqui..."
                   />
                 </div>

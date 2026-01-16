@@ -63,7 +63,7 @@ interface FunnelBlock {
   atualizadoEm: Date;
 }
 
-// Labels para exibição
+// Labels para exibição dos filtros
 const STATUS_PLATAFORMA_LABELS: Record<string, string> = {
   all: "Todos",
   accessed: "Ativo",
@@ -74,6 +74,20 @@ const SITUACAO_LABELS: Record<string, string> = {
   all: "Todos",
   active: "Compra Aprovada",
   abandoned: "Carrinho Abandonado",
+  none: "Nenhum",
+};
+
+// Labels curtos para badges
+const STATUS_PLATAFORMA_SHORT: Record<string, string> = {
+  all: "Todos",
+  accessed: "Ativo",
+  not_accessed: "Inativo",
+};
+
+const SITUACAO_SHORT: Record<string, string> = {
+  all: "Todos",
+  active: "Aprovada",
+  abandoned: "Abandonado",
   none: "Nenhum",
 };
 
@@ -403,77 +417,86 @@ export default function EmailTemplates() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="items" className="space-y-6">
+        <TabsContent value="items" className="space-y-4">
           <div className="text-sm text-muted-foreground">Itens</div>
 
           <div className="space-y-3">
             {/* Renderizar Templates */}
             {templates.map((template) => (
-              <Card key={`template-${template.id}`} className={`${template.ativo === 0 ? 'opacity-60' : ''}`}>
-                <CardContent className="py-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-sm font-medium min-w-[80px] text-center">
-                        Template
-                      </div>
-                      <div className="flex-1">
-                        <Input
-                          value={template.nome}
-                          onChange={(e) => updateTemplateField(template.id, "nome", e.target.value)}
-                          className="text-base font-medium border-0 p-0 h-auto focus-visible:ring-0 bg-transparent"
-                          placeholder="Nome do Template"
-                        />
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-                          {SITUACAO_LABELS[template.targetSituacao]}
-                        </span>
-                        <span>•</span>
-                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-                          {STATUS_PLATAFORMA_LABELS[template.targetStatusPlataforma]}
-                        </span>
-                      </div>
+              <div 
+                key={`template-${template.id}`} 
+                className={`bg-white dark:bg-slate-950 rounded-xl border shadow-sm ${template.ativo === 0 ? 'opacity-60' : ''}`}
+              >
+                <div className="px-4 py-3">
+                  <div className="flex items-center gap-4">
+                    {/* Badge de tipo */}
+                    <div className="px-4 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-400 min-w-[90px] text-center">
+                      Template
                     </div>
+                    
+                    {/* Nome do template */}
+                    <div className="flex-1">
+                      <Input
+                        value={template.nome}
+                        onChange={(e) => updateTemplateField(template.id, "nome", e.target.value)}
+                        onBlur={() => handleSaveTemplate(template.id)}
+                        className="text-sm font-medium border-0 p-0 h-auto focus-visible:ring-0 bg-transparent shadow-none"
+                        placeholder="Nome do Template"
+                      />
+                    </div>
+                    
+                    {/* Filtros como badges */}
+                    <div className="flex items-center gap-1 text-xs text-cyan-600 dark:text-cyan-400">
+                      <span>{SITUACAO_SHORT[template.targetSituacao]}</span>
+                      <span className="text-slate-400">.</span>
+                      <span>{STATUS_PLATAFORMA_SHORT[template.targetStatusPlataforma]}</span>
+                    </div>
+                    
+                    {/* Ações */}
                     <div className="flex items-center gap-2">
+                      {/* Botão de configurações */}
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => setEditingTemplateId(editingTemplateId === template.id ? null : template.id)}
-                        className="h-8 w-8"
+                        className="h-8 w-8 text-slate-400 hover:text-slate-600"
                       >
-                        <Settings className="h-4 w-4 text-slate-400" />
+                        <Settings className="h-4 w-4" />
                       </Button>
                       
-                      {/* Botões de envio para Templates */}
+                      {/* Botão Enviar */}
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleSendImmediate(template.id)}
                         disabled={sendImmediateEmail.isPending || template.ativo === 0}
-                        className="gap-1"
+                        className="gap-1.5 text-cyan-600 border-cyan-200 hover:bg-cyan-50 dark:text-cyan-400 dark:border-cyan-800 dark:hover:bg-cyan-950"
                       >
                         {sendImmediateEmail.isPending ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
                           <>
-                            <Send className="h-3 w-3" />
-                            Enviar
+                            <span>Enviar</span>
+                            <Send className="h-3.5 w-3.5" />
                           </>
                         )}
                       </Button>
+                      
+                      {/* Botão S (enviar para selecionados) */}
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
                         onClick={() => handleSendToSelected(template.id)}
                         disabled={sendToSelectedLeads.isPending || template.ativo === 0}
-                        className="px-2"
-                        title="Enviar para selecionados"
+                        className="px-2 text-slate-400 border-slate-200 hover:text-slate-600 dark:border-slate-700"
+                        title="Enviar para leads selecionados"
                       >
                         S
                       </Button>
                       
+                      {/* Seta para detalhes */}
                       <ChevronRight 
-                        className="h-4 w-4 text-slate-400 cursor-pointer hover:text-slate-600" 
+                        className="h-5 w-5 text-slate-300 cursor-pointer hover:text-slate-500" 
                         onClick={() => {
                           setSelectedTemplateId(template.id);
                           handlePreview(template.id);
@@ -572,36 +595,41 @@ export default function EmailTemplates() {
                       </div>
                     </div>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ))}
 
             {/* Renderizar Funis */}
             {funnels.map((funnel: FunnelBlock) => (
-              <Card 
+              <div 
                 key={`funnel-${funnel.id}`} 
-                className={`cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${funnel.ativo === 0 ? 'opacity-60' : ''}`}
+                className={`bg-white dark:bg-slate-950 rounded-xl border shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${funnel.ativo === 0 ? 'opacity-60' : ''}`}
               >
-                <CardContent className="py-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4" onClick={() => handleFunnelClick(funnel.id)}>
-                      <div className="px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm font-medium min-w-[80px] text-center">
-                        Funil
-                      </div>
-                      <div className="flex-1">
-                        <span className="text-base font-medium">{funnel.nome}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-                          {SITUACAO_LABELS[funnel.targetSituacao] || funnel.targetSituacao}
-                        </span>
-                        <span>•</span>
-                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-                          {STATUS_PLATAFORMA_LABELS[funnel.targetStatusPlataforma] || funnel.targetStatusPlataforma}
-                        </span>
-                      </div>
+                <div className="px-4 py-3">
+                  <div className="flex items-center gap-4">
+                    {/* Badge de tipo - Funil com cor diferente */}
+                    <div 
+                      className="px-4 py-1.5 rounded-full border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950 text-sm font-medium text-cyan-600 dark:text-cyan-400 min-w-[90px] text-center"
+                      onClick={() => handleFunnelClick(funnel.id)}
+                    >
+                      Funil
                     </div>
+                    
+                    {/* Nome do funil */}
+                    <div className="flex-1" onClick={() => handleFunnelClick(funnel.id)}>
+                      <span className="text-sm font-medium">{funnel.nome}</span>
+                    </div>
+                    
+                    {/* Filtros como badges */}
+                    <div className="flex items-center gap-1 text-xs text-cyan-600 dark:text-cyan-400">
+                      <span>{SITUACAO_SHORT[funnel.targetSituacao] || funnel.targetSituacao}</span>
+                      <span className="text-slate-400">.</span>
+                      <span>{STATUS_PLATAFORMA_SHORT[funnel.targetStatusPlataforma] || funnel.targetStatusPlataforma}</span>
+                    </div>
+                    
+                    {/* Ações */}
                     <div className="flex items-center gap-2">
+                      {/* Botão de configurações/deletar */}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -609,36 +637,44 @@ export default function EmailTemplates() {
                           e.stopPropagation();
                           handleRemoveFunnel(funnel.id);
                         }}
-                        className="h-8 w-8"
+                        className="h-8 w-8 text-slate-400 hover:text-red-500"
                       >
-                        <Trash2 className="h-4 w-4 text-slate-400 hover:text-red-500" />
+                        <Settings className="h-4 w-4" />
                       </Button>
-                      <div className="flex items-center gap-1 px-2" onClick={(e) => e.stopPropagation()}>
-                        <span className="text-xs text-muted-foreground">Off</span>
+                      
+                      {/* Toggle Off/On */}
+                      <div 
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-slate-200 dark:border-slate-700" 
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="text-xs text-slate-400">Off</span>
                         <Switch
                           checked={funnel.ativo === 1}
                           onCheckedChange={() => handleToggleFunnelActive(funnel.id)}
+                          className="data-[state=checked]:bg-cyan-500"
                         />
-                        <span className="text-xs text-primary">On</span>
+                        <span className={`text-xs ${funnel.ativo === 1 ? 'text-cyan-500 font-medium' : 'text-slate-400'}`}>On</span>
                       </div>
+                      
+                      {/* Seta para detalhes */}
                       <ChevronRight 
-                        className="h-4 w-4 text-slate-400" 
+                        className="h-5 w-5 text-slate-300" 
                         onClick={() => handleFunnelClick(funnel.id)}
                       />
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ))}
           </div>
 
           {/* Botão para adicionar novo item */}
-          <div className="flex justify-center">
+          <div className="flex justify-center pt-4">
             <Button
               variant="outline"
               onClick={() => setShowCreateModal(true)}
               disabled={createTemplate.isPending || createFunnel.isPending}
-              className="border-dashed"
+              className="border-dashed border-cyan-300 text-cyan-600 hover:bg-cyan-50 dark:border-cyan-700 dark:text-cyan-400 dark:hover:bg-cyan-950"
             >
               {(createTemplate.isPending || createFunnel.isPending) ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
