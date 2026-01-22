@@ -822,15 +822,23 @@ export const appRouter = router({
     previewWithFirstLead: publicProcedure
       .input(z.object({ templateId: z.number() }))
       .query(async ({ input }) => {
-        const { getFunnelTemplateById, getFirstLead } = await import("./db");
+        const { getFunnelTemplateById, getFirstLead, replaceTemplateVariables } = await import("./db");
         const template = await getFunnelTemplateById(input.templateId);
         const lead = await getFirstLead();
 
-        let html = template?.htmlContent || "";
-        if (lead) {
-          html = html.replace(/\{\{nome\}\}/g, lead.nome);
-          html = html.replace(/\{\{email\}\}/g, lead.email);
+        if (!template || !template.htmlContent) {
+          return { success: false, html: "", message: "Template não encontrado ou sem conteúdo HTML" };
         }
+
+        // Substituir variáveis do template com dados do lead
+        let replacedHtml = template.htmlContent;
+        if (lead) {
+          replacedHtml = replaceTemplateVariables(template.htmlContent, lead);
+        }
+
+        // Aplicar o processamento de template com header, CSS e rodapé
+        const { processEmailTemplate } = await import("./emailTemplate");
+        const html = processEmailTemplate(replacedHtml);
 
         return { success: true, html };
       }),
