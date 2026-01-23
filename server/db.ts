@@ -1312,7 +1312,8 @@ export async function importAbandonedCartsFromPerfectPay(
     // Processar cada carrinho abandonado
     for (const sale of sales) {
       try {
-        const customerEmail = sale.customer?.email;
+        // NORMALIZAÇÃO: Converter email para minúsculas para evitar duplicatas por diferença de capitalização
+        const customerEmail = sale.customer?.email ? sale.customer.email.toLowerCase().trim() : sale.customer?.email;
         
         if (!customerEmail) {
           console.warn("[Import] ⚠️ Carrinho sem email, pulando...");
@@ -1320,7 +1321,7 @@ export async function importAbandonedCartsFromPerfectPay(
           continue;
         }
 
-        // Verificar se já existe
+        // Verificar se já existe (busca case-insensitive para segurança)
         const existing = await db
           .select()
           .from(leads)

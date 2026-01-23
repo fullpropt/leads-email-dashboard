@@ -20,7 +20,8 @@ export async function processNewSignupWebhook(payload: any) {
     // Extrair dados do webhook
     // Suportar múltiplos formatos de payload
     const customer_name = payload.name || payload.full_name || payload.nome;
-    const customer_email = payload.email;
+    // NORMALIZAÇÃO: Converter email para minúsculas para evitar duplicatas por diferença de capitalização
+    const customer_email = payload.email ? payload.email.toLowerCase().trim() : payload.email;
     
     // Validar campos obrigatórios
     if (!customer_email || !customer_name) {
