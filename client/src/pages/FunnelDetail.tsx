@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Loader2, Eye, Code, Settings, Trash2, Send, ChevronRight } from "lucide-react";
 import { CreateItemModal } from "@/components/CreateItemModal";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
 interface FunnelTemplateBlock {
   id: number;
@@ -51,6 +52,11 @@ export default function FunnelDetail() {
   const [previewHtml, setPreviewHtml] = useState("");
   const [localTemplates, setLocalTemplates] = useState<FunnelTemplateBlock[]>([]);
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
+
+  // Estados para diálogo de confirmação de exclusão
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTemplateId, setDeleteTemplateId] = useState<number | null>(null);
+  const [deleteTemplateName, setDeleteTemplateName] = useState<string>("");
 
   // Query para obter funil com templates
   const { data: funnelData, refetch: refetchFunnel, isLoading } = trpc.funnels.getWithTemplates.useQuery(
@@ -162,12 +168,23 @@ export default function FunnelDetail() {
     toggleFunnelTemplateActive.mutate({ templateId });
   };
 
-  const handleDeleteTemplate = (templateId: number) => {
+  const handleDeleteTemplate = (templateId: number, templateName: string) => {
     if (localTemplates.length <= 1) {
       toast.error("É necessário manter pelo menos um template no funil");
       return;
     }
-    deleteFunnelTemplate.mutate({ templateId });
+    setDeleteTemplateId(templateId);
+    setDeleteTemplateName(templateName);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deleteTemplateId) {
+      deleteFunnelTemplate.mutate({ templateId: deleteTemplateId });
+    }
+    setDeleteDialogOpen(false);
+    setDeleteTemplateId(null);
+    setDeleteTemplateName("");
   };
 
   const handlePreview = (templateId: number) => {
@@ -418,7 +435,7 @@ export default function FunnelDetail() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDeleteTemplate(template.id)}
+                              onClick={() => handleDeleteTemplate(template.id, template.nome)}
                             >
                               <Trash2 className="h-4 w-4 text-slate-400 hover:text-red-500" />
                             </Button>
@@ -569,6 +586,17 @@ export default function FunnelDetail() {
         onCreateFunnel={() => {}}
         onCreateFunnelTemplate={handleCreateFunnelTemplate}
         isFunnelContext={true}
+      />
+
+      {/* Diálogo de confirmação de exclusão */}
+      <ConfirmDeleteDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleConfirmDelete}
+        title="Excluir Template do Funil"
+        description="Tem certeza que deseja excluir este template do funil? Esta ação não pode ser desfeita."
+        itemName={deleteTemplateName}
+        isLoading={deleteFunnelTemplate.isPending}
       />
     </div>
   );

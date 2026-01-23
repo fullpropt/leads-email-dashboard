@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Eye, Send, Loader2, Plus, Trash2, Code, Settings, ChevronRight, Mail } from "lucide-react";
 import { CreateItemModal } from "@/components/CreateItemModal";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
 interface TemplateConfig {
   targetStatusPlataforma: "all" | "accessed" | "not_accessed";
@@ -101,6 +102,12 @@ export default function EmailTemplates() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
   const [editingFunnelId, setEditingFunnelId] = useState<number | null>(null);
+
+  // Estados para diálogo de confirmação de exclusão
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteType, setDeleteType] = useState<"template" | "funnel" | null>(null);
+  const [deleteItemId, setDeleteItemId] = useState<number | null>(null);
+  const [deleteItemName, setDeleteItemName] = useState<string>("");
 
   // Queries
   const { data: allTemplates, refetch: refetchTemplates } = trpc.emailTemplates.list.useQuery();
@@ -330,8 +337,11 @@ export default function EmailTemplates() {
     });
   };
 
-  const handleRemoveTemplate = (templateId: number) => {
-    deleteTemplate.mutate({ templateId });
+  const handleRemoveTemplate = (templateId: number, templateName: string) => {
+    setDeleteType("template");
+    setDeleteItemId(templateId);
+    setDeleteItemName(templateName);
+    setDeleteDialogOpen(true);
   };
 
   const handleToggleTemplateActive = (templateId: number) => {
@@ -342,8 +352,23 @@ export default function EmailTemplates() {
     toggleFunnelActive.mutate({ funnelId });
   };
 
-  const handleRemoveFunnel = (funnelId: number) => {
-    deleteFunnel.mutate({ funnelId });
+  const handleRemoveFunnel = (funnelId: number, funnelName: string) => {
+    setDeleteType("funnel");
+    setDeleteItemId(funnelId);
+    setDeleteItemName(funnelName);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deleteType === "template" && deleteItemId) {
+      deleteTemplate.mutate({ templateId: deleteItemId });
+    } else if (deleteType === "funnel" && deleteItemId) {
+      deleteFunnel.mutate({ funnelId: deleteItemId });
+    }
+    setDeleteDialogOpen(false);
+    setDeleteType(null);
+    setDeleteItemId(null);
+    setDeleteItemName("");
   };
 
   const handleSaveFunnel = (funnelId: number, updates: { nome?: string; targetStatusPlataforma?: string; targetSituacao?: string }) => {
@@ -612,7 +637,7 @@ export default function EmailTemplates() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleRemoveTemplate(template.id)}
+                            onClick={() => handleRemoveTemplate(template.id, template.nome)}
                           >
                             <Trash2 className="h-4 w-4 text-red-500" />
                           </Button>
@@ -737,7 +762,7 @@ export default function EmailTemplates() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRemoveFunnel(funnel.id)}
+                          onClick={() => handleRemoveFunnel(funnel.id, funnel.nome)}
                         >
                           <Trash2 className="h-4 w-4 text-red-500 mr-1" />
                           Remover Funil
@@ -866,6 +891,21 @@ export default function EmailTemplates() {
         onClose={() => setShowCreateModal(false)}
         onCreateTemplate={handleCreateTemplate}
         onCreateFunnel={handleCreateFunnel}
+      />
+
+      {/* Diálogo de confirmação de exclusão */}
+      <ConfirmDeleteDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleConfirmDelete}
+        title={deleteType === "template" ? "Excluir Template" : "Excluir Funil"}
+        description={
+          deleteType === "template"
+            ? "Tem certeza que deseja excluir este template? Esta ação não pode ser desfeita e todo o histórico de envios relacionado será mantido."
+            : "Tem certeza que deseja excluir este funil? Esta ação não pode ser desfeita e todos os templates dentro do funil serão removidos."
+        }
+        itemName={deleteItemName}
+        isLoading={deleteTemplate.isPending || deleteFunnel.isPending}
       />
     </div>
   );
