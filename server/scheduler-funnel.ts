@@ -86,7 +86,6 @@ async function processFunnelEmails() {
     // Importar funções necessárias
     const { sendEmail } = await import("./email");
     const { replaceTemplateVariables } = await import("./db");
-    const { calculateSendTimeInLeadTimezone } = await import("./timezone-utils");
 
     // Processar cada progresso
     for (const progress of progressReadyForSend) {
@@ -155,14 +154,17 @@ async function processFunnelEmails() {
             .limit(1);
 
           if (nextTemplate) {
-            // Calcular próximo envio considerando timezone do lead
+            // Calcular próximo envio considerando timezone do lead e unidade de delay
+            // CORREÇÃO: Agora suporta corretamente horas, dias e semanas
             const leadTimezone = lead.timezone || "America/Sao_Paulo";
-            const sendTime = nextTemplate.sendTime || "12:00";
-            const delayDays = nextTemplate.delayUnit === "weeks" 
-              ? nextTemplate.delayValue * 7 
-              : nextTemplate.delayValue;
-
-            const nextSendAt = calculateSendTimeInLeadTimezone(sendTime, delayDays, leadTimezone);
+            const { calculateSendTimeWithUnit } = await import("./timezone-utils");
+            
+            const nextSendAt = calculateSendTimeWithUnit(
+              nextTemplate.delayValue,
+              nextTemplate.delayUnit,
+              nextTemplate.sendTime,
+              leadTimezone
+            );
 
             // Atualizar progresso para próximo template
             await db
@@ -260,15 +262,17 @@ export async function addLeadToFunnel(leadId: number, funnelId: number) {
       return { success: false, message: "Funil não tem templates ativos" };
     }
 
-    // Calcular primeiro envio considerando timezone do lead
-    const { calculateSendTimeInLeadTimezone } = await import("./timezone-utils");
+    // Calcular primeiro envio considerando timezone do lead e unidade de delay
+    // CORREÇÃO: Agora suporta corretamente horas, dias e semanas
+    const { calculateSendTimeWithUnit } = await import("./timezone-utils");
     const leadTimezone = lead.timezone || "America/Sao_Paulo";
-    const sendTime = firstTemplate.sendTime || "12:00";
-    const delayDays = firstTemplate.delayUnit === "weeks" 
-      ? firstTemplate.delayValue * 7 
-      : firstTemplate.delayValue;
-
-    const nextSendAt = calculateSendTimeInLeadTimezone(sendTime, delayDays, leadTimezone);
+    
+    const nextSendAt = calculateSendTimeWithUnit(
+      firstTemplate.delayValue,
+      firstTemplate.delayUnit,
+      firstTemplate.sendTime,
+      leadTimezone
+    );
 
     // Criar progresso do funil
     await db.insert(funnelLeadProgress).values({
