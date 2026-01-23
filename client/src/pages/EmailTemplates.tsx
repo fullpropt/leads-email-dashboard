@@ -113,6 +113,7 @@ export default function EmailTemplates() {
   const { data: allTemplates, refetch: refetchTemplates } = trpc.emailTemplates.list.useQuery();
   const { data: allFunnels, refetch: refetchFunnels } = trpc.funnels.list.useQuery();
   const { data: emailSentCounts } = trpc.emailTemplates.getAllEmailSentCounts.useQuery();
+  const { data: funnelEmailStats } = trpc.funnels.getEmailStats.useQuery();
 
   // Mutations para Templates
   const createTemplate = trpc.emailTemplates.create.useMutation({
@@ -675,6 +676,12 @@ export default function EmailTemplates() {
                       <span>{SITUACAO_SHORT[funnel.targetSituacao] || funnel.targetSituacao}</span>
                       <span className="text-slate-400">.</span>
                       <span>{STATUS_PLATAFORMA_SHORT[funnel.targetStatusPlataforma] || funnel.targetStatusPlataforma}</span>
+                    </div>
+                    
+                    {/* Contador de emails enviados */}
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400" title="Emails enviados">
+                      <Mail className="h-3.5 w-3.5" />
+                      <span>{funnelEmailStats?.find((f: any) => f.id === funnel.id)?.emailsSent || 0}</span>
                     </div>
                     
                     {/* Ações */}

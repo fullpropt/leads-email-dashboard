@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Loader2, Eye, Code, Settings, Trash2, Send, ChevronRight } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Eye, Code, Settings, Trash2, Send, ChevronRight, Mail } from "lucide-react";
 import { CreateItemModal } from "@/components/CreateItemModal";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
@@ -60,6 +60,12 @@ export default function FunnelDetail() {
 
   // Query para obter funil com templates
   const { data: funnelData, refetch: refetchFunnel, isLoading } = trpc.funnels.getWithTemplates.useQuery(
+    { funnelId },
+    { enabled: funnelId > 0 }
+  );
+
+  // Query para obter estatísticas de emails enviados do funil
+  const { data: funnelStats } = trpc.funnels.getEmailStatsByFunnelId.useQuery(
     { funnelId },
     { enabled: funnelId > 0 }
   );
@@ -238,13 +244,24 @@ export default function FunnelDetail() {
       </div>
 
       {/* Breadcrumb do Funil - estilo do design */}
-      <div className="flex items-center gap-3 text-sm border-b pb-4">
-        <Button variant="ghost" onClick={handleBack} size="sm" className="gap-1 px-2 h-7 text-slate-500 hover:text-slate-700">
-          <ArrowLeft className="h-3.5 w-3.5" />
-        </Button>
-        <span className="text-slate-400">Funil</span>
-        <span className="text-slate-300">|</span>
-        <span className="font-medium text-slate-700 dark:text-slate-300">{funnel.nome}</span>
+      <div className="flex items-center justify-between border-b pb-4">
+        <div className="flex items-center gap-3 text-sm">
+          <Button variant="ghost" onClick={handleBack} size="sm" className="gap-1 px-2 h-7 text-slate-500 hover:text-slate-700">
+            <ArrowLeft className="h-3.5 w-3.5" />
+          </Button>
+          <span className="text-slate-400">Funil</span>
+          <span className="text-slate-300">|</span>
+          <span className="font-medium text-slate-700 dark:text-slate-300">{funnel.nome}</span>
+        </div>
+        
+        {/* Estatísticas do Funil */}
+        <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400" title="Total de emails enviados">
+            <Mail className="h-4 w-4" />
+            <span className="font-medium">{funnelStats?.totals?.emailsSent || 0}</span>
+            <span className="text-xs">enviados</span>
+          </div>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -287,6 +304,12 @@ export default function FunnelDetail() {
                         className="text-sm font-medium border-0 p-0 h-auto focus-visible:ring-0 bg-transparent shadow-none"
                         placeholder="Nome do Template"
                       />
+                    </div>
+                    
+                    {/* Contador de emails enviados */}
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400" title="Emails enviados">
+                      <Mail className="h-3.5 w-3.5" />
+                      <span>{funnelStats?.templates?.find((t: any) => t.id === template.id)?.emailsSent || 0}</span>
                     </div>
                     
                     {/* Ações */}
