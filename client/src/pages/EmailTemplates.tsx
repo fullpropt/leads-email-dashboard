@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Eye, Send, Loader2, Plus, Trash2, Code, Settings, ChevronRight } from "lucide-react";
+import { Eye, Send, Loader2, Plus, Trash2, Code, Settings, ChevronRight, Mail } from "lucide-react";
 import { CreateItemModal } from "@/components/CreateItemModal";
 
 interface TemplateConfig {
@@ -454,6 +454,12 @@ export default function EmailTemplates() {
                       <span>{SITUACAO_SHORT[template.targetSituacao]}</span>
                       <span className="text-slate-400">.</span>
                       <span>{STATUS_PLATAFORMA_SHORT[template.targetStatusPlataforma]}</span>
+                    </div>
+                    
+                    {/* Contador de emails enviados */}
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400" title="Emails enviados">
+                      <Mail className="h-3.5 w-3.5" />
+                      <span>{emailSentCounts?.[template.id] || 0}</span>
                     </div>
                     
                     {/* Ações */}
