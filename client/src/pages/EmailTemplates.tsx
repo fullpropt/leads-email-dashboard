@@ -100,6 +100,7 @@ export default function EmailTemplates() {
   const [previewTemplateId, setPreviewTemplateId] = useState<number | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
+  const [editingFunnelId, setEditingFunnelId] = useState<number | null>(null);
 
   // Queries
   const { data: allTemplates, refetch: refetchTemplates } = trpc.emailTemplates.list.useQuery();
@@ -203,6 +204,20 @@ export default function EmailTemplates() {
     },
     onError: () => {
       toast.error("Erro ao remover funil");
+    },
+  });
+
+  const updateFunnel = trpc.funnels.update.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success("Funil atualizado com sucesso!");
+        refetchFunnels();
+      } else {
+        toast.error("Erro ao atualizar funil");
+      }
+    },
+    onError: () => {
+      toast.error("Erro ao atualizar funil");
     },
   });
 
@@ -329,6 +344,10 @@ export default function EmailTemplates() {
 
   const handleRemoveFunnel = (funnelId: number) => {
     deleteFunnel.mutate({ funnelId });
+  };
+
+  const handleSaveFunnel = (funnelId: number, updates: { nome?: string; targetStatusPlataforma?: string; targetSituacao?: string }) => {
+    updateFunnel.mutate({ funnelId, updates });
   };
 
   const handleFunnelClick = (funnelId: number) => {
@@ -635,12 +654,12 @@ export default function EmailTemplates() {
                     
                     {/* Ações */}
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                      {/* Botão de configurações/deletar */}
+                      {/* Botão de configurações */}
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleRemoveFunnel(funnel.id)}
-                        className="h-8 w-8 text-slate-400 hover:text-red-500"
+                        onClick={() => setEditingFunnelId(editingFunnelId === funnel.id ? null : funnel.id)}
+                        className="h-8 w-8 text-slate-400 hover:text-slate-600"
                       >
                         <Settings className="h-4 w-4" />
                       </Button>
@@ -664,6 +683,74 @@ export default function EmailTemplates() {
                       />
                     </div>
                   </div>
+
+                  {/* Painel de edição expandido do funil */}
+                  {editingFunnelId === funnel.id && (
+                    <div className="mt-4 pt-4 border-t space-y-4" onClick={(e) => e.stopPropagation()}>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Nome do Funil</Label>
+                        <Input
+                          defaultValue={funnel.nome}
+                          placeholder="Nome do funil"
+                          onBlur={(e) => {
+                            if (e.target.value !== funnel.nome) {
+                              handleSaveFunnel(funnel.id, { nome: e.target.value });
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs">Status Plataforma</Label>
+                          <Select
+                            defaultValue={funnel.targetStatusPlataforma}
+                            onValueChange={(value) => handleSaveFunnel(funnel.id, { targetStatusPlataforma: value })}
+                          >
+                            <SelectTrigger className="text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todos</SelectItem>
+                              <SelectItem value="accessed">Ativo</SelectItem>
+                              <SelectItem value="not_accessed">Inativo</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Situação</Label>
+                          <Select
+                            defaultValue={funnel.targetSituacao}
+                            onValueChange={(value) => handleSaveFunnel(funnel.id, { targetSituacao: value })}
+                          >
+                            <SelectTrigger className="text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todos</SelectItem>
+                              <SelectItem value="active">Compra Aprovada</SelectItem>
+                              <SelectItem value="abandoned">Carrinho Abandonado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveFunnel(funnel.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-500 mr-1" />
+                          Remover Funil
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => setEditingFunnelId(null)}
+                        >
+                          Fechar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
