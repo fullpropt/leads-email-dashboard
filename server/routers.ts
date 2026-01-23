@@ -456,14 +456,13 @@ export const appRouter = router({
           return { success: false, message: "Nenhum template encontrado" };
         }
 
-        // Substituir variáveis no HTML e no assunto usando função utilitária
+        // Substituir variáveis no HTML usando função utilitária
         const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
-        const processedSubject = replaceTemplateVariables(template.assunto, lead);
 
         // Enviar email
         const success = await sendEmail({
           to: lead.email,
-          subject: processedSubject,
+          subject: template.assunto,
           html: htmlContent,
         });
 
@@ -503,11 +502,10 @@ export const appRouter = router({
 
         for (const lead of pendingLeads) {
           const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
-          const processedSubject = replaceTemplateVariables(template.assunto, lead);
 
           const success = await sendEmail({
             to: lead.email,
-            subject: processedSubject,
+            subject: template.assunto,
             html: htmlContent,
           });
 
@@ -555,11 +553,10 @@ export const appRouter = router({
 
         for (const lead of leads) {
           const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
-          const processedSubject = replaceTemplateVariables(template.assunto, lead);
 
           const success = await sendEmail({
             to: lead.email,
-            subject: processedSubject,
+            subject: template.assunto,
             html: htmlContent,
           });
 
@@ -610,10 +607,9 @@ export const appRouter = router({
         for (const lead of selectedLeads) {
           try {
             const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
-            const processedSubject = replaceTemplateVariables(template.assunto, lead);
             const success = await sendEmail({
               to: lead.email,
-              subject: processedSubject,
+              subject: template.assunto,
               html: htmlContent,
             });
 
@@ -776,7 +772,7 @@ export const appRouter = router({
       .input(z.object({
         funnelId: z.number(),
         delayValue: z.number(),
-        delayUnit: z.enum(["days", "weeks"]),
+        delayUnit: z.enum(["hours", "days", "weeks"]),
         sendTime: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
@@ -793,7 +789,7 @@ export const appRouter = router({
           assunto: z.string().optional(),
           htmlContent: z.string().optional(),
           delayValue: z.number().optional(),
-          delayUnit: z.enum(["days", "weeks"]).optional(),
+          delayUnit: z.enum(["hours", "days", "weeks"]).optional(),
           sendTime: z.string().optional(),
         }),
       }))

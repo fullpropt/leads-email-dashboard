@@ -124,7 +124,7 @@ export default function FunnelDetail() {
     setLocation("/email-templates");
   };
 
-  const handleCreateFunnelTemplate = (config: { delayValue: number; delayUnit: "days" | "weeks"; sendTime?: string }) => {
+  const handleCreateFunnelTemplate = (config: { delayValue: number; delayUnit: "hours" | "days" | "weeks"; sendTime?: string }) => {
     createFunnelTemplate.mutate({
       funnelId,
       delayValue: config.delayValue,
@@ -152,7 +152,7 @@ export default function FunnelDetail() {
         assunto: template.assunto,
         htmlContent: template.htmlContent,
         delayValue: template.delayValue,
-        delayUnit: template.delayUnit as "days" | "weeks",
+        delayUnit: template.delayUnit as "hours" | "days" | "weeks",
         sendTime: template.sendTime || undefined,
       },
     });
@@ -306,60 +306,64 @@ export default function FunnelDetail() {
                   {/* Painel de edição expandido */}
                   {editingTemplateId === template.id && (
                     <div className="mt-4 pt-4 border-t space-y-4">
-                      {/* Configurações de Delay e Horário - apenas para templates após o primeiro */}
-                      {index > 0 && (
-                        <div className="space-y-3 bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
-                          <Label className="text-xs font-medium">Configurações de Envio</Label>
-                          <div className="grid grid-cols-3 gap-3">
-                            {/* Delay Value */}
-                            <div className="space-y-1">
-                              <Label className="text-xs text-muted-foreground">Atraso</Label>
-                              <Input
-                                type="number"
-                                min="0"
-                                value={template.delayValue}
-                                onChange={(e) => updateTemplateField(template.id, "delayValue", parseInt(e.target.value) || 0)}
-                                className="text-sm h-9"
-                              />
-                            </div>
-                            {/* Delay Unit */}
-                            <div className="space-y-1">
-                              <Label className="text-xs text-muted-foreground">Unidade</Label>
-                              <Select
-                                value={template.delayUnit}
-                                onValueChange={(value) => updateTemplateField(template.id, "delayUnit", value)}
-                              >
-                                <SelectTrigger className="h-9 text-sm">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="days">Dias</SelectItem>
-                                  <SelectItem value="weeks">Semanas</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            {/* Send Time */}
-                            <div className="space-y-1">
-                              <Label className="text-xs text-muted-foreground">Horário (UTC)</Label>
-                              <Input
-                                type="time"
-                                value={template.sendTime || ""}
-                                onChange={(e) => updateTemplateField(template.id, "sendTime", e.target.value || null)}
-                                className="text-sm h-9"
-                              />
-                            </div>
+                      {/* Configurações de Delay e Horário - para todos os templates */}
+                      <div className="space-y-3 bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+                        <Label className="text-xs font-medium">
+                          {index === 0 ? "Configurações de Envio Inicial" : "Configurações de Envio"}
+                        </Label>
+                        <div className="grid grid-cols-3 gap-3">
+                          {/* Delay Value */}
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">
+                              {index === 0 ? "Aguardar" : "Atraso"}
+                            </Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={template.delayValue}
+                              onChange={(e) => updateTemplateField(template.id, "delayValue", parseInt(e.target.value) || 0)}
+                              className="text-sm h-9"
+                            />
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            Enviar após {template.delayValue} {template.delayUnit === "days" ? "dia(s)" : "semana(s)"}
-                            {template.sendTime ? ` às ${template.sendTime} (UTC)` : ""} do template anterior
-                          </p>
+                          {/* Delay Unit */}
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Unidade</Label>
+                            <Select
+                              value={template.delayUnit}
+                              onValueChange={(value) => updateTemplateField(template.id, "delayUnit", value)}
+                            >
+                              <SelectTrigger className="h-9 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="hours">Horas</SelectItem>
+                                <SelectItem value="days">Dias</SelectItem>
+                                <SelectItem value="weeks">Semanas</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {/* Send Time */}
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Horário (UTC)</Label>
+                            <Input
+                              type="time"
+                              value={template.sendTime || ""}
+                              onChange={(e) => updateTemplateField(template.id, "sendTime", e.target.value || null)}
+                              className="text-sm h-9"
+                              disabled={template.delayUnit === "hours"}
+                            />
+                          </div>
                         </div>
-                      )}
-                      {index === 0 && (
-                        <div className="text-xs text-muted-foreground bg-slate-50 dark:bg-slate-900 rounded-lg p-3">
-                          Enviado imediatamente quando o lead entra no funil
-                        </div>
-                      )}
+                        <p className="text-xs text-muted-foreground">
+                          {template.delayValue === 0 && index === 0 ? (
+                            "Enviado imediatamente quando o lead entra no funil"
+                          ) : index === 0 ? (
+                            `Enviar após ${template.delayValue} ${template.delayUnit === "hours" ? "hora(s)" : template.delayUnit === "days" ? "dia(s)" : "semana(s)"} do lead entrar no funil${template.sendTime && template.delayUnit !== "hours" ? ` às ${template.sendTime} (UTC)` : ""}`
+                          ) : (
+                            `Enviar após ${template.delayValue} ${template.delayUnit === "hours" ? "hora(s)" : template.delayUnit === "days" ? "dia(s)" : "semana(s)"}${template.sendTime && template.delayUnit !== "hours" ? ` às ${template.sendTime} (UTC)` : ""} do template anterior`
+                          )}
+                        </p>
+                      </div>
 
                       {/* Assunto */}
                       <div className="space-y-2">

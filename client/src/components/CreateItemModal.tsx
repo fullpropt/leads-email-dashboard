@@ -19,7 +19,7 @@ interface FunnelConfig {
 
 interface FunnelTemplateConfig {
   delayValue: number;
-  delayUnit: "days" | "weeks";
+  delayUnit: "hours" | "days" | "weeks";
   sendTime?: string;
 }
 
@@ -47,7 +47,7 @@ export function CreateItemModal({
 
   // Para templates dentro de funil
   const [delayValue, setDelayValue] = useState(0);
-  const [delayUnit, setDelayUnit] = useState<"days" | "weeks">("days");
+  const [delayUnit, setDelayUnit] = useState<"hours" | "days" | "weeks">("days");
   const [sendTime, setSendTime] = useState("");
 
   const resetForm = () => {
@@ -114,19 +114,10 @@ export function CreateItemModal({
                 Defina quando será enviado o email
               </p>
               <p className="text-xs text-muted-foreground">
-                Escolha o horário a ser enviado e em quantos dias ou semanas será enviado após o último Template.
+                Escolha em quanto tempo será enviado após o último Template.
               </p>
 
               <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <Label className="text-xs">Horário</Label>
-                  <Input
-                    type="time"
-                    value={sendTime}
-                    onChange={(e) => setSendTime(e.target.value)}
-                    placeholder="--:--"
-                  />
-                </div>
                 <div className="flex-1">
                   <Label className="text-xs">Delay</Label>
                   <Input
@@ -138,15 +129,26 @@ export function CreateItemModal({
                 </div>
                 <div className="flex-1">
                   <Label className="text-xs">Unidade</Label>
-                  <Select value={delayUnit} onValueChange={(v) => setDelayUnit(v as "days" | "weeks")}>
+                  <Select value={delayUnit} onValueChange={(v) => setDelayUnit(v as "hours" | "days" | "weeks")}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="hours">Horas</SelectItem>
                       <SelectItem value="days">Dias</SelectItem>
                       <SelectItem value="weeks">Semanas</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="flex-1">
+                  <Label className="text-xs">Horário (UTC)</Label>
+                  <Input
+                    type="time"
+                    value={sendTime}
+                    onChange={(e) => setSendTime(e.target.value)}
+                    placeholder="--:--"
+                    disabled={delayUnit === "hours"}
+                  />
                 </div>
               </div>
             </>
