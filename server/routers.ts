@@ -710,6 +710,20 @@ export const appRouter = router({
       return getAllFunnels();
     }),
 
+    // Obter estatísticas de emails enviados por funil
+    getEmailStats: publicProcedure.query(async () => {
+      const { getFunnelEmailStats } = await import("./db");
+      return getFunnelEmailStats();
+    }),
+
+    // Obter estatísticas de um funil específico
+    getEmailStatsByFunnelId: publicProcedure
+      .input(z.object({ funnelId: z.number() }))
+      .query(async ({ input }) => {
+        const { getFunnelEmailStatsByFunnelId } = await import("./db");
+        return getFunnelEmailStatsByFunnelId(input.funnelId);
+      }),
+
     create: publicProcedure
       .input(z.object({
         nome: z.string(),

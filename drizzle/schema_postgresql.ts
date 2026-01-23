@@ -115,10 +115,12 @@ export const emailSendHistory = pgTable("email_send_history", {
   id: serial("id").primaryKey(),
   templateId: integer("template_id").notNull(),
   leadId: integer("lead_id").notNull(),
-  sendType: varchar("send_type", { length: 20 }).notNull(), // "immediate", "auto_lead", "scheduled"
+  sendType: varchar("send_type", { length: 20 }).notNull(), // "immediate", "auto_lead", "scheduled", "funnel"
   sentAt: timestamp("sent_at").defaultNow().notNull(),
   status: varchar("status", { length: 20 }).notNull().default("sent"), // "sent", "failed", "bounced"
   errorMessage: text("error_message"), // mensagem de erro se houver
+  funnelId: integer("funnel_id"), // ID do funil (se for envio de funil)
+  funnelTemplateId: integer("funnel_template_id"), // ID do template do funil (se for envio de funil)
 });
 
 export type EmailSendHistory = typeof emailSendHistory.$inferSelect;

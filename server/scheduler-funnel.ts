@@ -136,8 +136,19 @@ async function processFunnelEmails() {
           html: htmlContent,
         });
 
+        // Importar função para registrar envio no histórico
+        const { recordFunnelEmailSend } = await import("./db");
+
         if (emailSent) {
           console.log(`[FunnelScheduler] ✅ Email enviado para ${lead.email}`);
+          
+          // Registrar envio bem-sucedido no histórico
+          await recordFunnelEmailSend({
+            funnelId: progress.funnelId,
+            funnelTemplateId: template.id,
+            leadId: lead.id,
+            status: "sent",
+          });
 
           // Buscar próximo template na sequência
           const [nextTemplate] = await db
@@ -196,6 +207,15 @@ async function processFunnelEmails() {
           }
         } else {
           console.error(`[FunnelScheduler] ❌ Falha ao enviar email para ${lead.email}`);
+          
+          // Registrar falha no histórico
+          await recordFunnelEmailSend({
+            funnelId: progress.funnelId,
+            funnelTemplateId: template.id,
+            leadId: lead.id,
+            status: "failed",
+            errorMessage: "Falha ao enviar email",
+          });
         }
       } catch (progressError) {
         console.error(`[FunnelScheduler] ❌ Erro ao processar progresso ${progress.id}:`, progressError);

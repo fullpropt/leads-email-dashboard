@@ -328,6 +328,46 @@ export async function processWebhook(payload: any) {
       console.log(`[Webhook] ⏭️ Lead já existente, NÃO agendando envio atrasado para ${customer_email}`);
     }
 
+    // ===== ADICIONAR LEAD AOS FUNIS AUTOMATICAMENTE =====
+    // Buscar funis ativos que correspondem ao status do lead
+    if (isNewLead) {
+      console.log(`[Webhook] 🔍 Verificando funis para adicionar lead ${customer_email}...`);
+      
+      try {
+        const { getMatchingFunnelsForLead } = await import("./db");
+        const { addLeadToFunnel } = await import("./scheduler-funnel");
+        
+        // Buscar funis que correspondem ao status do lead
+        // Para carrinho abandonado: target_situacao = "abandoned"
+        // Para compra aprovada: target_situacao = "active"
+        const matchingFunnels = await getMatchingFunnelsForLead(
+          leadStatus, // "active" ou "abandoned"
+          lead.hasAccessedPlatform === 1 ? "accessed" : "not_accessed"
+        );
+        
+        if (matchingFunnels.length > 0) {
+          console.log(`[Webhook] 📧 Encontrados ${matchingFunnels.length} funil(s) para o lead`);
+          
+          for (const funnel of matchingFunnels) {
+            console.log(`[Webhook] ➕ Adicionando lead ao funil "${funnel.nome}" (ID: ${funnel.id})`);
+            const result = await addLeadToFunnel(lead.id, funnel.id);
+            
+            if (result.success) {
+              console.log(`[Webhook] ✅ Lead adicionado ao funil "${funnel.nome}" com sucesso`);
+            } else {
+              console.log(`[Webhook] ⚠️ Não foi possível adicionar ao funil: ${result.message}`);
+            }
+          }
+        } else {
+          console.log(`[Webhook] ℹ️ Nenhum funil encontrado para lead com status: ${leadStatus}`);
+        }
+      } catch (funnelError) {
+        console.error(`[Webhook] ❌ Erro ao processar funis:`, funnelError);
+      }
+    } else {
+      console.log(`[Webhook] ⏭️ Lead já existente, NÃO adicionando a funis`);
+    }
+
     console.log(`[Webhook] ✅ Lead processado com sucesso: ${customer_email}`);
     return {
       success: true,

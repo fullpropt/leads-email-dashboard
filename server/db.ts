@@ -1691,6 +1691,247 @@ export async function getChargebackStats() {
 // ==================== FUNÇÕES DE FUNIS ====================
 
 /**
+ * Obter estatísticas de emails enviados por funil
+ * @returns Lista de funis com contagem de emails enviados
+ */
+export async function getFunnelEmailStats() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get funnel email stats: database not available");
+    return [];
+  }
+
+  try {
+    const { emailSendHistory } = await import("../drizzle/schema_postgresql");
+    
+    // Buscar todos os funis
+    const allFunnels = await db.select().from(funnels).orderBy(desc(funnels.criadoEm));
+    
+    // Para cada funil, contar emails enviados
+    const funnelStats = await Promise.all(
+      allFunnels.map(async (funnel) => {
+        // Contar emails enviados deste funil
+        const [sentCount] = await db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(emailSendHistory)
+          .where(
+            and(
+              eq(emailSendHistory.funnelId, funnel.id),
+              eq(emailSendHistory.status, "sent")
+            )
+          );
+        
+        // Contar emails com falha
+        const [failedCount] = await db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(emailSendHistory)
+          .where(
+            and(
+              eq(emailSendHistory.funnelId, funnel.id),
+              eq(emailSendHistory.status, "failed")
+            )
+          );
+        
+        // Contar leads ativos no funil
+        const [activeLeadsCount] = await db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(funnelLeadProgress)
+          .where(
+            and(
+              eq(funnelLeadProgress.funnelId, funnel.id),
+              eq(funnelLeadProgress.status, "active")
+            )
+          );
+        
+        // Contar leads que completaram o funil
+        const [completedLeadsCount] = await db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(funnelLeadProgress)
+          .where(
+            and(
+              eq(funnelLeadProgress.funnelId, funnel.id),
+              eq(funnelLeadProgress.status, "completed")
+            )
+          );
+        
+        return {
+          ...funnel,
+          emailsSent: Number(sentCount?.count || 0),
+          emailsFailed: Number(failedCount?.count || 0),
+          activeLeads: Number(activeLeadsCount?.count || 0),
+          completedLeads: Number(completedLeadsCount?.count || 0),
+        };
+      })
+    );
+    
+    return funnelStats;
+  } catch (error) {
+    console.error("[Database] Failed to get funnel email stats:", error);
+    return [];
+  }
+}
+
+/**
+ * Obter estatísticas de emails enviados por um funil específico
+ * @param funnelId - ID do funil
+ * @returns Estatísticas detalhadas do funil
+ */
+export async function getFunnelEmailStatsByFunnelId(funnelId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get funnel email stats: database not available");
+    return null;
+  }
+
+  try {
+    const { emailSendHistory } = await import("../drizzle/schema_postgresql");
+    
+    // Buscar o funil
+    const [funnel] = await db.select().from(funnels).where(eq(funnels.id, funnelId));
+    if (!funnel) return null;
+    
+    // Buscar templates do funil
+    const templates = await db
+      .select()
+      .from(funnelTemplates)
+      .where(eq(funnelTemplates.funnelId, funnelId))
+      .orderBy(asc(funnelTemplates.posicao));
+    
+    // Para cada template, contar emails enviados
+    const templateStats = await Promise.all(
+      templates.map(async (template) => {
+        const [sentCount] = await db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(emailSendHistory)
+          .where(
+            and(
+              eq(emailSendHistory.funnelTemplateId, template.id),
+              eq(emailSendHistory.status, "sent")
+            )
+          );
+        
+        const [failedCount] = await db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(emailSendHistory)
+          .where(
+            and(
+              eq(emailSendHistory.funnelTemplateId, template.id),
+              eq(emailSendHistory.status, "failed")
+            )
+          );
+        
+        return {
+          ...template,
+          emailsSent: Number(sentCount?.count || 0),
+          emailsFailed: Number(failedCount?.count || 0),
+        };
+      })
+    );
+    
+    // Contar totais do funil
+    const [totalSent] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(emailSendHistory)
+      .where(
+        and(
+          eq(emailSendHistory.funnelId, funnelId),
+          eq(emailSendHistory.status, "sent")
+        )
+      );
+    
+    const [totalFailed] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(emailSendHistory)
+      .where(
+        and(
+          eq(emailSendHistory.funnelId, funnelId),
+          eq(emailSendHistory.status, "failed")
+        )
+      );
+    
+    const [activeLeads] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(funnelLeadProgress)
+      .where(
+        and(
+          eq(funnelLeadProgress.funnelId, funnelId),
+          eq(funnelLeadProgress.status, "active")
+        )
+      );
+    
+    const [completedLeads] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(funnelLeadProgress)
+      .where(
+        and(
+          eq(funnelLeadProgress.funnelId, funnelId),
+          eq(funnelLeadProgress.status, "completed")
+        )
+      );
+    
+    return {
+      funnel,
+      templates: templateStats,
+      totals: {
+        emailsSent: Number(totalSent?.count || 0),
+        emailsFailed: Number(totalFailed?.count || 0),
+        activeLeads: Number(activeLeads?.count || 0),
+        completedLeads: Number(completedLeads?.count || 0),
+      },
+    };
+  } catch (error) {
+    console.error("[Database] Failed to get funnel email stats by id:", error);
+    return null;
+  }
+}
+
+/**
+ * Buscar funis que correspondem ao status do lead
+ * @param leadStatus - Status do lead ("active" ou "abandoned")
+ * @param platformAccess - Status de acesso à plataforma ("accessed" ou "not_accessed")
+ * @returns Lista de funis ativos que correspondem aos filtros
+ */
+export async function getMatchingFunnelsForLead(
+  leadStatus: string,
+  platformAccess: string
+) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get matching funnels: database not available");
+    return [];
+  }
+
+  try {
+    // Buscar funis ativos
+    const allFunnels = await db
+      .select()
+      .from(funnels)
+      .where(eq(funnels.ativo, 1));
+
+    // Filtrar funis que correspondem ao status do lead
+    const matchingFunnels = allFunnels.filter(funnel => {
+      // Verificar target_situacao (status do lead: active/abandoned)
+      const situacaoMatch = 
+        funnel.targetSituacao === "all" ||
+        funnel.targetSituacao === leadStatus;
+
+      // Verificar target_status_plataforma (acesso à plataforma)
+      const plataformaMatch = 
+        funnel.targetStatusPlataforma === "all" ||
+        funnel.targetStatusPlataforma === platformAccess;
+
+      return situacaoMatch && plataformaMatch;
+    });
+
+    console.log(`[Database] Encontrados ${matchingFunnels.length} funil(s) para lead com status=${leadStatus}, platformAccess=${platformAccess}`);
+    return matchingFunnels;
+  } catch (error) {
+    console.error("[Database] Failed to get matching funnels:", error);
+    return [];
+  }
+}
+
+/**
  * Listar todos os funis
  */
 export async function getAllFunnels() {
@@ -2007,5 +2248,44 @@ export async function getFirstLead() {
   } catch (error) {
     console.error("[Database] Failed to get first lead:", error);
     return null;
+  }
+}
+
+
+/**
+ * Registrar envio de email de funil no histórico
+ * @param data - Dados do envio
+ */
+export async function recordFunnelEmailSend(data: {
+  funnelId: number;
+  funnelTemplateId: number;
+  leadId: number;
+  status: "sent" | "failed";
+  errorMessage?: string;
+}) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot record funnel email send: database not available");
+    return false;
+  }
+
+  try {
+    const { emailSendHistory } = await import("../drizzle/schema_postgresql");
+    
+    await db.insert(emailSendHistory).values({
+      templateId: data.funnelTemplateId, // Usar o ID do template do funil
+      leadId: data.leadId,
+      sendType: "funnel",
+      status: data.status,
+      errorMessage: data.errorMessage || null,
+      funnelId: data.funnelId,
+      funnelTemplateId: data.funnelTemplateId,
+    });
+
+    console.log(`[Database] Registrado envio de email de funil: funnelId=${data.funnelId}, templateId=${data.funnelTemplateId}, leadId=${data.leadId}, status=${data.status}`);
+    return true;
+  } catch (error) {
+    console.error("[Database] Failed to record funnel email send:", error);
+    return false;
   }
 }
