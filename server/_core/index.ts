@@ -10,6 +10,7 @@ import { serveStatic, setupVite } from "./vite";
 import { processWebhook } from "../webhooks";
 import { startScheduler } from "../scheduler";
 import { startFunnelScheduler } from "../scheduler-funnel";
+import { startSyncScheduler } from "../scheduler-sync-tubetools";
 
 function isPortAvailable(port: number ): Promise<boolean> {
   return new Promise(resolve => {
@@ -99,6 +100,7 @@ async function startServer() {
     // Inicializar schedulers
     startScheduler();
     startFunnelScheduler();
+    startSyncScheduler();
   });
 }
 

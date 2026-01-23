@@ -701,6 +701,18 @@ export const appRouter = router({
       const { getTemporalAnalytics } = await import("./tubetools-db");
       return await getTemporalAnalytics();
     }),
+
+    // Obter status do scheduler de sincronização
+    getSyncSchedulerStatus: publicProcedure.query(async () => {
+      const { getSyncSchedulerStatus } = await import("./scheduler-sync-tubetools");
+      return getSyncSchedulerStatus();
+    }),
+
+    // Forçar sincronização completa
+    forceFullSync: publicProcedure.mutation(async () => {
+      const { forceFullSync } = await import("./scheduler-sync-tubetools");
+      return await forceFullSync();
+    }),
   }),
 
   // ==================== ROUTER DE FUNIS ====================
