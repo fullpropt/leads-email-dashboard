@@ -425,7 +425,11 @@ export default function EmailTemplates() {
             {templates.map((template) => (
               <div 
                 key={`template-${template.id}`} 
-                className={`bg-white dark:bg-slate-950 rounded-xl border shadow-sm ${template.ativo === 0 ? 'opacity-60' : ''}`}
+                className={`bg-white dark:bg-slate-950 rounded-xl border shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${template.ativo === 0 ? 'opacity-60' : ''}`}
+                onClick={() => {
+                  setSelectedTemplateId(template.id);
+                  handlePreview(template.id);
+                }}
               >
                 <div className="px-4 py-3">
                   <div className="flex items-center gap-4">
@@ -435,7 +439,7 @@ export default function EmailTemplates() {
                     </div>
                     
                     {/* Nome do template */}
-                    <div className="flex-1">
+                    <div className="flex-1" onClick={(e) => e.stopPropagation()}>
                       <Input
                         value={template.nome}
                         onChange={(e) => updateTemplateField(template.id, "nome", e.target.value)}
@@ -453,7 +457,7 @@ export default function EmailTemplates() {
                     </div>
                     
                     {/* Ações */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {/* Botão de configurações */}
                       <Button
                         variant="ghost"
@@ -496,18 +500,14 @@ export default function EmailTemplates() {
                       
                       {/* Seta para detalhes */}
                       <ChevronRight 
-                        className="h-5 w-5 text-slate-300 cursor-pointer hover:text-slate-500" 
-                        onClick={() => {
-                          setSelectedTemplateId(template.id);
-                          handlePreview(template.id);
-                        }}
+                        className="h-5 w-5 text-slate-300" 
                       />
                     </div>
                   </div>
 
                   {/* Painel de edição expandido */}
                   {editingTemplateId === template.id && (
-                    <div className="mt-4 pt-4 border-t space-y-4">
+                    <div className="mt-4 pt-4 border-t space-y-4" onClick={(e) => e.stopPropagation()}>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label className="text-xs">Status Plataforma</Label>
@@ -604,19 +604,19 @@ export default function EmailTemplates() {
               <div 
                 key={`funnel-${funnel.id}`} 
                 className={`bg-white dark:bg-slate-950 rounded-xl border shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${funnel.ativo === 0 ? 'opacity-60' : ''}`}
+                onClick={() => handleFunnelClick(funnel.id)}
               >
                 <div className="px-4 py-3">
                   <div className="flex items-center gap-4">
                     {/* Badge de tipo - Funil com cor diferente */}
                     <div 
                       className="px-4 py-1.5 rounded-full border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950 text-sm font-medium text-cyan-600 dark:text-cyan-400 min-w-[90px] text-center"
-                      onClick={() => handleFunnelClick(funnel.id)}
                     >
                       Funil
                     </div>
                     
                     {/* Nome do funil */}
-                    <div className="flex-1" onClick={() => handleFunnelClick(funnel.id)}>
+                    <div className="flex-1">
                       <span className="text-sm font-medium">{funnel.nome}</span>
                     </div>
                     
@@ -628,15 +628,12 @@ export default function EmailTemplates() {
                     </div>
                     
                     {/* Ações */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {/* Botão de configurações/deletar */}
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveFunnel(funnel.id);
-                        }}
+                        onClick={() => handleRemoveFunnel(funnel.id)}
                         className="h-8 w-8 text-slate-400 hover:text-red-500"
                       >
                         <Settings className="h-4 w-4" />
@@ -644,8 +641,7 @@ export default function EmailTemplates() {
                       
                       {/* Toggle Off/On */}
                       <div 
-                        className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-slate-200 dark:border-slate-700" 
-                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-slate-200 dark:border-slate-700"
                       >
                         <span className="text-xs text-slate-400">Off</span>
                         <Switch
@@ -659,7 +655,6 @@ export default function EmailTemplates() {
                       {/* Seta para detalhes */}
                       <ChevronRight 
                         className="h-5 w-5 text-slate-300" 
-                        onClick={() => handleFunnelClick(funnel.id)}
                       />
                     </div>
                   </div>
