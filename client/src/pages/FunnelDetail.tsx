@@ -14,6 +14,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Loader2, Eye, Code, Settings, Trash2, Send, ChevronRight } from "lucide-react";
 import { CreateItemModal } from "@/components/CreateItemModal";
@@ -299,11 +306,53 @@ export default function FunnelDetail() {
                   {/* Painel de edição expandido */}
                   {editingTemplateId === template.id && (
                     <div className="mt-4 pt-4 border-t space-y-4">
-                      {/* Informações de delay */}
+                      {/* Configurações de Delay e Horário - apenas para templates após o primeiro */}
                       {index > 0 && (
-                        <div className="text-xs text-muted-foreground bg-slate-50 dark:bg-slate-900 rounded-lg p-3">
-                          Enviar após {template.delayValue} {template.delayUnit === "days" ? "dias" : "semanas"}
-                          {template.sendTime && ` às ${template.sendTime}`} do template anterior
+                        <div className="space-y-3 bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+                          <Label className="text-xs font-medium">Configurações de Envio</Label>
+                          <div className="grid grid-cols-3 gap-3">
+                            {/* Delay Value */}
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Atraso</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={template.delayValue}
+                                onChange={(e) => updateTemplateField(template.id, "delayValue", parseInt(e.target.value) || 0)}
+                                className="text-sm h-9"
+                              />
+                            </div>
+                            {/* Delay Unit */}
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Unidade</Label>
+                              <Select
+                                value={template.delayUnit}
+                                onValueChange={(value) => updateTemplateField(template.id, "delayUnit", value)}
+                              >
+                                <SelectTrigger className="h-9 text-sm">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="days">Dias</SelectItem>
+                                  <SelectItem value="weeks">Semanas</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            {/* Send Time */}
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Horário (UTC)</Label>
+                              <Input
+                                type="time"
+                                value={template.sendTime || ""}
+                                onChange={(e) => updateTemplateField(template.id, "sendTime", e.target.value || null)}
+                                className="text-sm h-9"
+                              />
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Enviar após {template.delayValue} {template.delayUnit === "days" ? "dia(s)" : "semana(s)"}
+                            {template.sendTime ? ` às ${template.sendTime} (UTC)` : ""} do template anterior
+                          </p>
                         </div>
                       )}
                       {index === 0 && (
