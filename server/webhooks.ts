@@ -127,6 +127,28 @@ export async function processWebhook(payload: any) {
       leadType = "carrinho_abandonado";
     }
     
+    // ===== DETECTAR FUSO HORÁRIO DO LEAD =====
+    const { detectTimezoneFromIP, getTimezoneFromCountry } = await import("./timezone-utils");
+    
+    // Tentar obter IP do cliente (pode vir em diferentes campos dependendo do proxy/servidor)
+    const clientIP = payload.customer_ip || payload.ip || payload.client_ip || undefined;
+    
+    // Tentar obter país do cliente (PerfectPay pode enviar)
+    const countryCode = customer.country || customer.country_code || payload.country || undefined;
+    
+    // Detectar timezone: primeiro tenta por IP, depois por país, senão usa padrão
+    let leadTimezone = "America/Sao_Paulo"; // padrão
+    
+    if (clientIP) {
+      leadTimezone = await detectTimezoneFromIP(clientIP);
+      console.log(`[Webhook] Timezone detectado por IP (${clientIP}): ${leadTimezone}`);
+    } else if (countryCode) {
+      leadTimezone = getTimezoneFromCountry(countryCode);
+      console.log(`[Webhook] Timezone detectado por país (${countryCode}): ${leadTimezone}`);
+    } else {
+      console.log(`[Webhook] Nenhum IP ou país disponível, usando timezone padrão: ${leadTimezone}`);
+    }
+
     // Preparar dados do lead para inserção no banco
     const leadData: InsertLead = {
       nome: customer_name,
@@ -141,6 +163,7 @@ export async function processWebhook(payload: any) {
       status: leadStatus, // "active" ou "abandoned"
       leadType: leadType, // tipo de lead
       isNewLeadAfterUpdate: 1, // marcar como novo lead
+      timezone: leadTimezone, // fuso horário do lead
     };
 
     // Importar função de banco de dados dinamicamente

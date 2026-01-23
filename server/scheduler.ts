@@ -178,22 +178,30 @@ export async function recalculateAllLeadsNextSendAt() {
 
     console.log(`[Scheduler] 📋 Processando ${allLeads.length} lead(s)`);
 
+      // Importar função de cálculo de timezone
+      const { calculateSendTimeInLeadTimezone } = await import("./timezone-utils");
+
       // Para cada lead, usar o template com maior atraso (para não sobrescrever)
       for (const lead of allLeads) {
         // Usar o primeiro template (você pode customizar essa lógica)
         const template = templatesWithDelayedSend[0];
         const delayDays = template.delayDaysAfterLeadCreation || 0;
-
-        const createdAt = new Date(lead.dataCriacao);
-        const nextSendAt = new Date(createdAt);
-        nextSendAt.setDate(nextSendAt.getDate() + delayDays);
+        
+        // Usar timezone do lead ou padrão
+        const leadTimezone = lead.timezone || "America/Sao_Paulo";
+        
+        // Usar horário do template ou padrão 12:00
+        const sendTime = template.scheduleTime || "12:00";
+        
+        // Calcular próximo envio considerando timezone do lead
+        const nextSendAt = calculateSendTimeInLeadTimezone(sendTime, delayDays, leadTimezone);
 
         await db
           .update(leads)
-          .set({ nextEmailSendAt: nextSendAt.toISOString() as any })
+          .set({ nextEmailSendAt: nextSendAt })
           .where(eq(leads.id, lead.id));
 
-        console.log(`[Scheduler] ✓ Lead ${lead.email} agendado para ${nextSendAt.toLocaleString("pt-BR")}`);
+        console.log(`[Scheduler] ✓ Lead ${lead.email} agendado para ${nextSendAt.toLocaleString("pt-BR")} (timezone: ${leadTimezone})`);
       }
 
     console.log("[Scheduler] ✅ Recálculo concluído");
