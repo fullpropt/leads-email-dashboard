@@ -107,13 +107,14 @@ async function processDelayedSends() {
         try {
           console.log(`[Scheduler] 📧 Enviando template "${template.nome}" para ${lead.email}`);
 
-          // Substituir variáveis no template
+          // Substituir variáveis no template (HTML e assunto)
           const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+          const processedSubject = replaceTemplateVariables(template.assunto, lead);
 
           // Enviar email
           const emailSent = await sendEmail({
             to: lead.email,
-            subject: template.assunto,
+            subject: processedSubject,
             html: htmlContent,
           });
 

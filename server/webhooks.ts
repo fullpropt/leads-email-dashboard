@@ -29,8 +29,7 @@ export async function processWebhook(payload: any) {
     const plan = payload.plan || {};
     
     const customer_name = customer.full_name;
-    // NORMALIZAÇÃO: Converter email para minúsculas para evitar duplicatas por diferença de capitalização
-    const customer_email = customer.email ? customer.email.toLowerCase().trim() : customer.email;
+    const customer_email = customer.email;
     const product_name = product.name;
     const plan_name = plan.name;
     const sale_value = payload.sale_amount;
@@ -240,10 +239,11 @@ export async function processWebhook(payload: any) {
             console.log(`[Webhook] Enviando template '${template.nome}' para ${customer_email} (IMEDIATO)`);
             
             const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+            const processedSubject = replaceTemplateVariables(template.assunto, lead);
             
             const emailSent = await sendEmail({
               to: lead.email,
-              subject: template.assunto,
+              subject: processedSubject,
               html: htmlContent,
             });
             

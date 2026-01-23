@@ -84,10 +84,11 @@ export async function processScheduledEmails() {
               console.log(`[Scheduler] Enviando template '${template.nome}' para ${lead.email}`);
               
               const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+              const processedSubject = replaceTemplateVariables(template.assunto, lead);
               
               const emailSent = await sendEmail({
                 to: lead.email,
-                subject: template.assunto,
+                subject: processedSubject,
                 html: htmlContent,
               });
               

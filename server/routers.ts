@@ -456,13 +456,14 @@ export const appRouter = router({
           return { success: false, message: "Nenhum template encontrado" };
         }
 
-        // Substituir variáveis no HTML usando função utilitária
+        // Substituir variáveis no HTML e no assunto usando função utilitária
         const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+        const processedSubject = replaceTemplateVariables(template.assunto, lead);
 
         // Enviar email
         const success = await sendEmail({
           to: lead.email,
-          subject: template.assunto,
+          subject: processedSubject,
           html: htmlContent,
         });
 
@@ -502,10 +503,11 @@ export const appRouter = router({
 
         for (const lead of pendingLeads) {
           const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+          const processedSubject = replaceTemplateVariables(template.assunto, lead);
 
           const success = await sendEmail({
             to: lead.email,
-            subject: template.assunto,
+            subject: processedSubject,
             html: htmlContent,
           });
 
@@ -553,10 +555,11 @@ export const appRouter = router({
 
         for (const lead of leads) {
           const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+          const processedSubject = replaceTemplateVariables(template.assunto, lead);
 
           const success = await sendEmail({
             to: lead.email,
-            subject: template.assunto,
+            subject: processedSubject,
             html: htmlContent,
           });
 
@@ -607,9 +610,10 @@ export const appRouter = router({
         for (const lead of selectedLeads) {
           try {
             const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+            const processedSubject = replaceTemplateVariables(template.assunto, lead);
             const success = await sendEmail({
               to: lead.email,
-              subject: template.assunto,
+              subject: processedSubject,
               html: htmlContent,
             });
 

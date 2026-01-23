@@ -20,8 +20,7 @@ export async function processNewSignupWebhook(payload: any) {
     // Extrair dados do webhook
     // Suportar múltiplos formatos de payload
     const customer_name = payload.name || payload.full_name || payload.nome;
-    // NORMALIZAÇÃO: Converter email para minúsculas para evitar duplicatas por diferença de capitalização
-    const customer_email = payload.email ? payload.email.toLowerCase().trim() : payload.email;
+    const customer_email = payload.email;
     
     // Validar campos obrigatórios
     if (!customer_email || !customer_name) {
@@ -114,10 +113,11 @@ export async function processNewSignupWebhook(payload: any) {
         console.log(`[Webhook Novo Cadastro] Enviando template '${template.nome}' para ${customer_email} (IMEDIATO)`);
         
         const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+        const processedSubject = replaceTemplateVariables(template.assunto, lead);
         
         const emailSent = await sendEmail({
           to: lead.email,
-          subject: template.assunto,
+          subject: processedSubject,
           html: htmlContent,
         });
         
