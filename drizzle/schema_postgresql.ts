@@ -47,6 +47,11 @@ export const leads = pgTable("leads", {
   
   // ===== FUSO HORÁRIO DO LEAD =====
   timezone: varchar("timezone", { length: 50 }).default("America/Sao_Paulo"), // Fuso horário do lead (IANA timezone, ex: "America/Sao_Paulo", "America/New_York")
+  
+  // ===== CAMPOS DE UNSUBSCRIBE =====
+  unsubscribed: integer("unsubscribed").notNull().default(0), // 0 = inscrito, 1 = cancelou inscrição
+  unsubscribedAt: timestamp("unsubscribed_at"), // Data do cancelamento
+  unsubscribeToken: varchar("unsubscribe_token", { length: 64 }), // Token único para link de unsubscribe
 });
 
 export type Lead = typeof leads.$inferSelect;

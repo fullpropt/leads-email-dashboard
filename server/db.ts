@@ -2289,3 +2289,187 @@ export async function recordFunnelEmailSend(data: {
     return false;
   }
 }
+
+
+// ========================================================================
+// UNSUBSCRIBE FUNCTIONS
+// ========================================================================
+
+/**
+ * Buscar lead pelo token de unsubscribe
+ * @param token - Token único de unsubscribe
+ */
+export async function getLeadByUnsubscribeToken(token: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get lead: database not available");
+    return null;
+  }
+
+  try {
+    const result = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.unsubscribeToken, token))
+      .limit(1);
+
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error("[Database] Failed to get lead by unsubscribe token:", error);
+    return null;
+  }
+}
+
+/**
+ * Processar unsubscribe de um lead
+ * @param token - Token único de unsubscribe
+ */
+export async function processUnsubscribe(token: string): Promise<{ success: boolean; email?: string; message: string }> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot process unsubscribe: database not available");
+    return { success: false, message: "Database not available" };
+  }
+
+  try {
+    // Buscar lead pelo token
+    const lead = await getLeadByUnsubscribeToken(token);
+    
+    if (!lead) {
+      return { success: false, message: "Invalid unsubscribe token" };
+    }
+
+    if (lead.unsubscribed === 1) {
+      return { success: true, email: lead.email, message: "You have already unsubscribed" };
+    }
+
+    // Atualizar lead como unsubscribed
+    await db
+      .update(leads)
+      .set({
+        unsubscribed: 1,
+        unsubscribedAt: new Date(),
+      })
+      .where(eq(leads.id, lead.id));
+
+    console.log(`[Unsubscribe] Lead ${lead.email} successfully unsubscribed`);
+    return { success: true, email: lead.email, message: "Successfully unsubscribed" };
+  } catch (error) {
+    console.error("[Database] Failed to process unsubscribe:", error);
+    return { success: false, message: "Failed to process unsubscribe" };
+  }
+}
+
+/**
+ * Gerar token de unsubscribe para um lead (se não existir)
+ * @param leadId - ID do lead
+ */
+export async function generateUnsubscribeToken(leadId: number): Promise<string | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot generate token: database not available");
+    return null;
+  }
+
+  try {
+    // Buscar lead
+    const result = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.id, leadId))
+      .limit(1);
+
+    if (result.length === 0) {
+      return null;
+    }
+
+    const lead = result[0];
+
+    // Se já tem token, retornar
+    if (lead.unsubscribeToken) {
+      return lead.unsubscribeToken;
+    }
+
+    // Gerar novo token
+    const crypto = await import("crypto");
+    const token = crypto.randomBytes(32).toString("hex");
+
+    // Atualizar lead com o token
+    await db
+      .update(leads)
+      .set({ unsubscribeToken: token })
+      .where(eq(leads.id, leadId));
+
+    return token;
+  } catch (error) {
+    console.error("[Database] Failed to generate unsubscribe token:", error);
+    return null;
+  }
+}
+
+/**
+ * Obter token de unsubscribe de um lead pelo email
+ * @param email - Email do lead
+ */
+export async function getUnsubscribeTokenByEmail(email: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get token: database not available");
+    return null;
+  }
+
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    const result = await db
+      .select()
+      .from(leads)
+      .where(sql`LOWER(${leads.email}) = ${normalizedEmail}`)
+      .limit(1);
+
+    if (result.length === 0) {
+      return null;
+    }
+
+    const lead = result[0];
+
+    // Se não tem token, gerar um
+    if (!lead.unsubscribeToken) {
+      return await generateUnsubscribeToken(lead.id);
+    }
+
+    return lead.unsubscribeToken;
+  } catch (error) {
+    console.error("[Database] Failed to get unsubscribe token by email:", error);
+    return null;
+  }
+}
+
+/**
+ * Verificar se um lead está inscrito (não fez unsubscribe)
+ * @param email - Email do lead
+ */
+export async function isLeadSubscribed(email: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot check subscription: database not available");
+    return true; // Por padrão, considera inscrito se não conseguir verificar
+  }
+
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    const result = await db
+      .select({ unsubscribed: leads.unsubscribed })
+      .from(leads)
+      .where(sql`LOWER(${leads.email}) = ${normalizedEmail}`)
+      .limit(1);
+
+    if (result.length === 0) {
+      return true; // Lead não existe, considera inscrito
+    }
+
+    return result[0].unsubscribed === 0;
+  } catch (error) {
+    console.error("[Database] Failed to check subscription status:", error);
+    return true; // Por padrão, considera inscrito se houver erro
+  }
+}

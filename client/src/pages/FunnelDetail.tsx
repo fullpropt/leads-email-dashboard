@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Plus, Loader2, Eye, Code, Settings, Trash2, Send, ChevronRight, Mail } from "lucide-react";
 import { CreateItemModal } from "@/components/CreateItemModal";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
+import { SimplifiedEmailEditor } from "@/components/SimplifiedEmailEditor";
 
 interface FunnelTemplateBlock {
   id: number;
@@ -554,21 +555,18 @@ export default function FunnelDetail() {
             </div>
           )}
 
-          <div className="text-sm text-muted-foreground">Código HTML</div>
+          <div className="text-sm text-muted-foreground">Editor de Email</div>
 
           {selectedTemplate ? (
             <Card className="border-0 shadow-none">
               <CardContent className="p-0 space-y-4">
-                <div className="space-y-2">
-                  <Textarea
-                    id="html-editor"
-                    value={selectedTemplate.htmlContent}
-                    onChange={(e) => updateTemplateField(selectedTemplate.id, "htmlContent", e.target.value)}
-                    className="font-mono text-sm h-[500px] bg-slate-50 dark:bg-slate-900 border rounded-lg"
-                    placeholder="Cole seu código HTML aqui..."
-                  />
-                </div>
-                <div className="flex gap-2">
+                <SimplifiedEmailEditor
+                  htmlContent={selectedTemplate.htmlContent}
+                  onContentChange={(content) => updateTemplateField(selectedTemplate.id, "htmlContent", content)}
+                  onPreview={() => handlePreview(selectedTemplate.id)}
+                  isPreviewLoading={previewTemplate.isLoading}
+                />
+                <div className="flex gap-2 pt-4 border-t">
                   <Button
                     onClick={() => handleSaveTemplate(selectedTemplate.id)}
                     disabled={updateFunnelTemplate.isPending}
@@ -594,7 +592,7 @@ export default function FunnelDetail() {
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
                 <Code className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Selecione um template na aba "Templates" para editar seu HTML</p>
+                <p>Selecione um template na aba "Templates" para editar seu conteúdo</p>
               </CardContent>
             </Card>
           )}

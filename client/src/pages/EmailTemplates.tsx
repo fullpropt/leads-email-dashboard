@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Eye, Send, Loader2, Plus, Trash2, Code, Settings, ChevronRight, Mail } from "lucide-react";
 import { CreateItemModal } from "@/components/CreateItemModal";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
+import { SimplifiedEmailEditor } from "@/components/SimplifiedEmailEditor";
 
 interface TemplateConfig {
   targetStatusPlataforma: "all" | "accessed" | "not_accessed";
@@ -843,23 +844,19 @@ export default function EmailTemplates() {
           {selectedTemplate ? (
             <Card>
               <CardHeader>
-                <CardTitle>Editor HTML - {selectedTemplate.nome}</CardTitle>
+                <CardTitle>Editor de Email - {selectedTemplate.nome}</CardTitle>
                 <CardDescription>
-                  Edite o código HTML do seu template
+                  Crie seu email usando texto simples ou HTML. O sistema aplica automaticamente estilos, header, footer e link de unsubscribe.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="html-editor">Código HTML</Label>
-                  <Textarea
-                    id="html-editor"
-                    value={selectedTemplate.htmlContent}
-                    onChange={(e) => updateTemplateField(selectedTemplate.id, "htmlContent", e.target.value)}
-                    className="font-mono text-sm h-96"
-                    placeholder="Cole seu código HTML aqui..."
-                  />
-                </div>
-                <div className="flex gap-2">
+                <SimplifiedEmailEditor
+                  htmlContent={selectedTemplate.htmlContent}
+                  onContentChange={(content) => updateTemplateField(selectedTemplate.id, "htmlContent", content)}
+                  onPreview={() => handlePreview(selectedTemplate.id)}
+                  isPreviewLoading={previewTemplate.isLoading}
+                />
+                <div className="flex gap-2 pt-4 border-t">
                   <Button
                     onClick={() => handleSaveTemplate(selectedTemplate.id)}
                     disabled={updateTemplate.isPending}
@@ -885,7 +882,7 @@ export default function EmailTemplates() {
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
                 <Code className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Selecione um template na aba "Itens" para editar seu HTML</p>
+                <p>Selecione um template na aba "Itens" para editar seu conteúdo</p>
               </CardContent>
             </Card>
           )}

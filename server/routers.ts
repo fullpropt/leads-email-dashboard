@@ -133,6 +133,22 @@ export const appRouter = router({
           tubetools: tubetoolsData,
         };
       }),
+
+    // ===== UNSUBSCRIBE ENDPOINTS =====
+    unsubscribe: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .mutation(async ({ input }) => {
+        const { processUnsubscribe } = await import("./db");
+        return processUnsubscribe(input.token);
+      }),
+
+    checkSubscription: publicProcedure
+      .input(z.object({ email: z.string().email() }))
+      .query(async ({ input }) => {
+        const { isLeadSubscribed } = await import("./db");
+        const subscribed = await isLeadSubscribed(input.email);
+        return { subscribed };
+      }),
   }),
 
   // Routers para gerenciamento de templates de email

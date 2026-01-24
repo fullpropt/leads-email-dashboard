@@ -69,6 +69,123 @@ async function startServer() {
       message: "Webhook endpoint está funcionando",
     });
   });
+
+  // ===== UNSUBSCRIBE ENDPOINT =====
+  // Página de unsubscribe (GET - mostra confirmação)
+  app.get("/unsubscribe/:token", async (req, res) => {
+    const { token } = req.params;
+    const { processUnsubscribe, getDb } = await import("../db");
+    // Inicializa a conexão com o banco de dados antes de usá-la.
+    await getDb();
+    
+    // Garantir que a conexão com o banco de dados esteja ativa
+    const db = await getDb();
+    if (!db) {
+      console.error("[Unsubscribe] Database connection failed");
+      return res.status(500).send("Database connection failed.");
+    }
+    
+    try {
+      const result = await processUnsubscribe(token);
+      
+      // Retornar página HTML de confirmação
+      const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unsubscribe - TubeTools</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f9f9f9;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      padding: 40px;
+      max-width: 500px;
+      text-align: center;
+    }
+    .logo {
+      max-width: 200px;
+      margin-bottom: 30px;
+    }
+    .icon {
+      font-size: 60px;
+      margin-bottom: 20px;
+    }
+    .success { color: #22c55e; }
+    .error { color: #ef4444; }
+    h1 {
+      color: #333;
+      margin-bottom: 15px;
+      font-size: 24px;
+    }
+    p {
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    .email {
+      background: #f5f5f5;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: bold;
+      color: #333;
+      display: inline-block;
+      margin-bottom: 20px;
+    }
+    .footer {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+      color: #999;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663266054093/HaAhrQWlddPFPJjs.png" alt="TubeTools" class="logo">
+    
+    ${result.success ? `
+      <div class="icon success">✓</div>
+      <h1>Successfully Unsubscribed</h1>
+      ${result.email ? `<div class="email">${result.email}</div>` : ''}
+      <p>${result.message === 'You have already unsubscribed' 
+        ? 'You have already unsubscribed from our mailing list.' 
+        : 'You have been removed from our mailing list and will no longer receive promotional emails from TubeTools.'}</p>
+    ` : `
+      <div class="icon error">✗</div>
+      <h1>Unsubscribe Failed</h1>
+      <p>We couldn't process your unsubscribe request. The link may be invalid or expired.</p>
+      <p>If you continue to receive emails, please contact our support team.</p>
+    `}
+    
+    <div class="footer">
+      <p>&copy; ${new Date().getFullYear()} TubeTools. All rights reserved.</p>
+      <p>Support: <a href="mailto:supfullpropt@gmail.com" style="color: #FF0000;">supfullpropt@gmail.com</a></p>
+    </div>
+  </div>
+</body>
+</html>
+      `;
+      
+      res.status(200).send(html);
+    } catch (error) {
+      console.error("[Unsubscribe] Error:", error);
+      res.status(500).send("An error occurred while processing your request.");
+    }
+  });
   
   // tRPC API
   app.use(

@@ -2,21 +2,44 @@ export interface SendEmailOptions {
   to: string;
   subject: string;
   html: string;
+  /** Token de unsubscribe do lead (opcional - será buscado automaticamente se não fornecido) */
+  unsubscribeToken?: string;
+  /** Se true, não processa o template (já está pronto) */
+  skipProcessing?: boolean;
 }
 
 /**
  * Envia um email usando Mailgun como provedor principal, 
  * com fallback para Mailgun2, Mailgun3 e depois Brevo.
  * Automaticamente envolve o conteúdo com header e rodapé padrão TubeTools.
+ * Inclui link de unsubscribe automático no rodapé.
  * 
  * @param options - Opções do email (destinatário, assunto, conteúdo HTML)
  * @returns Promise<boolean> - true se enviado com sucesso, false caso contrário
  */
 export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
   try {
-    // Processar HTML com header e rodapé padrão
-    const { processEmailTemplate } = await import("./emailTemplate");
-    const processedHtml = processEmailTemplate(options.html);
+    // Verificar se o lead está inscrito (não fez unsubscribe)
+    const { isLeadSubscribed, getUnsubscribeTokenByEmail } = await import("./db");
+    const isSubscribed = await isLeadSubscribed(options.to);
+    
+    if (!isSubscribed) {
+      console.log(`[Email] ⚠️ Lead ${options.to} cancelou inscrição, email não enviado`);
+      return false;
+    }
+    
+    // Obter token de unsubscribe se não foi fornecido
+    let unsubscribeToken = options.unsubscribeToken;
+    if (!unsubscribeToken) {
+      unsubscribeToken = await getUnsubscribeTokenByEmail(options.to) || undefined;
+    }
+    
+    // Processar HTML com header, rodapé e link de unsubscribe
+    let processedHtml = options.html;
+    if (!options.skipProcessing) {
+      const { processEmailTemplate } = await import("./emailTemplate");
+      processedHtml = processEmailTemplate(options.html, unsubscribeToken);
+    }
     
     // Criar opções com HTML processado
     const processedOptions = {
