@@ -10,6 +10,7 @@ import EmailTemplates from "./pages/EmailTemplates";
 import Analytics from "./pages/Analytics";
 import LeadLookup from "./pages/LeadLookup";
 import FunnelDetail from "./pages/FunnelDetail";
+import Support from "./pages/Support";
 
 function Router() {
   return (
@@ -42,6 +43,11 @@ function Router() {
       <Route path={"/lead-lookup"}>
         <DashboardLayout>
           <LeadLookup />
+        </DashboardLayout>
+      </Route>
+      <Route path={"/support"}>
+        <DashboardLayout>
+          <Support />
         </DashboardLayout>
       </Route>
       <Route path={"/404"} component={NotFound} />

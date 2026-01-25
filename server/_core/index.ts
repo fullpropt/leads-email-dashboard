@@ -11,6 +11,7 @@ import { processWebhook } from "../webhooks";
 import { startScheduler } from "../scheduler";
 import { startFunnelScheduler } from "../scheduler-funnel";
 import { startSyncScheduler } from "../scheduler-sync-tubetools";
+import { handleMailgunIncomingWebhook } from "../webhooks-support";
 
 function isPortAvailable(port: number ): Promise<boolean> {
   return new Promise(resolve => {
@@ -67,6 +68,18 @@ async function startServer() {
     res.status(200).json({
       status: "ok",
       message: "Webhook endpoint está funcionando",
+    });
+  });
+
+  // ===== WEBHOOK MAILGUN - EMAILS DE SUPORTE =====
+  // Recebe emails de suporte via Mailgun Routes
+  app.post("/api/webhooks/mailgun/incoming", handleMailgunIncomingWebhook);
+  
+  // Health check para webhook do Mailgun
+  app.get("/api/webhooks/mailgun/health", (req, res) => {
+    res.status(200).json({
+      status: "ok",
+      message: "Mailgun webhook endpoint está funcionando",
     });
   });
 

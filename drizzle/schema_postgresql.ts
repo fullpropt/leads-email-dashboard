@@ -208,3 +208,104 @@ export const funnelLeadProgress = pgTable("funnel_lead_progress", {
 
 export type FunnelLeadProgress = typeof funnelLeadProgress.$inferSelect;
 export type InsertFunnelLeadProgress = typeof funnelLeadProgress.$inferInsert;
+
+
+// ==================== TABELAS DE SUPORTE POR EMAIL ====================
+
+/**
+ * Grupos de emails de suporte
+ * Agrupa emails similares classificados pela IA
+ */
+export const supportEmailGroups = pgTable("support_email_groups", {
+  id: serial("id").primaryKey(),
+  nome: varchar("nome", { length: 255 }).notNull(),
+  descricao: text("descricao"),
+  categoria: varchar("categoria", { length: 100 }), // ex: "billing", "technical", "account", "general"
+  aiSummary: text("ai_summary"), // Resumo gerado pela IA sobre o grupo
+  aiKeywords: text("ai_keywords"), // Palavras-chave identificadas pela IA (JSON array)
+  aiSentiment: varchar("ai_sentiment", { length: 20 }), // "positive", "negative", "neutral"
+  aiPriority: varchar("ai_priority", { length: 20 }).notNull().default("normal"), // "low", "normal", "high", "urgent"
+  suggestedResponseId: integer("suggested_response_id"), // Resposta sugerida pela IA
+  emailCount: integer("email_count").notNull().default(0),
+  pendingCount: integer("pending_count").notNull().default(0),
+  status: varchar("status", { length: 20 }).notNull().default("active"), // "active", "archived"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type SupportEmailGroup = typeof supportEmailGroups.$inferSelect;
+export type InsertSupportEmailGroup = typeof supportEmailGroups.$inferInsert;
+
+/**
+ * Emails de suporte recebidos via Webhook Mailgun
+ */
+export const supportEmails = pgTable("support_emails", {
+  id: serial("id").primaryKey(),
+  messageId: varchar("message_id", { length: 255 }).unique(), // ID único do Mailgun
+  sender: varchar("sender", { length: 320 }).notNull(), // Email do remetente
+  senderName: varchar("sender_name", { length: 255 }), // Nome do remetente
+  recipient: varchar("recipient", { length: 320 }).notNull(), // Email de destino (suporte)
+  subject: varchar("subject", { length: 500 }).notNull(),
+  bodyPlain: text("body_plain"), // Corpo em texto plano
+  bodyHtml: text("body_html"), // Corpo em HTML
+  strippedText: text("stripped_text"), // Texto sem assinatura/citações
+  strippedSignature: text("stripped_signature"), // Assinatura extraída
+  attachmentCount: integer("attachment_count").notNull().default(0),
+  attachments: text("attachments"), // JSON com informações dos anexos
+  messageHeaders: text("message_headers"), // Headers do email (JSON)
+  groupId: integer("group_id"), // Grupo ao qual pertence
+  status: varchar("status", { length: 20 }).notNull().default("pending"), // "pending", "grouped", "responded", "archived"
+  respondedAt: timestamp("responded_at"),
+  responseId: integer("response_id"), // Resposta enviada
+  mailgunTimestamp: integer("mailgun_timestamp"), // Timestamp do Mailgun
+  mailgunToken: varchar("mailgun_token", { length: 100 }), // Token de verificação
+  mailgunSignature: varchar("mailgun_signature", { length: 255 }), // Assinatura de verificação
+  receivedAt: timestamp("received_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type SupportEmail = typeof supportEmails.$inferSelect;
+export type InsertSupportEmail = typeof supportEmails.$inferInsert;
+
+/**
+ * Respostas de suporte (geradas pela IA ou manuais)
+ */
+export const supportEmailResponses = pgTable("support_email_responses", {
+  id: serial("id").primaryKey(),
+  subject: varchar("subject", { length: 500 }).notNull(),
+  bodyHtml: text("body_html").notNull(),
+  bodyPlain: text("body_plain"),
+  aiGenerated: integer("ai_generated").notNull().default(1), // 1 = gerado pela IA, 0 = manual
+  aiPromptUsed: text("ai_prompt_used"), // Prompt usado para gerar a resposta
+  aiInstructions: text("ai_instructions"), // Instruções do usuário para a IA
+  version: integer("version").notNull().default(1), // Versão da resposta (para histórico de edições)
+  parentResponseId: integer("parent_response_id"), // Resposta anterior (se for edição)
+  groupId: integer("group_id"), // Grupo relacionado (para respostas em massa)
+  emailId: integer("email_id"), // Email específico (para resposta individual)
+  status: varchar("status", { length: 20 }).notNull().default("draft"), // "draft", "approved", "sent"
+  sentAt: timestamp("sent_at"),
+  sentBy: varchar("sent_by", { length: 255 }), // Quem enviou
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type SupportEmailResponse = typeof supportEmailResponses.$inferSelect;
+export type InsertSupportEmailResponse = typeof supportEmailResponses.$inferInsert;
+
+/**
+ * Histórico de envios de respostas de suporte
+ */
+export const supportResponseHistory = pgTable("support_response_history", {
+  id: serial("id").primaryKey(),
+  responseId: integer("response_id").notNull(),
+  emailId: integer("email_id").notNull(),
+  recipientEmail: varchar("recipient_email", { length: 320 }).notNull(),
+  subject: varchar("subject", { length: 500 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("sent"), // "sent", "failed", "bounced"
+  errorMessage: text("error_message"),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+});
+
+export type SupportResponseHistory = typeof supportResponseHistory.$inferSelect;
+export type InsertSupportResponseHistory = typeof supportResponseHistory.$inferInsert;
