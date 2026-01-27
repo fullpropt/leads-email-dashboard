@@ -1,3 +1,5 @@
+import nodemailer from "nodemailer";
+
 export interface SendEmailOptions {
   to: string;
   subject: string;
@@ -9,8 +11,8 @@ export interface SendEmailOptions {
 }
 
 /**
- * Envia um email usando Mailgun como provedor principal, 
- * com fallback para Mailgun2, Mailgun3 e depois Brevo.
+ * Envia um email usando Hostinger SMTP como provedor principal, 
+ * com fallback para Mailgun, Mailgun2, Mailgun3 e depois Brevo.
  * Automaticamente envolve o conteúdo com header e rodapé padrão TubeTools.
  * Inclui link de unsubscribe automático no rodapé.
  * 
@@ -47,33 +49,103 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
       html: processedHtml
     };
     
-    // 1. Tenta enviar com Mailgun primeiro (provedor principal)
+    // 1. Tenta enviar com Hostinger SMTP primeiro (provedor principal)
+    const hostingerSuccess = await sendWithHostinger(processedOptions);
+    if (hostingerSuccess) {
+      return true;
+    }
+
+    // 2. Se Hostinger falhar, tenta com Mailgun como primeiro fallback
+    console.warn("[Email] ⚠️ Hostinger falhou, tentando com Mailgun...");
     const mailgunSuccess = await sendWithMailgun(processedOptions);
     if (mailgunSuccess) {
       return true;
     }
 
-    // 2. Se Mailgun falhar, tenta com Mailgun2 como primeiro fallback
+    // 3. Se Mailgun falhar, tenta com Mailgun2 como segundo fallback
     console.warn("[Email] ⚠️ Mailgun falhou, tentando com Mailgun2...");
     const mailgun2Success = await sendWithMailgun2(processedOptions);
     if (mailgun2Success) {
       return true;
     }
 
-    // 3. Se Mailgun2 falhar, tenta com Mailgun3 como segundo fallback
+    // 4. Se Mailgun2 falhar, tenta com Mailgun3 como terceiro fallback
     console.warn("[Email] ⚠️ Mailgun2 falhou, tentando com Mailgun3...");
     const mailgun3Success = await sendWithMailgun3(processedOptions);
     if (mailgun3Success) {
       return true;
     }
 
-    // 4. Se Mailgun3 também falhar, tenta com Brevo como último fallback
+    // 5. Se Mailgun3 também falhar, tenta com Brevo como último fallback
     console.warn("[Email] ⚠️ Mailgun3 falhou, tentando com Brevo...");
     const brevoSuccess = await sendWithBrevo(processedOptions);
     return brevoSuccess;
 
   } catch (error) {
     console.error("[Email] ❌ Exceção geral ao enviar email:", error);
+    return false;
+  }
+}
+
+/**
+ * Envia um email usando SMTP da Hostinger (provedor principal).
+ * Usa nodemailer para conexão SMTP segura com TLS.
+ */
+async function sendWithHostinger(options: SendEmailOptions): Promise<boolean> {
+  try {
+    const smtpHost = process.env.HOSTINGER_SMTP_HOST || "smtp.hostinger.com";
+    const smtpPort = parseInt(process.env.HOSTINGER_SMTP_PORT || "587");
+    const smtpUser = process.env.HOSTINGER_SMTP_USER;
+    const smtpPass = process.env.HOSTINGER_SMTP_PASS;
+    const fromEmail = process.env.HOSTINGER_FROM_EMAIL || smtpUser;
+    const fromName = process.env.HOSTINGER_FROM_NAME || "TubeTools";
+
+    // Validar credenciais
+    if (!smtpUser || !smtpPass) {
+      console.error("[Hostinger] ❌ Credenciais SMTP não configuradas");
+      console.error("[Hostinger] HOSTINGER_SMTP_USER:", smtpUser ? "✓ Configurado" : "✗ Faltando");
+      console.error("[Hostinger] HOSTINGER_SMTP_PASS:", smtpPass ? "✓ Configurado" : "✗ Faltando");
+      return false;
+    }
+
+    console.log("[Hostinger] 📤 Enviando email para:", options.to);
+    console.log("[Hostinger] 📧 Assunto:", options.subject);
+    console.log("[Hostinger] 🔐 Servidor:", smtpHost + ":" + smtpPort);
+
+    // Criar transporter do nodemailer
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465, // true para 465 (SSL), false para 587 (TLS)
+      auth: {
+        user: smtpUser,
+        pass: smtpPass,
+      },
+      tls: {
+        rejectUnauthorized: false, // Aceitar certificados auto-assinados se necessário
+      },
+    });
+
+    // Enviar email
+    const info = await transporter.sendMail({
+      from: `${fromName} <${fromEmail}>`,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+    });
+
+    console.log("[Hostinger] ✅ Email enviado com sucesso!");
+    console.log("[Hostinger] ID da mensagem:", info.messageId);
+    
+    return true;
+
+  } catch (error) {
+    console.error("[Hostinger] ❌ Exceção ao enviar email:");
+    console.error("[Hostinger] Erro:", error);
+    if (error instanceof Error) {
+      console.error("[Hostinger] Mensagem:", error.message);
+      console.error("[Hostinger] Stack:", error.stack);
+    }
     return false;
   }
 }
@@ -694,10 +766,11 @@ export async function sendTestEmail(testEmail: string): Promise<boolean> {
               <li>Data/Hora: ${new Date().toLocaleString('pt-BR')}</li>
               <li>Provedores configurados:</li>
               <ul>
-                <li>1. Mailgun (principal)</li>
-                <li>2. Mailgun2 (fallback 1)</li>
-                <li>3. Mailgun3 (fallback 2)</li>
-                <li>4. Brevo (fallback 3)</li>
+                <li>1. Hostinger SMTP (principal)</li>
+                <li>2. Mailgun (fallback 1)</li>
+                <li>3. Mailgun2 (fallback 2)</li>
+                <li>4. Mailgun3 (fallback 3)</li>
+                <li>5. Brevo (fallback 4)</li>
               </ul>
               <li>Status: ✅ Enviado com sucesso</li>
             </ul>
