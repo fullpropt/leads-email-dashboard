@@ -1,9 +1,8 @@
 /**
  * Serviço de IA para classificação de emails de suporte e geração de respostas
- * Utiliza a API do OpenAI (ChatGPT) para análise e processamento
+ * Utiliza a API do Google Gemini para análise e processamento
  */
 
-import OpenAI from "openai";
 import {
   getUngroupedSupportEmails,
   getSupportEmailGroups,
@@ -18,13 +17,9 @@ import {
   type SupportEmailGroup,
 } from "./support-db";
 
-// Inicializar cliente OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Modelo a ser utilizado
-const AI_MODEL = "gpt-4.1-mini";
+// Configuração da API Gemini
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
 interface EmailClassification {
   groupName: string;
@@ -44,10 +39,73 @@ interface GroupClassificationResult {
 }
 
 /**
+ * Função auxiliar para chamar a API do Gemini
+ */
+async function callGeminiAPI(systemPrompt: string, userPrompt: string): Promise<string> {
+  if (!GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY não está configurada");
+  }
+
+  const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: `${systemPrompt}\n\n${userPrompt}` }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 2048,
+      }
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Erro na API Gemini: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  
+  // Extrair o texto da resposta do Gemini
+  const content = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  return content;
+}
+
+/**
+ * Função auxiliar para extrair JSON de uma resposta
+ */
+function extractJSON(content: string): string {
+  let jsonStr = content.trim();
+  
+  // Remover possíveis marcadores de código
+  if (jsonStr.startsWith("```json")) {
+    jsonStr = jsonStr.slice(7);
+  }
+  if (jsonStr.startsWith("```")) {
+    jsonStr = jsonStr.slice(3);
+  }
+  if (jsonStr.endsWith("```")) {
+    jsonStr = jsonStr.slice(0, -3);
+  }
+  
+  return jsonStr.trim();
+}
+
+/**
  * Classificar um único email usando IA
  */
 async function classifyEmail(email: SupportEmail): Promise<EmailClassification> {
-  const prompt = `Analise o seguinte email de suporte e forneça uma classificação detalhada.
+  const systemPrompt = "Você é um assistente especializado em classificar emails de suporte ao cliente. Responda apenas com JSON válido, sem formatação markdown.";
+  
+  const userPrompt = `Analise o seguinte email de suporte e forneça uma classificação detalhada.
 
 REMETENTE: ${email.sender}
 ASSUNTO: ${email.subject}
@@ -66,39 +124,9 @@ Responda APENAS com um JSON válido no seguinte formato (sem markdown, sem expli
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: "Você é um assistente especializado em classificar emails de suporte ao cliente. Responda apenas com JSON válido, sem formatação markdown.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.3,
-      max_tokens: 500,
-    });
-
-    const content = response.choices[0]?.message?.content || "";
-    
-    // Tentar extrair JSON da resposta
-    let jsonStr = content.trim();
-    
-    // Remover possíveis marcadores de código
-    if (jsonStr.startsWith("```json")) {
-      jsonStr = jsonStr.slice(7);
-    }
-    if (jsonStr.startsWith("```")) {
-      jsonStr = jsonStr.slice(3);
-    }
-    if (jsonStr.endsWith("```")) {
-      jsonStr = jsonStr.slice(0, -3);
-    }
-    
-    const classification = JSON.parse(jsonStr.trim()) as EmailClassification;
+    const content = await callGeminiAPI(systemPrompt, userPrompt);
+    const jsonStr = extractJSON(content);
+    const classification = JSON.parse(jsonStr) as EmailClassification;
     
     return classification;
   } catch (error) {
@@ -135,7 +163,9 @@ async function findMatchingGroup(
     keywords: g.aiKeywords,
   }));
 
-  const prompt = `Dado um novo email classificado e uma lista de grupos existentes, determine se o email deve ser adicionado a um grupo existente ou se deve criar um novo grupo.
+  const systemPrompt = "Você é um assistente que agrupa emails de suporte similares. Responda apenas com JSON válido.";
+  
+  const userPrompt = `Dado um novo email classificado e uma lista de grupos existentes, determine se o email deve ser adicionado a um grupo existente ou se deve criar um novo grupo.
 
 CLASSIFICAÇÃO DO EMAIL:
 - Nome do grupo sugerido: ${classification.groupName}
@@ -154,31 +184,9 @@ Responda APENAS com um JSON válido:
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: "Você é um assistente que agrupa emails de suporte similares. Responda apenas com JSON válido.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.2,
-      max_tokens: 200,
-    });
-
-    const content = response.choices[0]?.message?.content || "";
-    let jsonStr = content.trim();
-    
-    // Limpar possíveis marcadores
-    if (jsonStr.startsWith("```json")) jsonStr = jsonStr.slice(7);
-    if (jsonStr.startsWith("```")) jsonStr = jsonStr.slice(3);
-    if (jsonStr.endsWith("```")) jsonStr = jsonStr.slice(0, -3);
-    
-    const result = JSON.parse(jsonStr.trim());
+    const content = await callGeminiAPI(systemPrompt, userPrompt);
+    const jsonStr = extractJSON(content);
+    const result = JSON.parse(jsonStr);
 
     if (result.matchingGroupId && result.confidence > 0.7) {
       return existingGroups.find((g) => g.id === result.matchingGroupId) || null;
@@ -307,7 +315,9 @@ export async function generateGroupResponse(
       conteudo: (e.strippedText || e.bodyPlain || "").slice(0, 500),
     }));
 
-    const prompt = `Você é um agente de suporte da TubeTools, uma plataforma onde usuários assistem vídeos e ganham recompensas.
+    const systemPrompt = "Você é um agente de suporte profissional e empático. Responda apenas com JSON válido.";
+    
+    const userPrompt = `Você é um agente de suporte da TubeTools, uma plataforma onde usuários assistem vídeos e ganham recompensas.
 
 INFORMAÇÕES DO GRUPO DE EMAILS:
 - Nome do grupo: ${group.nome}
@@ -322,7 +332,7 @@ ${JSON.stringify(emailsContext, null, 2)}
 ${customInstructions ? `INSTRUÇÕES ADICIONAIS DO OPERADOR:\n${customInstructions}\n` : ""}
 
 Crie uma resposta profissional e empática que possa ser enviada para todos os emails deste grupo. A resposta deve:
-1. Reconhecer o problema/solicitação do usuário
+1. Abordar o problema/solicitação comum do grupo
 2. Fornecer uma solução ou explicação clara
 3. Ser cordial e profissional
 4. Incluir assinatura "Equipe TubeTools"
@@ -334,31 +344,9 @@ Responda APENAS com um JSON válido:
   "bodyPlain": "Corpo do email em texto plano"
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: "Você é um agente de suporte profissional e empático. Responda apenas com JSON válido.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: 1000,
-    });
-
-    const content = response.choices[0]?.message?.content || "";
-    let jsonStr = content.trim();
-    
-    // Limpar possíveis marcadores
-    if (jsonStr.startsWith("```json")) jsonStr = jsonStr.slice(7);
-    if (jsonStr.startsWith("```")) jsonStr = jsonStr.slice(3);
-    if (jsonStr.endsWith("```")) jsonStr = jsonStr.slice(0, -3);
-    
-    const generatedResponse = JSON.parse(jsonStr.trim());
+    const content = await callGeminiAPI(systemPrompt, userPrompt);
+    const jsonStr = extractJSON(content);
+    const generatedResponse = JSON.parse(jsonStr);
 
     // Salvar a resposta no banco
     const responseId = await createSupportResponse({
@@ -366,7 +354,7 @@ Responda APENAS com um JSON válido:
       bodyHtml: generatedResponse.bodyHtml,
       bodyPlain: generatedResponse.bodyPlain,
       aiGenerated: 1,
-      aiPromptUsed: prompt,
+      aiPromptUsed: userPrompt,
       aiInstructions: customInstructions || null,
       groupId,
       status: "draft",
@@ -437,7 +425,9 @@ export async function generateEmailResponse(
       return { success: false, error: "Email não encontrado" };
     }
 
-    const prompt = `Você é um agente de suporte da TubeTools, uma plataforma onde usuários assistem vídeos e ganham recompensas.
+    const systemPrompt = "Você é um agente de suporte profissional e empático. Responda apenas com JSON válido.";
+    
+    const userPrompt = `Você é um agente de suporte da TubeTools, uma plataforma onde usuários assistem vídeos e ganham recompensas.
 
 EMAIL RECEBIDO:
 - De: ${email.sender} ${email.senderName ? `(${email.senderName})` : ""}
@@ -460,37 +450,16 @@ Responda APENAS com um JSON válido:
   "bodyPlain": "Corpo do email em texto plano"
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: "Você é um agente de suporte profissional e empático. Responda apenas com JSON válido.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: 1000,
-    });
-
-    const content = response.choices[0]?.message?.content || "";
-    let jsonStr = content.trim();
-    
-    if (jsonStr.startsWith("```json")) jsonStr = jsonStr.slice(7);
-    if (jsonStr.startsWith("```")) jsonStr = jsonStr.slice(3);
-    if (jsonStr.endsWith("```")) jsonStr = jsonStr.slice(0, -3);
-    
-    const generatedResponse = JSON.parse(jsonStr.trim());
+    const content = await callGeminiAPI(systemPrompt, userPrompt);
+    const jsonStr = extractJSON(content);
+    const generatedResponse = JSON.parse(jsonStr);
 
     const responseId = await createSupportResponse({
       subject: generatedResponse.subject,
       bodyHtml: generatedResponse.bodyHtml,
       bodyPlain: generatedResponse.bodyPlain,
       aiGenerated: 1,
-      aiPromptUsed: prompt,
+      aiPromptUsed: userPrompt,
       aiInstructions: customInstructions || null,
       emailId,
       groupId: email.groupId || null,
