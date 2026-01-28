@@ -11,7 +11,7 @@ export interface SendEmailOptions {
 }
 
 /**
- * Envia um email usando Hostinger SMTP como provedor principal, 
+ * Envia um email usando Brevo como provedor principal, 
  * com fallback para Mailgun.
  * Automaticamente envolve o conteúdo com header e rodapé padrão TubeTools.
  * Inclui link de unsubscribe automático no rodapé.
@@ -49,14 +49,14 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
       html: processedHtml
     };
     
-    // 1. Tenta enviar com Hostinger SMTP primeiro (provedor principal)
-    const hostingerSuccess = await sendWithHostinger(processedOptions);
-    if (hostingerSuccess) {
+    // 1. Tenta enviar com Brevo primeiro (provedor principal)
+    const brevoSuccess = await sendWithBrevo(processedOptions);
+    if (brevoSuccess) {
       return true;
     }
 
-    // 2. Se Hostinger falhar, tenta com Mailgun como fallback
-    console.warn("[Email] ⚠️ Hostinger falhou, tentando com Mailgun...");
+    // 2. Se Brevo falhar, tenta com Mailgun como fallback
+    console.warn("[Email] ⚠️ Brevo falhou, tentando com Mailgun...");
     const mailgunSuccess = await sendWithMailgun(processedOptions);
     return mailgunSuccess;
 
