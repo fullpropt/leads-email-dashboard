@@ -42,8 +42,8 @@ Thank you for joining TubeTools.
 
 Here's what you can do:
 - Watch amazing videos
-- Vote for your favorites
-- Earn rewards
+- Rate your favorites
+- Participate in the community
 
 [BUTTON:Start Now:https://youtbviews.online]
 
@@ -158,8 +158,8 @@ Thank you for joining TubeTools.
 
 Here's what you can do:
 - Watch amazing videos
-- Vote for your favorites
-- Earn rewards
+- Rate your favorites
+- Participate in the community
 
 [BUTTON:Start Now:https://youtbviews.online]
 

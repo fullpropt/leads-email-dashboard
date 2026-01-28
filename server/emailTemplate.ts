@@ -85,7 +85,7 @@ export function getEmailFooter(unsubscribeToken?: string): string {
             <tr>
               <td align="center" style="padding: 20px; color: #666666; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6;">
                 <p style="margin: 0 0 10px 0; font-weight: bold; color: #000000;">TubeTools</p>
-                <p style="margin: 0 0 10px 0;">Watch. Vote. Earn.</p>
+                <p style="margin: 0 0 10px 0;">Watch. Rate. Participate.</p>
                 <p style="margin: 0 0 5px 0;">
                   <strong>Support:</strong> 
                   <a href="mailto:supfullpropt@gmail.com" style="color: #FF0000; text-decoration: none;">supfullpropt@gmail.com</a>
