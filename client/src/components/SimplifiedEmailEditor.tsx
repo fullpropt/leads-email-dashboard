@@ -33,19 +33,23 @@ const FORMATTING_GUIDE = `
 • {{email}} - Email do lead
 • {{produto}} - Nome do produto
 • {{plano}} - Plano adquirido
-• {{valor}} - V39	# Bem-vindo, {{nome}}!
-40	
-41	Obrigado por se juntar ao TubeTools.
-42	
-43	Aqui está o que você pode fazer:
-44	- Assistir vídeos incríveis
-45	- Avaliar seus favoritos
-46	- Participar da comunidade
-47	
-48	[BUTTON:Começar Agora:https://youtbviews.online]
-49	
-50	Atenciosamente,
-51	**Equipe TubeTools**
+• {{valor}} - Valor da compra
+
+**Exemplo:**
+# Welcome, {{nome}}!
+
+Thank you for joining TubeTools.
+
+Here's what you can do:
+- Watch amazing videos
+- Vote for your favorites
+- Earn rewards
+
+[BUTTON:Start Now:https://youtbviews.online]
+
+Best regards,
+**The TubeTools Team**
+`.trim();
 
 /**
  * Componente de edição simplificada de emails
@@ -146,35 +150,42 @@ export function SimplifiedEmailEditor({
             value={htmlContent}
             onChange={(e) => onContentChange(e.target.value)}
             className={`min-h-[400px] ${editorMode === "html" ? "font-mono text-sm" : ""}`}
-            plac155	                ? `# Bem-vindo, {{nome}}!
-156	
-157	Obrigado por se juntar ao TubeTools.
-158	
-159	Aqui está o que você pode fazer:
-160	- Assistir vídeos incríveis
-161	- Avaliar seus favoritos
-162	- Participar da comunidade
-163	
-164	[BUTTON:Começar Agora:https://youtbviews.online]
-165	
-166	Atenciosamente,
-167	**Equipe TubeTools**`             : `<h1 style="font-size: 28px; font-weight: bold; color169	  Bem-vindo ao TubeTools, {{nome}}!
-170	</h1>
-171	
-172	<p style="font-size: 16px; color: #333333; margin-bottom: 25px;">
-173	  Obrigado por se juntar à nossa comunidade.
-174	</p>
-175	
-176	<!-- Botão CTA -->
-177	<table width="100%" cellpadding="0" cellspacing="0" border="0">
-178	  <tr>
-179	    <td align="center">
-180	      <a href="https://youtbviews.online" target="_blank" style="display: inline-block; padding: 14px 35px; background-color: #FF0000; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
-181	        Começar a Explorar Agora
-182	      </a>
-183	    </td>
-184	  </tr>
-185	</table>`  </CardContent>
+            placeholder={
+              editorMode === "simple"
+                ? `# Welcome, {{nome}}!
+
+Thank you for joining TubeTools.
+
+Here's what you can do:
+- Watch amazing videos
+- Vote for your favorites
+- Earn rewards
+
+[BUTTON:Start Now:https://youtbviews.online]
+
+Best regards,
+**The TubeTools Team**`
+                : `<h1 style="font-size: 28px; font-weight: bold; color: #000000; margin-bottom: 20px;">
+  Welcome to TubeTools, {{nome}}!
+</h1>
+
+<p style="font-size: 16px; color: #333333; margin-bottom: 25px;">
+  Thank you for joining our community.
+</p>
+
+<!-- CTA Button -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <td align="center">
+      <a href="https://youtbviews.online" target="_blank" style="display: inline-block; padding: 14px 35px; background-color: #FF0000; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+        Start Exploring Now
+      </a>
+    </td>
+  </tr>
+</table>`
+            }
+          />
+        </CardContent>
       </Card>
 
       <div className="text-xs text-muted-foreground space-y-1">
