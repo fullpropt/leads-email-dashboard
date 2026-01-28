@@ -72,8 +72,8 @@ export function getEmailFooter(unsubscribeToken?: string): string {
   
   const unsubscribeSection = unsubscribeToken ? `
     <p style="margin: 15px 0 0 0; font-size: 12px; color: #999999;">
-      Don't want to receive these emails? 
-      <a href="${unsubscribeLink}" style="color: #999999; text-decoration: underline;">Unsubscribe here</a>
+      Não deseja mais receber estes e-mails? 
+      <a href="${unsubscribeLink}" style="color: #999999; text-decoration: underline;">Cancele sua inscrição aqui</a>
     </p>
   ` : '';
 
@@ -85,13 +85,13 @@ export function getEmailFooter(unsubscribeToken?: string): string {
             <tr>
               <td align="center" style="padding: 20px; color: #666666; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6;">
                 <p style="margin: 0 0 10px 0; font-weight: bold; color: #000000;">TubeTools</p>
-                <p style="margin: 0 0 10px 0;">Watch. Vote. Earn.</p>
+                <p style="margin: 0 0 10px 0;">Assista. Avalie. Participe.</p>
                 <p style="margin: 0 0 5px 0;">
                   <strong>Support:</strong> 
                   <a href="mailto:supfullpropt@gmail.com" style="color: #FF0000; text-decoration: none;">supfullpropt@gmail.com</a>
                 </p>
                 <p style="margin: 20px 0 0 0; font-size: 12px; color: #999999;">
-                  © ${new Date().getFullYear()} TubeTools. All rights reserved.
+                  © ${new Date().getFullYear()} TubeTools. Todos os direitos reservados.
                 </p>
                 ${unsubscribeSection}
               </td>

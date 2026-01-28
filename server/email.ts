@@ -12,7 +12,7 @@ export interface SendEmailOptions {
 
 /**
  * Envia um email usando Hostinger SMTP como provedor principal, 
- * com fallback para Mailgun, Mailgun2, Mailgun3 e depois Brevo.
+ * com fallback para Mailgun.
  * Automaticamente envolve o conteúdo com header e rodapé padrão TubeTools.
  * Inclui link de unsubscribe automático no rodapé.
  * 
@@ -55,31 +55,10 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
       return true;
     }
 
-    // 2. Se Hostinger falhar, tenta com Mailgun como primeiro fallback
+    // 2. Se Hostinger falhar, tenta com Mailgun como fallback
     console.warn("[Email] ⚠️ Hostinger falhou, tentando com Mailgun...");
     const mailgunSuccess = await sendWithMailgun(processedOptions);
-    if (mailgunSuccess) {
-      return true;
-    }
-
-    // 3. Se Mailgun falhar, tenta com Mailgun2 como segundo fallback
-    console.warn("[Email] ⚠️ Mailgun falhou, tentando com Mailgun2...");
-    const mailgun2Success = await sendWithMailgun2(processedOptions);
-    if (mailgun2Success) {
-      return true;
-    }
-
-    // 4. Se Mailgun2 falhar, tenta com Mailgun3 como terceiro fallback
-    console.warn("[Email] ⚠️ Mailgun2 falhou, tentando com Mailgun3...");
-    const mailgun3Success = await sendWithMailgun3(processedOptions);
-    if (mailgun3Success) {
-      return true;
-    }
-
-    // 5. Se Mailgun3 também falhar, tenta com Brevo como último fallback
-    console.warn("[Email] ⚠️ Mailgun3 falhou, tentando com Brevo...");
-    const brevoSuccess = await sendWithBrevo(processedOptions);
-    return brevoSuccess;
+    return mailgunSuccess;
 
   } catch (error) {
     console.error("[Email] ❌ Exceção geral ao enviar email:", error);
