@@ -49,6 +49,38 @@ export const supportRouter = router({
     return getUngroupedSupportEmails();
   }),
 
+  // ==================== IMAP - BUSCAR EMAILS ====================
+
+  /**
+   * Testar conexão IMAP com a Hostinger
+   */
+  testImapConnection: publicProcedure.query(async () => {
+    const { testImapConnection } = await import("./imap-support");
+    return testImapConnection();
+  }),
+
+  /**
+   * Importar emails não lidos via IMAP
+   */
+  importEmailsFromImap: publicProcedure.mutation(async () => {
+    const { importUnreadEmailsToSupport } = await import("./imap-support");
+    return importUnreadEmailsToSupport();
+  }),
+
+  /**
+   * Buscar emails recentes via IMAP (últimos N dias)
+   */
+  fetchRecentFromImap: publicProcedure
+    .input(
+      z.object({
+        daysBack: z.number().min(1).max(30).default(7),
+      }).optional()
+    )
+    .query(async ({ input }) => {
+      const { fetchRecentEmails } = await import("./imap-support");
+      return fetchRecentEmails(input?.daysBack || 7);
+    }),
+
   // ==================== GRUPOS ====================
 
   listGroups: publicProcedure

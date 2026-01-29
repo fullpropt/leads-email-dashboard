@@ -29,6 +29,7 @@ import {
   Clock,
   TrendingDown,
   ShoppingCart,
+  ArrowRightLeft,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -288,6 +289,20 @@ export default function Analytics() {
                 </p>
               </CardContent>
             </Card>
+
+            {/* Carrinhos Convertidos */}
+            <Card className="border-green-200 dark:border-green-900">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Carrinhos Convertidos</CardTitle>
+                <ArrowRightLeft className="h-4 w-4 text-green-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">{accessStats?.convertedCarts || 0}</div>
+                <p className="text-xs text-muted-foreground">
+                  {accessStats?.cartConversionRate || 0}% taxa de conversão
+                </p>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Métricas da Plataforma TubeTools */}
@@ -402,7 +417,7 @@ export default function Analytics() {
                   <Award className="h-5 w-5" />
                   Top 10 - Maior Streak
                 </CardTitle>
-                <CardDescription>Usuários com maior sequência de dias consecutivos</CardDescription>
+                <CardDescription>Usuários mais consistentes</CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -411,7 +426,7 @@ export default function Analytics() {
                       <TableHead className="w-[50px]">#</TableHead>
                       <TableHead>Nome</TableHead>
                       <TableHead className="text-right">Streak</TableHead>
-                      <TableHead className="text-right">Dias Votados</TableHead>
+                      <TableHead className="text-right">Saldo</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -425,12 +440,10 @@ export default function Analytics() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Badge variant="default" className="bg-orange-600">
-                            {user.voting_streak} dias
-                          </Badge>
+                          <Badge variant="default">{user.voting_streak} dias</Badge>
                         </TableCell>
-                        <TableCell className="text-right">
-                          {user.voting_days_count} dias
+                        <TableCell className="text-right font-mono">
+                          ${Number(user.balance).toFixed(2)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -443,219 +456,167 @@ export default function Analytics() {
 
         {/* Aba 3: Análise Temporal */}
         <TabsContent value="temporal" className="space-y-4">
-          {/* Votos por Hora do Dia */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Votos por Hora do Dia
-              </CardTitle>
-              <CardDescription>Distribuição de votos ao longo de 24 horas (últimos 30 dias)</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={completeVotesByHour}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="count" fill="#8884d8" name="Votos" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Votos por Hora */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Votos por Hora do Dia</CardTitle>
+                <CardDescription>Distribuição de atividade ao longo do dia</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={completeVotesByHour}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#8884d8" name="Votos" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
-          {/* Votos por Dia da Semana */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Votos por Dia da Semana
-              </CardTitle>
-              <CardDescription>Distribuição de votos por dia (últimos 30 dias)</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={votesByDayOfWeekData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="dayName" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="count" fill="#82ca9d" name="Votos" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+            {/* Votos por Dia da Semana */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Votos por Dia da Semana</CardTitle>
+                <CardDescription>Dias mais ativos</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={votesByDayOfWeekData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="dayName" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#82ca9d" name="Votos" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
-          {/* Cadastros por Dia */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Cadastros por Dia
-              </CardTitle>
-              <CardDescription>Novos usuários cadastrados (últimos 30 dias)</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={userSignupsByDayData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="date" 
-                    tickFormatter={(value) => format(new Date(value), "dd/MM", { locale: ptBR })}
-                  />
-                  <YAxis />
-                  <Tooltip 
-                    labelFormatter={(value) => format(new Date(value), "dd/MM/yyyy", { locale: ptBR })}
-                  />
-                  <Legend />
-                  <Area type="monotone" dataKey="count" stroke="#8884d8" fill="#8884d8" name="Cadastros" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+            {/* Cadastros por Dia */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Novos Cadastros (Últimos 30 dias)</CardTitle>
+                <CardDescription>Crescimento da base de usuários</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={userSignupsByDayData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="count" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} name="Cadastros" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
-          {/* Ganhos por Dia */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
-                Ganhos por Dia
-              </CardTitle>
-              <CardDescription>Recompensas distribuídas (últimos 30 dias)</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={earningsByDayData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="date" 
-                    tickFormatter={(value) => format(new Date(value), "dd/MM", { locale: ptBR })}
-                  />
-                  <YAxis />
-                  <Tooltip 
-                    labelFormatter={(value) => format(new Date(value), "dd/MM/yyyy", { locale: ptBR })}
-                    formatter={(value: any) => `$${Number(value).toFixed(2)}`}
-                  />
-                  <Legend />
-                  <Line type="monotone" dataKey="totalRewards" stroke="#82ca9d" name="Ganhos ($)" />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Usuários Ativos por Dia */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5" />
-                Usuários Ativos por Dia
-              </CardTitle>
-              <CardDescription>Usuários que votaram em cada dia (últimos 30 dias)</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={activeUsersByDayData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="date" 
-                    tickFormatter={(value) => format(new Date(value), "dd/MM", { locale: ptBR })}
-                  />
-                  <YAxis />
-                  <Tooltip 
-                    labelFormatter={(value) => format(new Date(value), "dd/MM/yyyy", { locale: ptBR })}
-                  />
-                  <Legend />
-                  <Area type="monotone" dataKey="activeUsers" stroke="#ff7300" fill="#ff7300" name="Usuários Ativos" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+            {/* Ganhos por Dia */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Recompensas Distribuídas (Últimos 30 dias)</CardTitle>
+                <CardDescription>Total de ganhos dos usuários</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={earningsByDayData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip formatter={(value: any) => [`$${Number(value).toFixed(2)}`, 'Recompensas']} />
+                    <Line type="monotone" dataKey="total" stroke="#00C49F" strokeWidth={2} name="Recompensas" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Aba 4: Resumo Executivo */}
         <TabsContent value="summary" className="space-y-4">
-          {/* Informações Temporais */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Informações Temporais
-              </CardTitle>
-              <CardDescription>Datas importantes e crescimento</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Primeiro Usuário</p>
-                  <p className="text-lg font-semibold">
-                    {stats.firstUserDate
-                      ? format(new Date(stats.firstUserDate), "dd/MM/yyyy HH:mm", { locale: ptBR })
-                      : "N/A"}
-                  </p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Funil de Conversão</CardTitle>
+                <CardDescription>Da compra ao engajamento</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Compras Aprovadas</span>
+                    <span className="font-mono">{accessStats?.total || 0}</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div className="bg-primary h-2 rounded-full" style={{ width: '100%' }} />
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Último Usuário</p>
-                  <p className="text-lg font-semibold">
-                    {stats.lastUserDate
-                      ? format(new Date(stats.lastUserDate), "dd/MM/yyyy HH:mm", { locale: ptBR })
-                      : "N/A"}
-                  </p>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Acessaram Plataforma</span>
+                    <span className="font-mono">{accessStats?.accessed || 0} ({conversionRate}%)</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div className="bg-green-500 h-2 rounded-full" style={{ width: `${conversionRate}%` }} />
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Novos Usuários (7 dias)</p>
-                  <p className="text-lg font-semibold">{stats.recentUsers}</p>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Usuários Ativos (7d)</span>
+                    <span className="font-mono">{stats.activeUsers} ({engagementRate}%)</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${engagementRate}%` }} />
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          {/* Resumo de Métricas */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="h-5 w-5" />
-                Resumo de Métricas
-              </CardTitle>
-              <CardDescription>Visão geral do desempenho</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Taxa de Conversão (Compra → Acesso)</span>
-                  <Badge variant={parseFloat(conversionRate) > 10 ? "default" : "destructive"}>
-                    {conversionRate}%
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Taxa de Engajamento (Ativos 7 dias)</span>
-                  <Badge variant={parseFloat(engagementRate) > 20 ? "default" : "secondary"}>
-                    {engagementRate}%
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Usuários com Ganhos</span>
-                  <Badge variant="secondary">
-                    {((stats.usersWithEarnings / stats.totalUsers) * 100).toFixed(1)}% ({stats.usersWithEarnings}/{stats.totalUsers})
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Média de Dias Votados</span>
-                  <Badge variant="outline">{stats.avgVotingDays.toFixed(1)} dias</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Total de Votos</span>
-                  <Badge variant="outline">{votes.totalVotes}</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Recompensas Distribuídas</span>
-                  <Badge variant="outline">${votes.totalRewardsDistributed.toFixed(2)}</Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Métricas Chave</CardTitle>
+                <CardDescription>Indicadores de performance</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell className="font-medium">Taxa de Conversão</TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={parseFloat(conversionRate) >= 50 ? "default" : "secondary"}>
+                          {conversionRate}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Taxa de Engajamento</TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={parseFloat(engagementRate) >= 30 ? "default" : "secondary"}>
+                          {engagementRate}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Saldo Médio</TableCell>
+                      <TableCell className="text-right font-mono">${stats.avgBalance.toFixed(2)}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Streak Médio</TableCell>
+                      <TableCell className="text-right">{stats.avgVotingStreak.toFixed(1)} dias</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">Votos/Usuário</TableCell>
+                      <TableCell className="text-right">
+                        {stats.totalUsers > 0 ? (votes.totalVotes / stats.totalUsers).toFixed(1) : 0}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

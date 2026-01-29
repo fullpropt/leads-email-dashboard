@@ -44,6 +44,7 @@ import {
   MessageSquare,
   Users,
   Loader2,
+  Download,
 } from "lucide-react";
 
 // Tipos
@@ -113,6 +114,22 @@ export default function Support() {
     },
     onError: (error) => {
       toast.error(`Erro na classificação: ${error.message}`);
+    },
+  });
+
+  // Mutation para importar emails via IMAP
+  const importEmailsMutation = trpc.support.importEmailsFromImap.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(`${data.imported} emails importados com sucesso!`);
+        ungroupedQuery.refetch();
+        statsQuery.refetch();
+      } else {
+        toast.error(data.error || "Erro ao importar emails");
+      }
+    },
+    onError: (error) => {
+      toast.error(`Erro: ${error.message}`);
     },
   });
 
@@ -255,17 +272,31 @@ export default function Support() {
             Gerencie emails de suporte com classificação por IA
           </p>
         </div>
-        <Button
-          onClick={() => classifyMutation.mutate()}
-          disabled={classifyMutation.isPending || (ungroupedQuery.data?.length ?? 0) === 0}
-        >
-          {classifyMutation.isPending ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Bot className="mr-2 h-4 w-4" />
-          )}
-          Classificar Emails ({ungroupedQuery.data?.length ?? 0})
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => importEmailsMutation.mutate()}
+            disabled={importEmailsMutation.isPending}
+          >
+            {importEmailsMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            Buscar Emails
+          </Button>
+          <Button
+            onClick={() => classifyMutation.mutate()}
+            disabled={classifyMutation.isPending || (ungroupedQuery.data?.length ?? 0) === 0}
+          >
+            {classifyMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Bot className="mr-2 h-4 w-4" />
+            )}
+            Classificar Emails ({ungroupedQuery.data?.length ?? 0})
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -336,7 +367,7 @@ export default function Support() {
                   <Inbox className="h-12 w-12 text-muted-foreground mb-4" />
                   <p className="text-muted-foreground">Nenhum grupo criado ainda</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Clique em "Classificar Emails" para agrupar
+                    Clique em "Buscar Emails" e depois "Classificar Emails" para agrupar
                   </p>
                 </div>
               ) : (

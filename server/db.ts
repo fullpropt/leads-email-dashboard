@@ -1012,11 +1012,11 @@ export async function getLeadsAccessStats() {
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot get access stats: database not available");
-    return { total: 0, accessed: 0, notAccessed: 0, abandoned: 0 };
+    return { total: 0, accessed: 0, notAccessed: 0, abandoned: 0, convertedCarts: 0, cartConversionRate: "0.0" };
   }
 
   try {
-    const { count, eq, sql } = await import("drizzle-orm");
+    const { count, eq, sql, and, inArray } = await import("drizzle-orm");
     const { getTubetoolsDb } = await import("./tubetools-db");
     
     // Contar total de leads (apenas compras aprovadas, não abandonados)
@@ -1032,6 +1032,36 @@ export async function getLeadsAccessStats() {
       .from(leads)
       .where(eq(leads.status, 'abandoned'));
     const abandoned = Number(abandonedResult?.count || 0);
+    
+    // Contar carrinhos abandonados que foram convertidos (compra aprovada)
+    // Um carrinho é considerado convertido quando o mesmo email aparece tanto
+    // como 'abandoned' quanto como 'active' (compra_aprovada)
+    const abandonedEmails = await db
+      .select({ email: leads.email })
+      .from(leads)
+      .where(eq(leads.status, 'abandoned'));
+    
+    let convertedCarts = 0;
+    if (abandonedEmails.length > 0) {
+      const abandonedEmailList = abandonedEmails.map(l => l.email).filter(Boolean) as string[];
+      if (abandonedEmailList.length > 0) {
+        const [convertedResult] = await db
+          .select({ count: sql`COUNT(DISTINCT ${leads.email})` })
+          .from(leads)
+          .where(
+            and(
+              eq(leads.status, 'active'),
+              inArray(leads.email, abandonedEmailList)
+            )
+          );
+        convertedCarts = Number(convertedResult?.count || 0);
+      }
+    }
+    
+    // Calcular taxa de conversão de carrinhos
+    const cartConversionRate = abandoned > 0 
+      ? ((convertedCarts / abandoned) * 100).toFixed(1) 
+      : "0.0";
     
     // Buscar total de usuários ativos no TubeTools (todos os cadastrados)
     let accessed = 0;
@@ -1072,13 +1102,14 @@ export async function getLeadsAccessStats() {
       accessed,
       notAccessed,
       abandoned,
+      convertedCarts,
+      cartConversionRate,
     };
   } catch (error) {
     console.error("[Database] Failed to get access stats:", error);
-    return { total: 0, accessed: 0, notAccessed: 0, abandoned: 0 };
+    return { total: 0, accessed: 0, notAccessed: 0, abandoned: 0, convertedCarts: 0, cartConversionRate: "0.0" };
   }
 }
-
 
 // ========================================================================
 // NOVAS FUNÇÕES PARA SUPORTE A TIPOS DE TEMPLATES E LEADS
