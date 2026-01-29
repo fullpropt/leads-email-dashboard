@@ -50,6 +50,7 @@ export function stopScheduler() {
 /**
  * Processar envios atrasados
  * Busca leads prontos para envio e envia emails
+ * CORRIGIDO: Envia apenas UM template por lead (o primeiro encontrado)
  */
 async function processDelayedSends() {
   try {
@@ -94,48 +95,49 @@ async function processDelayedSends() {
 
     console.log(`[Scheduler] 📋 Encontrados ${templatesWithDelayedSend.length} template(s) com envio atrasado`);
 
+    // CORREÇÃO: Usar apenas o primeiro template (não enviar todos)
+    const template = templatesWithDelayedSend[0];
+    console.log(`[Scheduler] 📋 Usando template: "${template.nome}" (ID: ${template.id})`);
+
     // Importar funções necessárias
     const { sendEmail } = await import("./email");
     const { replaceTemplateVariables } = await import("./db");
 
-    // Processar cada lead
+    // Processar cada lead - enviar apenas UM template
     for (const lead of leadsReadyForSend) {
       console.log(`[Scheduler] 📤 Processando lead: ${lead.email}`);
 
-      // Enviar email com cada template de envio atrasado
-      for (const template of templatesWithDelayedSend) {
-        try {
-          console.log(`[Scheduler] 📧 Enviando template "${template.nome}" para ${lead.email}`);
+      try {
+        console.log(`[Scheduler] 📧 Enviando template "${template.nome}" para ${lead.email}`);
 
-          // Substituir variáveis no template (HTML e assunto)
-          const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
-          const processedSubject = replaceTemplateVariables(template.assunto, lead);
+        // Substituir variáveis no template (HTML e assunto)
+        const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+        const processedSubject = replaceTemplateVariables(template.assunto, lead);
 
-          // Enviar email
-          const emailSent = await sendEmail({
-            to: lead.email,
-            subject: processedSubject,
-            html: htmlContent,
-          });
+        // Enviar email
+        const emailSent = await sendEmail({
+          to: lead.email,
+          subject: processedSubject,
+          html: htmlContent,
+        });
 
-          if (emailSent) {
-            // Marcar email como enviado
-            await db
-              .update(leads)
-              .set({
-                emailEnviado: 1,
-                dataEnvioEmail: new Date(),
-                nextEmailSendAt: null, // Limpar a data de envio agendado
-              })
-              .where(eq(leads.id, lead.id));
+        if (emailSent) {
+          // Marcar email como enviado
+          await db
+            .update(leads)
+            .set({
+              emailEnviado: 1,
+              dataEnvioEmail: new Date(),
+              nextEmailSendAt: null, // Limpar a data de envio agendado
+            })
+            .where(eq(leads.id, lead.id));
 
-            console.log(`[Scheduler] ✅ Email enviado com sucesso para ${lead.email}`);
-          } else {
-            console.error(`[Scheduler] ❌ Falha ao enviar email para ${lead.email}`);
-          }
-        } catch (templateError) {
-          console.error(`[Scheduler] ❌ Erro ao processar template ${template.id}:`, templateError);
+          console.log(`[Scheduler] ✅ Email enviado com sucesso para ${lead.email}`);
+        } else {
+          console.error(`[Scheduler] ❌ Falha ao enviar email para ${lead.email}`);
         }
+      } catch (templateError) {
+        console.error(`[Scheduler] ❌ Erro ao processar template ${template.id}:`, templateError);
       }
     }
 
