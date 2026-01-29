@@ -1,4 +1,4 @@
-import { asc, desc, eq, sql, and } from "drizzle-orm";
+import { asc, desc, eq, sql, and, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { autoSendConfig, emailTemplates, InsertEmailTemplate, InsertLead, InsertUser, Lead, leads, users, funnels, funnelTemplates, funnelLeadProgress, Funnel, FunnelTemplate, FunnelLeadProgress, InsertFunnel, InsertFunnelTemplate, InsertFunnelLeadProgress } from "../drizzle/schema_postgresql";
@@ -1457,7 +1457,8 @@ export async function getEmailSentCountByTemplate(templateId: number): Promise<n
       .where(
         and(
           eq(emailSendHistory.templateId, templateId),
-          eq(emailSendHistory.status, "sent")
+          eq(emailSendHistory.status, "sent"),
+          ne(emailSendHistory.sendType, "funnel")
         )
       );
     return Number(result?.count || 0);
@@ -1485,7 +1486,12 @@ export async function getAllTemplatesEmailSentCounts(): Promise<Record<number, n
         count: sql<number>`COUNT(*)`,
       })
       .from(emailSendHistory)
-      .where(eq(emailSendHistory.status, "sent"))
+      .where(
+        and(
+          eq(emailSendHistory.status, "sent"),
+          ne(emailSendHistory.sendType, "funnel")
+        )
+      )
       .groupBy(emailSendHistory.templateId);
 
     const counts: Record<number, number> = {};
