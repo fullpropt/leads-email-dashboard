@@ -321,7 +321,7 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const { sendEmail } = await import("./email");
 
-        const resetLink = `https://youtbviews.online/reset-password?token=${input.resetToken}`;
+        const resetLink = `https://tubetoolsacess.work/reset-password?token=${input.resetToken}`;
         
         const htmlContent = `
           <!DOCTYPE html>
