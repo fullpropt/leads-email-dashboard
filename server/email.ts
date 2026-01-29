@@ -91,7 +91,7 @@ async function sendWithHostinger(options: SendEmailOptions): Promise<boolean> {
     const transporter = nodemailer.createTransport({
       host: smtpHost,
       port: smtpPort,
-      secure: smtpPort === 465, // true para 465 (SSL), false para 587 (TLS)
+      secure: false, // true para 465 (SSL), false para 587 (TLS)
       auth: {
         user: smtpUser,
         pass: smtpPass,
