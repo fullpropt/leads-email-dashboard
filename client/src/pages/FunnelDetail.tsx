@@ -519,12 +519,12 @@ export default function FunnelDetail() {
                 </div>
               )}
               {previewHtml && !previewTemplate.isLoading ? (
-                <div className="border rounded-lg bg-gray-50 overflow-auto" style={{ maxHeight: "calc(100vh - 300px)" }}>
+                <div className="border rounded-lg bg-gray-50 overflow-hidden">
                   <iframe
                     srcDoc={previewHtml}
                     title="Email Preview"
                     className="w-full border-0"
-                    style={{ minHeight: "800px" }}
+                    style={{ height: "calc(100vh - 280px)", minHeight: "500px" }}
                   />
                 </div>
               ) : !previewTemplate.isLoading && (
