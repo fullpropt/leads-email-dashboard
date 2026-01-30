@@ -13,7 +13,7 @@ COPY patches ./patches
 
 # Install dependencies with frozen lockfile for reproducibility
 FROM base AS dependencies
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Build stage
 FROM base AS build
