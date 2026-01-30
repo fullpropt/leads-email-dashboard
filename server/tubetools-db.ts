@@ -638,3 +638,147 @@ export async function getFullUserDetailsByEmail(email: string) {
     return null;
   }
 }
+
+
+/**
+ * Buscar dados de jornada do usuário - distribuição de streaks e resets
+ * @returns Dados para análise de jornada
+ */
+export async function getUserJourneyAnalytics() {
+  try {
+    const sql = getTubetoolsDb();
+    
+    if (!sql) {
+      console.warn("[TubeTools DB] Banco não disponível");
+      return null;
+    }
+
+    // Distribuição de streak atual dos usuários (quantos estão em cada dia)
+    const streakDistribution = await sql`
+      SELECT 
+        CASE 
+          WHEN voting_days_count >= 20 THEN 20
+          ELSE voting_days_count
+        END as days,
+        COUNT(*) as count
+      FROM users
+      WHERE voting_days_count > 0
+      GROUP BY 
+        CASE 
+          WHEN voting_days_count >= 20 THEN 20
+          ELSE voting_days_count
+        END
+      ORDER BY days ASC
+    `;
+
+    // Onde os resets acontecem - extrair o número de dias do description
+    const resetDistribution = await sql`
+      SELECT 
+        CASE
+          WHEN description LIKE '%2 days ago%' THEN 2
+          WHEN description LIKE '%3 days ago%' THEN 3
+          WHEN description LIKE '%4 days ago%' THEN 4
+          WHEN description LIKE '%5 days ago%' THEN 5
+          WHEN description LIKE '%6 days ago%' THEN 6
+          WHEN description LIKE '%7 days ago%' THEN 7
+          WHEN description LIKE '%no vote in 24 hours%' THEN 1
+          ELSE 8
+        END as days_inactive,
+        COUNT(*) as count,
+        SUM(amount) as total_lost
+      FROM transactions
+      WHERE description LIKE '%Balance reset due to inactivity%'
+      GROUP BY 
+        CASE
+          WHEN description LIKE '%2 days ago%' THEN 2
+          WHEN description LIKE '%3 days ago%' THEN 3
+          WHEN description LIKE '%4 days ago%' THEN 4
+          WHEN description LIKE '%5 days ago%' THEN 5
+          WHEN description LIKE '%6 days ago%' THEN 6
+          WHEN description LIKE '%7 days ago%' THEN 7
+          WHEN description LIKE '%no vote in 24 hours%' THEN 1
+          ELSE 8
+        END
+      ORDER BY days_inactive ASC
+    `;
+
+    // Usuários que chegaram em cada milestone (1, 5, 10, 15, 20 dias)
+    const milestones = await sql`
+      SELECT 
+        CASE 
+          WHEN voting_days_count >= 20 THEN '20+ dias'
+          WHEN voting_days_count >= 15 THEN '15-19 dias'
+          WHEN voting_days_count >= 10 THEN '10-14 dias'
+          WHEN voting_days_count >= 5 THEN '5-9 dias'
+          WHEN voting_days_count >= 1 THEN '1-4 dias'
+          ELSE '0 dias'
+        END as milestone,
+        COUNT(*) as count,
+        ROUND(AVG(balance)::numeric, 2) as avg_balance
+      FROM users
+      GROUP BY 
+        CASE 
+          WHEN voting_days_count >= 20 THEN '20+ dias'
+          WHEN voting_days_count >= 15 THEN '15-19 dias'
+          WHEN voting_days_count >= 10 THEN '10-14 dias'
+          WHEN voting_days_count >= 5 THEN '5-9 dias'
+          WHEN voting_days_count >= 1 THEN '1-4 dias'
+          ELSE '0 dias'
+        END
+      ORDER BY 
+        CASE 
+          WHEN voting_days_count >= 20 THEN 5
+          WHEN voting_days_count >= 15 THEN 4
+          WHEN voting_days_count >= 10 THEN 3
+          WHEN voting_days_count >= 5 THEN 2
+          WHEN voting_days_count >= 1 THEN 1
+          ELSE 0
+        END DESC
+    `;
+
+    // Taxa de retenção por dia (quantos % dos usuários chegaram em cada dia)
+    const totalUsers = await sql`SELECT COUNT(*) as total FROM users`;
+    const total = Number(totalUsers[0].total);
+
+    const retentionByDay = await sql`
+      SELECT 
+        voting_days_count as day,
+        COUNT(*) as users_at_day
+      FROM users
+      WHERE voting_days_count > 0 AND voting_days_count <= 25
+      GROUP BY voting_days_count
+      ORDER BY voting_days_count ASC
+    `;
+
+    console.log("[TubeTools DB] ✅ Dados de jornada recuperados com sucesso");
+
+    return {
+      streakDistribution: streakDistribution.map((row: any) => ({
+        days: Number(row.days),
+        label: Number(row.days) === 20 ? '20+' : String(row.days),
+        count: Number(row.count),
+      })),
+      resetDistribution: resetDistribution.map((row: any) => ({
+        daysInactive: Number(row.days_inactive),
+        label: Number(row.days_inactive) === 8 ? '8+' : String(row.days_inactive),
+        count: Number(row.count),
+        totalLost: Number(row.total_lost),
+      })),
+      milestones: milestones.map((row: any) => ({
+        milestone: row.milestone,
+        count: Number(row.count),
+        avgBalance: Number(row.avg_balance),
+        percentage: total > 0 ? ((Number(row.count) / total) * 100).toFixed(1) : '0',
+      })),
+      retentionByDay: retentionByDay.map((row: any) => ({
+        day: Number(row.day),
+        usersAtDay: Number(row.users_at_day),
+        retentionRate: total > 0 ? ((Number(row.users_at_day) / total) * 100).toFixed(1) : '0',
+      })),
+      totalUsers: total,
+    };
+  } catch (error) {
+    console.error("[TubeTools DB] Erro ao buscar dados de jornada:", error);
+    return null;
+  }
+}

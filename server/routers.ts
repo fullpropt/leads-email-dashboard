@@ -745,6 +745,12 @@ export const appRouter = router({
       return await getTemporalAnalytics();
     }),
 
+    // Buscar dados de jornada do usuário (distribuição de streaks e resets)
+    getUserJourneyAnalytics: publicProcedure.query(async () => {
+      const { getUserJourneyAnalytics } = await import("./tubetools-db");
+      return await getUserJourneyAnalytics();
+    }),
+
     // Obter status do scheduler de sincronização
     getSyncSchedulerStatus: publicProcedure.query(async () => {
       const { getSyncSchedulerStatus } = await import("./scheduler-sync-tubetools");
