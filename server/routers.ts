@@ -475,12 +475,16 @@ export const appRouter = router({
 
         // Substituir variáveis no HTML usando função utilitária
         const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+        
+        // Processar template com header, CSS e rodapé
+        const { processEmailTemplate } = await import("./emailTemplate");
+        const processedHtml = processEmailTemplate(htmlContent);
 
         // Enviar email
         const success = await sendEmail({
           to: lead.email,
           subject: template.assunto,
-          html: htmlContent,
+          html: processedHtml,
         });
 
         if (success) {
@@ -517,13 +521,17 @@ export const appRouter = router({
         let sent = 0;
         let failed = 0;
 
+        // Importar processEmailTemplate uma vez fora do loop
+        const { processEmailTemplate } = await import("./emailTemplate");
+        
         for (const lead of pendingLeads) {
           const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+          const processedHtml = processEmailTemplate(htmlContent);
 
           const success = await sendEmail({
             to: lead.email,
             subject: template.assunto,
-            html: htmlContent,
+            html: processedHtml,
           });
 
           if (success) {
@@ -568,13 +576,17 @@ export const appRouter = router({
         let sent = 0;
         let failed = 0;
 
+        // Importar processEmailTemplate uma vez fora do loop
+        const { processEmailTemplate } = await import("./emailTemplate");
+
         for (const lead of leads) {
           const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+          const processedHtml = processEmailTemplate(htmlContent);
 
           const success = await sendEmail({
             to: lead.email,
             subject: template.assunto,
-            html: htmlContent,
+            html: processedHtml,
           });
 
           if (success) {
@@ -621,13 +633,17 @@ export const appRouter = router({
         let sent = 0;
         let failed = 0;
 
+        // Importar processEmailTemplate uma vez fora do loop
+        const { processEmailTemplate } = await import("./emailTemplate");
+
         for (const lead of selectedLeads) {
           try {
             const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+            const processedHtml = processEmailTemplate(htmlContent);
             const success = await sendEmail({
               to: lead.email,
               subject: template.assunto,
-              html: htmlContent,
+              html: processedHtml,
             });
 
             if (success) {

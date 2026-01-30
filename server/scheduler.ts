@@ -113,12 +113,16 @@ async function processDelayedSends() {
         // Substituir variáveis no template (HTML e assunto)
         const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
         const processedSubject = replaceTemplateVariables(template.assunto, lead);
+        
+        // Processar template com header, CSS e rodapé
+        const { processEmailTemplate } = await import("./emailTemplate");
+        const processedHtml = processEmailTemplate(htmlContent);
 
         // Enviar email
         const emailSent = await sendEmail({
           to: lead.email,
           subject: processedSubject,
-          html: htmlContent,
+          html: processedHtml,
         });
 
         if (emailSent) {

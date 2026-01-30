@@ -86,10 +86,14 @@ export async function processScheduledEmails() {
               const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
               const processedSubject = replaceTemplateVariables(template.assunto, lead);
               
+              // Processar template com header, CSS e rodapé
+              const { processEmailTemplate } = await import("./emailTemplate");
+              const processedHtml = processEmailTemplate(htmlContent);
+              
               const emailSent = await sendEmail({
                 to: lead.email,
                 subject: processedSubject,
-                html: htmlContent,
+                html: processedHtml,
               });
               
               if (emailSent) {
