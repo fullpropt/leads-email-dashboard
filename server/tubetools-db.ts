@@ -180,6 +180,15 @@ export async function getTubetoolsAnalytics() {
       FROM votes
     `;
 
+    // Buscar estatísticas de resets por inatividade
+    const [resetStats] = await sql`
+      SELECT 
+        COUNT(*) as total_resets,
+        COUNT(DISTINCT user_id) as users_with_resets
+      FROM transactions
+      WHERE description LIKE '%Balance reset due to inactivity%'
+    `;
+
     // Buscar distribuição de usuários por data de criação (últimos 30 dias)
     const userGrowth = await sql`
       SELECT 
@@ -206,6 +215,8 @@ export async function getTubetoolsAnalytics() {
         avgVotingDays: Number(stats.avg_voting_days),
         recentUsers: Number(recentUsers[0].count),
         activeUsers: Number(activeUsers[0].count),
+        totalResets: Number(resetStats.total_resets),
+        usersWithResets: Number(resetStats.users_with_resets),
       },
       votes: {
         totalVotes: Number(votesStats.total_votes),
