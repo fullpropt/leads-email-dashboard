@@ -86,9 +86,13 @@ export async function processScheduledEmails() {
               const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
               const processedSubject = replaceTemplateVariables(template.assunto, lead);
               
-              // Processar template com header, CSS e rodapé
+              // Gerar/obter token de unsubscribe para o lead
+              const { generateUnsubscribeToken } = await import("./db");
+              const unsubscribeToken = await generateUnsubscribeToken(lead.id);
+              
+              // Processar template com header, CSS e rodapé (incluindo link de unsubscribe)
               const { processEmailTemplate } = await import("./emailTemplate");
-              const processedHtml = processEmailTemplate(htmlContent);
+              const processedHtml = processEmailTemplate(htmlContent, unsubscribeToken || undefined);
               
               const emailSent = await sendEmail({
                 to: lead.email,

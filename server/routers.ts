@@ -476,9 +476,13 @@ export const appRouter = router({
         // Substituir variáveis no HTML usando função utilitária
         const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
         
-        // Processar template com header, CSS e rodapé
+        // Gerar/obter token de unsubscribe para o lead
+        const { generateUnsubscribeToken } = await import("./db");
+        const unsubscribeToken = await generateUnsubscribeToken(lead.id);
+        
+        // Processar template com header, CSS e rodapé (incluindo link de unsubscribe)
         const { processEmailTemplate } = await import("./emailTemplate");
-        const processedHtml = processEmailTemplate(htmlContent);
+        const processedHtml = processEmailTemplate(htmlContent, unsubscribeToken || undefined);
 
         // Enviar email
         const success = await sendEmail({
@@ -521,12 +525,14 @@ export const appRouter = router({
         let sent = 0;
         let failed = 0;
 
-        // Importar processEmailTemplate uma vez fora do loop
+        // Importar processEmailTemplate e generateUnsubscribeToken uma vez fora do loop
         const { processEmailTemplate } = await import("./emailTemplate");
+        const { generateUnsubscribeToken } = await import("./db");
         
         for (const lead of pendingLeads) {
           const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
-          const processedHtml = processEmailTemplate(htmlContent);
+          const unsubscribeToken = await generateUnsubscribeToken(lead.id);
+          const processedHtml = processEmailTemplate(htmlContent, unsubscribeToken || undefined);
 
           const success = await sendEmail({
             to: lead.email,
@@ -576,12 +582,14 @@ export const appRouter = router({
         let sent = 0;
         let failed = 0;
 
-        // Importar processEmailTemplate uma vez fora do loop
+        // Importar processEmailTemplate e generateUnsubscribeToken uma vez fora do loop
         const { processEmailTemplate } = await import("./emailTemplate");
+        const { generateUnsubscribeToken } = await import("./db");
 
         for (const lead of leads) {
           const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
-          const processedHtml = processEmailTemplate(htmlContent);
+          const unsubscribeToken = await generateUnsubscribeToken(lead.id);
+          const processedHtml = processEmailTemplate(htmlContent, unsubscribeToken || undefined);
 
           const success = await sendEmail({
             to: lead.email,
@@ -633,13 +641,15 @@ export const appRouter = router({
         let sent = 0;
         let failed = 0;
 
-        // Importar processEmailTemplate uma vez fora do loop
+        // Importar processEmailTemplate e generateUnsubscribeToken uma vez fora do loop
         const { processEmailTemplate } = await import("./emailTemplate");
+        const { generateUnsubscribeToken } = await import("./db");
 
         for (const lead of selectedLeads) {
           try {
             const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
-            const processedHtml = processEmailTemplate(htmlContent);
+            const unsubscribeToken = await generateUnsubscribeToken(lead.id);
+            const processedHtml = processEmailTemplate(htmlContent, unsubscribeToken || undefined);
             const success = await sendEmail({
               to: lead.email,
               subject: template.assunto,
