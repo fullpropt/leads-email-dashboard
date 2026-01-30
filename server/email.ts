@@ -1,131 +1,92 @@
-import { Resend } from 'resend';
+import sgMail from "@sendgrid/mail";
 
-// Resend client
-const resendApiKey = process.env.RESEND_API_KEY;
-const resendFromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@tubetoolsup.uk';
-const resendFromName = process.env.RESEND_FROM_NAME || 'TubeTools';
+// Configurar SendGrid
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || "";
+const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || "noreply@tubetoolsup.uk";
+const FROM_NAME = process.env.SENDGRID_FROM_NAME || "TubeTools";
 
-let resendClient: Resend | null = null;
-
-if (resendApiKey) {
-  resendClient = new Resend(resendApiKey);
-  console.log('[Resend] ✅ Cliente inicializado');
+// Inicializar SendGrid
+if (SENDGRID_API_KEY) {
+  sgMail.setApiKey(SENDGRID_API_KEY);
+  console.log("[Email] SendGrid configurado com sucesso");
 } else {
-  console.warn('[Resend] ⚠️ RESEND_API_KEY não configurada');
+  console.warn("[Email] ⚠️ SENDGRID_API_KEY não configurada");
 }
 
-interface EmailOptions {
+interface SendEmailParams {
   to: string;
   subject: string;
   html: string;
-  text?: string;
+  from?: string;
+  fromName?: string;
 }
 
 /**
- * Send email using Resend
+ * Envia um email usando SendGrid
  */
-async function sendWithResend(options: EmailOptions): Promise<boolean> {
-  if (!resendClient) {
-    console.error('[Resend] ❌ Cliente não inicializado');
+export async function sendEmail({
+  to,
+  subject,
+  html,
+  from = FROM_EMAIL,
+  fromName = FROM_NAME,
+}: SendEmailParams): Promise<boolean> {
+  if (!SENDGRID_API_KEY) {
+    console.error("[Email] ❌ SENDGRID_API_KEY não configurada");
     return false;
   }
 
   try {
-    console.log(`[Resend] 📤 Enviando email para: ${options.to}`);
-    console.log(`[Resend] 📧 Assunto: ${options.subject}`);
-    console.log(`[Resend] 👤 De: ${resendFromEmail}`);
+    console.log(`[Email] 📤 Enviando email para ${to}...`);
+    console.log(`[Email] Assunto: ${subject}`);
+    console.log(`[Email] De: ${fromName} <${from}>`);
 
-    const { data, error } = await resendClient.emails.send({
-      from: `${resendFromName} <${resendFromEmail}>`,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-    });
+    const msg = {
+      to: to,
+      from: {
+        email: from,
+        name: fromName,
+      },
+      subject: subject,
+      html: html,
+      // Adicionar texto alternativo para clientes que não suportam HTML
+      text: html.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim(),
+    };
 
-    if (error) {
-      console.error('[Resend] ❌ Erro ao enviar email');
-      console.error('[Resend] Erro:', error);
-      return false;
-    }
-
-    console.log(`[Resend] ✅ Email enviado com sucesso! ID: ${data?.id}`);
+    const response = await sgMail.send(msg);
+    
+    console.log(`[Email] ✅ Email enviado com sucesso!`);
+    console.log(`[Email] Status: ${response[0].statusCode}`);
+    
     return true;
   } catch (error: any) {
-    console.error('[Resend] ❌ Erro ao enviar email');
-    console.error('[Resend] Erro:', error.message || error);
+    console.error("[Email] ❌ Erro ao enviar email:", error);
+    
+    // Log detalhado do erro do SendGrid
+    if (error.response) {
+      console.error("[Email] Status:", error.response.statusCode);
+      console.error("[Email] Body:", JSON.stringify(error.response.body, null, 2));
+    }
+    
     return false;
   }
 }
 
 /**
- * Main function to send email
+ * Verifica se o serviço de email está configurado
  */
-export async function sendEmail(options: EmailOptions): Promise<boolean> {
-  console.log(`[Email] Iniciando envio para: ${options.to}`);
-  
-  // Try Resend
-  const success = await sendWithResend(options);
-  
-  if (success) {
-    console.log(`[Email] ✅ Email enviado com sucesso para: ${options.to}`);
-  } else {
-    console.error(`[Email] ❌ Falha ao enviar email para: ${options.to}`);
-  }
-  
-  return success;
+export function isEmailConfigured(): boolean {
+  return !!SENDGRID_API_KEY;
 }
 
 /**
- * Send welcome email to new user
+ * Retorna informações sobre a configuração atual
  */
-export async function sendWelcomeEmail(to: string, name: string): Promise<boolean> {
-  const subject = 'Welcome to TubeTools!';
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h1 style="color: #333;">Welcome to TubeTools!</h1>
-      <p>Hi ${name},</p>
-      <p>Thank you for joining TubeTools. We're excited to have you on board!</p>
-      <p>Get started by exploring our platform and discovering all the features we have to offer.</p>
-      <br>
-      <p>Best regards,</p>
-      <p>The TubeTools Team</p>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-      <p style="font-size: 12px; color: #666;">Watch. Rate. Participate.</p>
-    </div>
-  `;
-  
-  return sendEmail({ to, subject, html });
-}
-
-/**
- * Send password reset email
- */
-export async function sendPasswordResetEmail(to: string, resetLink: string): Promise<boolean> {
-  const subject = 'Reset Your Password';
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h1 style="color: #333;">Password Reset Request</h1>
-      <p>You requested to reset your password. Click the button below to proceed:</p>
-      <p style="text-align: center; margin: 30px 0;">
-        <a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">Reset Password</a>
-      </p>
-      <p>If you didn't request this, you can safely ignore this email.</p>
-      <p>This link will expire in 24 hours.</p>
-      <br>
-      <p>Best regards,</p>
-      <p>The TubeTools Team</p>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-      <p style="font-size: 12px; color: #666;">Watch. Rate. Participate.</p>
-    </div>
-  `;
-  
-  return sendEmail({ to, subject, html });
-}
-
-/**
- * Check if email service is configured
- */
-export function isEmailServiceConfigured(): boolean {
-  return !!resendClient;
+export function getEmailConfig() {
+  return {
+    provider: "SendGrid",
+    configured: !!SENDGRID_API_KEY,
+    fromEmail: FROM_EMAIL,
+    fromName: FROM_NAME,
+  };
 }
