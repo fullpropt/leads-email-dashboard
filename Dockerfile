@@ -32,7 +32,7 @@ RUN npm install -g pnpm@10.4.1
 WORKDIR /app
 
 # Copy package files and patches
-COPY package.json pnpm-lock.yaml ./
+COPY package.json ./
 COPY patches ./patches
 
 # Install ALL dependencies (including devDependencies needed for migrations)
