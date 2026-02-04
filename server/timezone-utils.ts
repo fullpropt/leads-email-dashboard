@@ -305,14 +305,15 @@ export function getCurrentTimeInTimezone(timezone: string): string {
 
 
 /**
- * Calcula a data/hora de envio considerando delay em diferentes unidades (horas, dias, semanas)
+ * Calcula a data/hora de envio considerando delay em diferentes unidades (minutos, horas, dias, semanas)
  * 
  * COMPORTAMENTO:
+ * - Se delayUnit = "minutes": adiciona minutos à data atual, IGNORA o sendTime
  * - Se delayUnit = "hours": adiciona horas à data atual, IGNORA o sendTime
  * - Se delayUnit = "days" ou "weeks": usa o sendTime como horário de envio no timezone do lead
  * 
  * @param delayValue - Valor do delay (número)
- * @param delayUnit - Unidade do delay ("hours", "days", "weeks")
+ * @param delayUnit - Unidade do delay ("minutes", "hours", "days", "weeks")
  * @param sendTime - Horário de envio no formato "HH:MM" (usado apenas para dias/semanas)
  * @param leadTimezone - Fuso horário do lead (IANA format)
  * @returns Data/hora UTC para o envio
@@ -325,6 +326,19 @@ export function calculateSendTimeWithUnit(
 ): Date {
   try {
     const now = new Date();
+    
+    // Se a unidade é MINUTOS, simplesmente adiciona os minutos à data atual
+    // Neste caso, o sendTime é IGNORADO pois o delay já define o momento exato
+    if (delayUnit === "minutes") {
+      const sendDate = new Date(now.getTime() + delayValue * 60 * 1000);
+      
+      console.log(`[Timezone] Horário de envio calculado (MINUTOS):`);
+      console.log(`  - Delay: ${delayValue} minuto(s)`);
+      console.log(`  - Data/hora UTC resultante: ${sendDate.toISOString()}`);
+      console.log(`  - Horário local (${leadTimezone}): ${sendDate.toLocaleString("pt-BR", { timeZone: leadTimezone })}`);
+      
+      return sendDate;
+    }
     
     // Se a unidade é HORAS, simplesmente adiciona as horas à data atual
     // Neste caso, o sendTime é IGNORADO pois o delay já define o momento exato
@@ -389,10 +403,9 @@ export function calculateSendTimeWithUnit(
 
   } catch (error) {
     console.error("[Timezone] Erro ao calcular horário de envio:", error);
-    // Fallback: retornar data atual + delay em horas (assume horas como padrão seguro)
+    // Fallback: retornar data atual + delay em minutos (assume minutos como padrão seguro)
     const fallbackDate = new Date();
-    fallbackDate.setTime(fallbackDate.getTime() + delayValue * 60 * 60 * 1000);
+    fallbackDate.setTime(fallbackDate.getTime() + delayValue * 60 * 1000);
     return fallbackDate;
   }
 }
-

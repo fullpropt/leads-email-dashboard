@@ -19,7 +19,7 @@ interface FunnelConfig {
 
 interface FunnelTemplateConfig {
   delayValue: number;
-  delayUnit: "hours" | "days" | "weeks";
+  delayUnit: "minutes" | "hours" | "days" | "weeks";
   sendTime?: string;
 }
 
@@ -47,7 +47,7 @@ export function CreateItemModal({
 
   // Para templates dentro de funil
   const [delayValue, setDelayValue] = useState(0);
-  const [delayUnit, setDelayUnit] = useState<"hours" | "days" | "weeks">("days");
+  const [delayUnit, setDelayUnit] = useState<"minutes" | "hours" | "days" | "weeks">("days");
   const [sendTime, setSendTime] = useState("");
 
   const resetForm = () => {
@@ -129,11 +129,12 @@ export function CreateItemModal({
                 </div>
                 <div className="flex-1">
                   <Label className="text-xs">Unidade</Label>
-                  <Select value={delayUnit} onValueChange={(v) => setDelayUnit(v as "hours" | "days" | "weeks")}>
+                  <Select value={delayUnit} onValueChange={(v) => setDelayUnit(v as "minutes" | "hours" | "days" | "weeks")}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="minutes">Minutos</SelectItem>
                       <SelectItem value="hours">Horas</SelectItem>
                       <SelectItem value="days">Dias</SelectItem>
                       <SelectItem value="weeks">Semanas</SelectItem>
@@ -147,7 +148,7 @@ export function CreateItemModal({
                     value={sendTime}
                     onChange={(e) => setSendTime(e.target.value)}
                     placeholder="--:--"
-                    disabled={delayUnit === "hours"}
+                    disabled={delayUnit === "hours" || delayUnit === "minutes"}
                   />
                 </div>
               </div>
