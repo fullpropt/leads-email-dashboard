@@ -847,7 +847,7 @@ export const appRouter = router({
       .input(z.object({
         funnelId: z.number(),
         delayValue: z.number(),
-        delayUnit: z.enum(["hours", "days", "weeks"]),
+        delayUnit: z.enum(["minutes", "hours", "days", "weeks"]),
         sendTime: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
@@ -864,7 +864,7 @@ export const appRouter = router({
           assunto: z.string().optional(),
           htmlContent: z.string().optional(),
           delayValue: z.number().optional(),
-          delayUnit: z.enum(["hours", "days", "weeks"]).optional(),
+          delayUnit: z.enum(["minutes", "hours", "days", "weeks"]).optional(),
           sendTime: z.string().optional(),
         }),
       }))
