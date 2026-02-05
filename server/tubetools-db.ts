@@ -654,10 +654,11 @@ export async function getUserJourneyAnalytics() {
     }
 
     // Distribuição de streak atual dos usuários (quantos estão em cada dia)
+    // Agrupando tudo que for acima de 50 em "50+"
     const streakDistribution = await sql`
       SELECT 
         CASE 
-          WHEN voting_days_count >= 20 THEN 20
+          WHEN voting_days_count >= 50 THEN 50
           ELSE voting_days_count
         END as days,
         COUNT(*) as count
@@ -665,7 +666,7 @@ export async function getUserJourneyAnalytics() {
       WHERE voting_days_count > 0
       GROUP BY 
         CASE 
-          WHEN voting_days_count >= 20 THEN 20
+          WHEN voting_days_count >= 50 THEN 50
           ELSE voting_days_count
         END
       ORDER BY days ASC
@@ -745,7 +746,7 @@ export async function getUserJourneyAnalytics() {
         voting_days_count as day,
         COUNT(*) as users_at_day
       FROM users
-      WHERE voting_days_count > 0 AND voting_days_count <= 25
+      WHERE voting_days_count > 0 AND voting_days_count <= 50
       GROUP BY voting_days_count
       ORDER BY voting_days_count ASC
     `;
@@ -755,7 +756,7 @@ export async function getUserJourneyAnalytics() {
     return {
       streakDistribution: streakDistribution.map((row: any) => ({
         days: Number(row.days),
-        label: Number(row.days) === 20 ? '20+' : String(row.days),
+        label: Number(row.days) === 50 ? '50+' : String(row.days),
         count: Number(row.count),
       })),
       resetDistribution: resetDistribution.map((row: any) => ({

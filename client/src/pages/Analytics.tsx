@@ -589,8 +589,8 @@ export default function Analytics() {
                           <TableHead className="w-[200px]">Progresso</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
-                        {journeyData.retentionByDay?.slice(0, 20).map((row: any) => (
+                    <TableBody>
+                    {journeyData.retentionByDay?.slice(0, 50).map((row: any) => (
                           <TableRow key={row.day}>
                             <TableCell className="font-medium">Dia {row.day}</TableCell>
                             <TableCell className="text-right">{row.usersAtDay}</TableCell>
