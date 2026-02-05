@@ -137,7 +137,7 @@ export default function FunnelDetail() {
     setLocation("/email-templates");
   };
 
-  const handleCreateFunnelTemplate = (config: { delayValue: number; delayUnit: "hours" | "days" | "weeks"; sendTime?: string }) => {
+  const handleCreateFunnelTemplate = (config: { delayValue: number; delayUnit: "minutes" | "hours" | "days" | "weeks"; sendTime?: string }) => {
     createFunnelTemplate.mutate({
       funnelId,
       delayValue: config.delayValue,
@@ -165,7 +165,7 @@ export default function FunnelDetail() {
         assunto: template.assunto,
         htmlContent: template.htmlContent,
         delayValue: template.delayValue,
-        delayUnit: template.delayUnit as "hours" | "days" | "weeks",
+        delayUnit: template.delayUnit as "minutes" | "hours" | "days" | "weeks",
         sendTime: template.sendTime || undefined,
       },
     });
@@ -377,6 +377,7 @@ export default function FunnelDetail() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
+                                <SelectItem value="minutes">Minutos</SelectItem>
                                 <SelectItem value="hours">Horas</SelectItem>
                                 <SelectItem value="days">Dias</SelectItem>
                                 <SelectItem value="weeks">Semanas</SelectItem>
@@ -391,7 +392,7 @@ export default function FunnelDetail() {
                               value={template.sendTime || ""}
                               onChange={(e) => updateTemplateField(template.id, "sendTime", e.target.value || null)}
                               className="text-sm h-9"
-                              disabled={template.delayUnit === "hours"}
+                              disabled={template.delayUnit === "hours" || template.delayUnit === "minutes"}
                             />
                           </div>
                         </div>
@@ -399,9 +400,9 @@ export default function FunnelDetail() {
                           {template.delayValue === 0 && index === 0 ? (
                             "Enviado imediatamente quando o lead entra no funil"
                           ) : index === 0 ? (
-                            `Enviar após ${template.delayValue} ${template.delayUnit === "hours" ? "hora(s)" : template.delayUnit === "days" ? "dia(s)" : "semana(s)"} do lead entrar no funil${template.sendTime && template.delayUnit !== "hours" ? ` às ${template.sendTime} (UTC)` : ""}`
+                            `Enviar após ${template.delayValue} ${template.delayUnit === "minutes" ? "minuto(s)" : template.delayUnit === "hours" ? "hora(s)" : template.delayUnit === "days" ? "dia(s)" : "semana(s)"} do lead entrar no funil${template.sendTime && template.delayUnit !== "hours" && template.delayUnit !== "minutes" ? ` às ${template.sendTime} (UTC)` : ""}`
                           ) : (
-                            `Enviar após ${template.delayValue} ${template.delayUnit === "hours" ? "hora(s)" : template.delayUnit === "days" ? "dia(s)" : "semana(s)"}${template.sendTime && template.delayUnit !== "hours" ? ` às ${template.sendTime} (UTC)` : ""} do template anterior`
+                            `Enviar após ${template.delayValue} ${template.delayUnit === "minutes" ? "minuto(s)" : template.delayUnit === "hours" ? "hora(s)" : template.delayUnit === "days" ? "dia(s)" : "semana(s)"}${template.sendTime && template.delayUnit !== "hours" && template.delayUnit !== "minutes" ? ` às ${template.sendTime} (UTC)` : ""} do template anterior`
                           )}
                         </p>
                       </div>

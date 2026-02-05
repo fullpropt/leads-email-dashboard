@@ -101,7 +101,13 @@ export default function Analytics() {
 
   const handleRefresh = async () => {
     toast.info("Atualizando dados...");
-    await Promise.all([refetchAccessStats(), refetchAnalytics(), refetchTemporal(), refetchChargebackStats(), refetchJourney]);
+    await Promise.all([
+      refetchAccessStats(),
+      refetchAnalytics(),
+      refetchTemporal(),
+      refetchChargebackStats(),
+      refetchJourney(),
+    ]);
     toast.success("Dados atualizados!");
   };
 
@@ -466,124 +472,150 @@ export default function Analytics() {
 
         {/* Aba 3: Jornada do Usuário */}
         <TabsContent value="journey" className="space-y-4">
-          {/* Cards de Milestones */}
-          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
-            {journeyData?.milestones?.map((m: any) => (
-              <Card key={m.milestone}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">{m.milestone}</CardTitle>
+          {(!journeyData ||
+            (!journeyData.milestones?.length &&
+              !journeyData.streakDistribution?.length &&
+              !journeyData.resetDistribution?.length &&
+              !journeyData.retentionByDay?.length)) ? (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-muted-foreground" />
+                  <CardTitle>Dados de jornada indisponíveis</CardTitle>
+                </div>
+                <CardDescription>
+                  Não foi possível carregar os dados de jornada do usuário. Verifique a conexão com o banco TubeTools ou tente novamente mais tarde.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="outline" size="sm" onClick={handleRefresh}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Tentar novamente
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Cards de Milestones */}
+              <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+                {journeyData.milestones?.map((m: any) => (
+                  <Card key={m.milestone}>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium">{m.milestone}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{m.count}</div>
+                      <p className="text-xs text-muted-foreground">
+                        {m.percentage}% dos usuários
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Média: ${m.avgBalance}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Distribuição de Streak Atual */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-green-600" />
+                      Onde os Usuários Estão (Dias Consecutivos)
+                    </CardTitle>
+                    <CardDescription>Quantos usuários estão em cada dia da jornada</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <BarChart data={journeyData.streakDistribution || []}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="label" label={{ value: 'Dias', position: 'bottom', offset: -5 }} />
+                        <YAxis label={{ value: 'Usuários', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip 
+                          formatter={(value: any) => [value, 'Usuários']}
+                          labelFormatter={(label) => `Dia ${label}`}
+                        />
+                        <Bar dataKey="count" fill="#22c55e" name="Usuários" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* Onde os Resets Acontecem */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <RefreshCw className="h-5 w-5 text-orange-600" />
+                      Onde os Resets Acontecem
+                    </CardTitle>
+                    <CardDescription>Após quantos dias de inatividade os usuários perdem o saldo</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={350}>
+                      <BarChart data={journeyData.resetDistribution || []}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="label" label={{ value: 'Dias Inativos', position: 'bottom', offset: -5 }} />
+                        <YAxis label={{ value: 'Resets', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip 
+                          formatter={(value: any, name: string) => {
+                            if (name === 'count') return [value, 'Resets'];
+                            if (name === 'totalLost') return [`$${Number(value).toFixed(2)}`, 'Total Perdido'];
+                            return [value, name];
+                          }}
+                          labelFormatter={(label) => `${label} dia(s) sem votar`}
+                        />
+                        <Bar dataKey="count" fill="#f97316" name="count" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Tabela de Retenção */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Taxa de Retenção por Dia</CardTitle>
+                  <CardDescription>Porcentagem de usuários que chegaram em cada dia consecutivo</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{m.count}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {m.percentage}% dos usuários
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Média: ${m.avgBalance}
-                  </p>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Dia</TableHead>
+                          <TableHead className="text-right">Usuários</TableHead>
+                          <TableHead className="text-right">Taxa de Retenção</TableHead>
+                          <TableHead className="w-[200px]">Progresso</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {journeyData.retentionByDay?.slice(0, 20).map((row: any) => (
+                          <TableRow key={row.day}>
+                            <TableCell className="font-medium">Dia {row.day}</TableCell>
+                            <TableCell className="text-right">{row.usersAtDay}</TableCell>
+                            <TableCell className="text-right">
+                              <Badge variant={parseFloat(row.retentionRate) >= 10 ? "default" : "secondary"}>
+                                {row.retentionRate}%
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="w-full bg-muted rounded-full h-2">
+                                <div 
+                                  className="bg-green-500 h-2 rounded-full transition-all" 
+                                  style={{ width: `${Math.min(parseFloat(row.retentionRate), 100)}%` }} 
+                                />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Distribuição de Streak Atual */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-green-600" />
-                  Onde os Usuários Estão (Dias Consecutivos)
-                </CardTitle>
-                <CardDescription>Quantos usuários estão em cada dia da jornada</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={journeyData?.streakDistribution || []}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" label={{ value: 'Dias', position: 'bottom', offset: -5 }} />
-                    <YAxis label={{ value: 'Usuários', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip 
-                      formatter={(value: any) => [value, 'Usuários']}
-                      labelFormatter={(label) => `Dia ${label}`}
-                    />
-                    <Bar dataKey="count" fill="#22c55e" name="Usuários" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {/* Onde os Resets Acontecem */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <RefreshCw className="h-5 w-5 text-orange-600" />
-                  Onde os Resets Acontecem
-                </CardTitle>
-                <CardDescription>Após quantos dias de inatividade os usuários perdem o saldo</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={journeyData?.resetDistribution || []}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" label={{ value: 'Dias Inativos', position: 'bottom', offset: -5 }} />
-                    <YAxis label={{ value: 'Resets', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip 
-                      formatter={(value: any, name: string) => {
-                        if (name === 'count') return [value, 'Resets'];
-                        if (name === 'totalLost') return [`$${Number(value).toFixed(2)}`, 'Total Perdido'];
-                        return [value, name];
-                      }}
-                      labelFormatter={(label) => `${label} dia(s) sem votar`}
-                    />
-                    <Bar dataKey="count" fill="#f97316" name="count" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Tabela de Retenção */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Taxa de Retenção por Dia</CardTitle>
-              <CardDescription>Porcentagem de usuários que chegaram em cada dia consecutivo</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Dia</TableHead>
-                      <TableHead className="text-right">Usuários</TableHead>
-                      <TableHead className="text-right">Taxa de Retenção</TableHead>
-                      <TableHead className="w-[200px]">Progresso</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {journeyData?.retentionByDay?.slice(0, 20).map((row: any) => (
-                      <TableRow key={row.day}>
-                        <TableCell className="font-medium">Dia {row.day}</TableCell>
-                        <TableCell className="text-right">{row.usersAtDay}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant={parseFloat(row.retentionRate) >= 10 ? "default" : "secondary"}>
-                            {row.retentionRate}%
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="w-full bg-muted rounded-full h-2">
-                            <div 
-                              className="bg-green-500 h-2 rounded-full transition-all" 
-                              style={{ width: `${Math.min(parseFloat(row.retentionRate), 100)}%` }} 
-                            />
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+            </>
+          )}
         </TabsContent>
 
         {/* Aba 4: Resumo Executivo */}
