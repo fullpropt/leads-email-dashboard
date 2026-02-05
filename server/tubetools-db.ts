@@ -703,37 +703,37 @@ export async function getUserJourneyAnalytics() {
     `;
 
     // Usuários que chegaram em cada milestone (1, 5, 10, 15, 20 dias)
+    // Usamos um subselect para poder ordenar pelos buckets sem violar o GROUP BY
     const milestones = await sql`
-      SELECT 
-        CASE 
-          WHEN voting_days_count >= 20 THEN '20+ dias'
-          WHEN voting_days_count >= 15 THEN '15-19 dias'
-          WHEN voting_days_count >= 10 THEN '10-14 dias'
-          WHEN voting_days_count >= 5 THEN '5-9 dias'
-          WHEN voting_days_count >= 1 THEN '1-4 dias'
-          ELSE '0 dias'
-        END as milestone,
-        COUNT(*) as count,
-        ROUND(AVG(balance)::numeric, 2) as avg_balance
-      FROM users
-      GROUP BY 
-        CASE 
-          WHEN voting_days_count >= 20 THEN '20+ dias'
-          WHEN voting_days_count >= 15 THEN '15-19 dias'
-          WHEN voting_days_count >= 10 THEN '10-14 dias'
-          WHEN voting_days_count >= 5 THEN '5-9 dias'
-          WHEN voting_days_count >= 1 THEN '1-4 dias'
-          ELSE '0 dias'
-        END
-      ORDER BY 
-        CASE 
-          WHEN voting_days_count >= 20 THEN 5
-          WHEN voting_days_count >= 15 THEN 4
-          WHEN voting_days_count >= 10 THEN 3
-          WHEN voting_days_count >= 5 THEN 2
-          WHEN voting_days_count >= 1 THEN 1
-          ELSE 0
-        END DESC
+      WITH user_milestones AS (
+        SELECT
+          CASE 
+            WHEN voting_days_count >= 20 THEN '20+ dias'
+            WHEN voting_days_count >= 15 THEN '15-19 dias'
+            WHEN voting_days_count >= 10 THEN '10-14 dias'
+            WHEN voting_days_count >= 5 THEN '5-9 dias'
+            WHEN voting_days_count >= 1 THEN '1-4 dias'
+            ELSE '0 dias'
+          END AS milestone,
+          CASE 
+            WHEN voting_days_count >= 20 THEN 5
+            WHEN voting_days_count >= 15 THEN 4
+            WHEN voting_days_count >= 10 THEN 3
+            WHEN voting_days_count >= 5 THEN 2
+            WHEN voting_days_count >= 1 THEN 1
+            ELSE 0
+          END AS bucket_order,
+          balance
+        FROM users
+      )
+      SELECT
+        milestone,
+        COUNT(*) AS count,
+        ROUND(AVG(balance)::numeric, 2) AS avg_balance,
+        bucket_order
+      FROM user_milestones
+      GROUP BY milestone, bucket_order
+      ORDER BY bucket_order DESC
     `;
 
     // Taxa de retenção por dia (quantos % dos usuários chegaram em cada dia)
