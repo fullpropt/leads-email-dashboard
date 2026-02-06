@@ -148,16 +148,36 @@ export function applyInlineStyles(content: string): string {
 }
 
 /**
+ * Helpers para detectar tipo de linha
+ */
+function isHeading(line: string): boolean {
+  return /^#{1,3}\s/.test(line);
+}
+
+function isBulletList(line: string): boolean {
+  return /^[-*]\s/.test(line);
+}
+
+function isNumberedList(line: string): boolean {
+  return /^\d+[.)]\s*.+$/.test(line);
+}
+
+function isButton(line: string): boolean {
+  return /^\[BUTTON:[^:]+:[^\]]+\]$/i.test(line);
+}
+
+function isEmptyLine(line: string): boolean {
+  return line.trim() === '';
+}
+
+/**
  * Converte texto simples em HTML formatado com estilos TubeTools
- * Detecta automaticamente:
- * - Títulos (linhas que começam com # ou são curtas e seguidas de linha vazia)
- * - Parágrafos
- * - Listas (linhas que começam com - ou *)
- * - Listas numeradas (linhas que começam com 1. 2. 3.)
- * - Links [LINK:texto:url]
- * - Emails [EMAIL:email@exemplo.com]
- * - Botões [BUTTON:texto:url]
- * - URLs automáticas
+ * 
+ * Regras de parsing:
+ * - Linhas vazias separam blocos (parágrafos, listas, etc.)
+ * - Linhas consecutivas de texto normal (sem marcação) são agrupadas em um único parágrafo
+ * - Listas numeradas e com bullet são agrupadas automaticamente, mesmo sem linha vazia antes
+ * - Títulos (#), botões ([BUTTON]) e listas sempre iniciam um novo bloco
  * 
  * @param text - Texto simples ou parcialmente formatado
  */
@@ -174,46 +194,65 @@ export function convertTextToHtml(text: string): string {
     return applyInlineStyles(text);
   }
   
-  // Converter texto simples para HTML
   const lines = text.split('\n');
   let html = '';
   let inList = false;
   let listType = ''; // 'ul' ou 'ol'
+  let paragraphBuffer: string[] = []; // Buffer para agrupar linhas de texto consecutivas
+  
+  // Função para flush do buffer de parágrafo
+  function flushParagraph() {
+    if (paragraphBuffer.length > 0) {
+      const combinedText = paragraphBuffer.join(' ');
+      html += `<p style="${EMAIL_STYLES.p}">${processInlineFormatting(combinedText)}</p>\n`;
+      paragraphBuffer = [];
+    }
+  }
+  
+  // Função para fechar lista aberta
+  function closeList() {
+    if (inList) {
+      html += `</${listType}>\n`;
+      inList = false;
+      listType = '';
+    }
+  }
   
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i].trim();
+    const line = lines[i].trim();
     
+    // Linha vazia — fechar tudo que está aberto
     if (!line) {
-      // Linha vazia - fechar lista se estiver aberta
-      if (inList) {
-        html += `</${listType}>\n`;
-        inList = false;
-        listType = '';
-      }
+      flushParagraph();
+      closeList();
       continue;
     }
     
-    // Detectar títulos com #
+    // === TÍTULOS ===
     if (line.startsWith('### ')) {
-      if (inList) { html += `</${listType}>\n`; inList = false; listType = ''; }
+      flushParagraph();
+      closeList();
       html += `<h3 style="${EMAIL_STYLES.h3}">${processInlineFormatting(line.substring(4))}</h3>\n`;
       continue;
     }
     if (line.startsWith('## ')) {
-      if (inList) { html += `</${listType}>\n`; inList = false; listType = ''; }
+      flushParagraph();
+      closeList();
       html += `<h2 style="${EMAIL_STYLES.h2}">${processInlineFormatting(line.substring(3))}</h2>\n`;
       continue;
     }
     if (line.startsWith('# ')) {
-      if (inList) { html += `</${listType}>\n`; inList = false; listType = ''; }
+      flushParagraph();
+      closeList();
       html += `<h1 style="${EMAIL_STYLES.h1}">${processInlineFormatting(line.substring(2))}</h1>\n`;
       continue;
     }
     
-    // Detectar botões [BUTTON:texto:url]
+    // === BOTÕES ===
     const buttonMatch = line.match(/\[BUTTON:([^:]+):([^\]]+)\]/i);
     if (buttonMatch) {
-      if (inList) { html += `</${listType}>\n`; inList = false; listType = ''; }
+      flushParagraph();
+      closeList();
       html += `
         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;">
           <tr>
@@ -227,31 +266,30 @@ export function convertTextToHtml(text: string): string {
       continue;
     }
     
-    // Detectar listas com - ou *
-    if (line.startsWith('- ') || line.startsWith('* ')) {
-      // Se estava em uma lista OL, fechar antes de abrir UL
+    // === LISTA COM BULLET (- ou *) ===
+    if (isBulletList(line)) {
+      flushParagraph();
+      // Se estava em OL, fechar antes
       if (inList && listType !== 'ul') {
-        html += `</${listType}>\n`;
-        inList = false;
-        listType = '';
+        closeList();
       }
       if (!inList) {
         listType = 'ul';
         html += '<ul style="margin: 0 0 25px 20px; padding: 0;">\n';
         inList = true;
       }
-      html += `<li style="margin-bottom: 10px; color: #333333; font-size: 16px; line-height: 1.6;">${processInlineFormatting(line.substring(2))}</li>\n`;
+      const content = line.replace(/^[-*]\s+/, '');
+      html += `<li style="margin-bottom: 10px; color: #333333; font-size: 16px; line-height: 1.6;">${processInlineFormatting(content)}</li>\n`;
       continue;
     }
     
-    // Detectar listas numeradas (aceita "1." "1. " "1) " etc.)
+    // === LISTA NUMERADA ===
     const numberedMatch = line.match(/^(\d+)[.)]\s*(.+)$/);
     if (numberedMatch) {
-      // Se estava em uma lista UL, fechar antes de abrir OL
+      flushParagraph();
+      // Se estava em UL, fechar antes
       if (inList && listType !== 'ol') {
-        html += `</${listType}>\n`;
-        inList = false;
-        listType = '';
+        closeList();
       }
       if (!inList) {
         listType = 'ol';
@@ -262,24 +300,17 @@ export function convertTextToHtml(text: string): string {
       continue;
     }
     
-    // Fechar lista se não é item de lista
-    if (inList) {
-      html += `</${listType}>\n`;
-      inList = false;
-      listType = '';
-    }
+    // === TEXTO NORMAL ===
+    // Se estava em uma lista, fechar antes de iniciar texto
+    closeList();
     
-    // Processar formatação inline e criar parágrafo
-    line = processInlineFormatting(line);
-    
-    // Parágrafo normal
-    html += `<p style="${EMAIL_STYLES.p}">${line}</p>\n`;
+    // Adicionar ao buffer de parágrafo (linhas consecutivas são agrupadas)
+    paragraphBuffer.push(line);
   }
   
-  // Fechar lista se ainda estiver aberta
-  if (inList) {
-    html += `</${listType}>\n`;
-  }
+  // Flush final
+  flushParagraph();
+  closeList();
   
   return html;
 }
@@ -288,7 +319,6 @@ export function convertTextToHtml(text: string): string {
  * Processa formatação inline em uma linha de texto:
  * - [LINK:texto:url] → link vermelho
  * - [EMAIL:email] → link mailto vermelho
- * - [BUTTON:texto:url] inline → botão (tratado separadamente)
  * - **texto** → negrito
  * - *texto* → itálico
  * - URLs automáticas → links vermelhos

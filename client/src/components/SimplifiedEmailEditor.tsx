@@ -29,6 +29,9 @@ const FORMATTING_GUIDE = `
 • Use [BUTTON:Texto do Botão:https://url.com] para criar um botão
 • Use [LINK:Texto do Link:https://url.com] para criar um link
 • Use [EMAIL:exemplo@email.com] para criar um link de email
+• Use uma linha vazia para separar parágrafos
+
+**Importante:** Linhas consecutivas sem linha vazia entre elas serão agrupadas no mesmo parágrafo.
 
 **Variáveis disponíveis:**
 • {{nome}} - Nome do lead
