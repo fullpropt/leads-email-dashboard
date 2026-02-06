@@ -919,6 +919,138 @@ export const appRouter = router({
       }),
   }),
 
+  // ==================== ROUTER DE CONFIGURAÇÃO DE ENVIO (RATE LIMITING) ====================
+  sendingConfig: router({
+    get: publicProcedure.query(async () => {
+      const { getDb } = await import("./db");
+      const { sendingConfig } = await import("../drizzle/schema_postgresql");
+      const db = await getDb();
+      if (!db) return null;
+      
+      const [config] = await db.select().from(sendingConfig).limit(1);
+      
+      if (!config) {
+        // Criar configuração padrão
+        const { eq } = await import("drizzle-orm");
+        const [newConfig] = await db.insert(sendingConfig).values({
+          dailyLimit: 50,
+          intervalSeconds: 30,
+          enabled: 1,
+          emailsSentToday: 0,
+          lastResetDate: new Date().toISOString().split("T")[0],
+        }).returning();
+        return newConfig;
+      }
+
+      // Resetar contador se mudou o dia
+      const today = new Date().toISOString().split("T")[0];
+      if (config.lastResetDate !== today) {
+        const { eq } = await import("drizzle-orm");
+        const [updatedConfig] = await db
+          .update(sendingConfig)
+          .set({
+            emailsSentToday: 0,
+            lastResetDate: today,
+            atualizadoEm: new Date(),
+          })
+          .where(eq(sendingConfig.id, config.id))
+          .returning();
+        return updatedConfig;
+      }
+
+      return config;
+    }),
+
+    update: publicProcedure
+      .input(z.object({
+        dailyLimit: z.number().min(1).max(10000).optional(),
+        intervalSeconds: z.number().min(5).max(3600).optional(),
+        enabled: z.number().min(0).max(1).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import("./db");
+        const { sendingConfig } = await import("../drizzle/schema_postgresql");
+        const { eq } = await import("drizzle-orm");
+        const db = await getDb();
+        if (!db) return { success: false, message: "Banco de dados não disponível" };
+
+        // Buscar ou criar config
+        let [config] = await db.select().from(sendingConfig).limit(1);
+        if (!config) {
+          [config] = await db.insert(sendingConfig).values({
+            dailyLimit: 50,
+            intervalSeconds: 30,
+            enabled: 1,
+            emailsSentToday: 0,
+            lastResetDate: new Date().toISOString().split("T")[0],
+          }).returning();
+        }
+
+        const updates: Record<string, any> = { atualizadoEm: new Date() };
+        if (input.dailyLimit !== undefined) updates.dailyLimit = input.dailyLimit;
+        if (input.intervalSeconds !== undefined) updates.intervalSeconds = input.intervalSeconds;
+        if (input.enabled !== undefined) updates.enabled = input.enabled;
+
+        const [updated] = await db
+          .update(sendingConfig)
+          .set(updates)
+          .where(eq(sendingConfig.id, config.id))
+          .returning();
+
+        return { success: true, config: updated };
+      }),
+  }),
+
+  // ==================== ROUTER DE ENFILEIRAMENTO DE LEADS ====================
+  enqueue: router({
+    // Contar leads elegíveis para enfileiramento
+    countEligible: publicProcedure
+      .input(z.object({
+        funnelId: z.number(),
+        leadStatus: z.enum(["abandoned", "active", "all"]),
+      }))
+      .query(async ({ input }) => {
+        const { getDb } = await import("./db");
+        const { leads, funnelLeadProgress } = await import("../drizzle/schema_postgresql");
+        const { eq, and, sql } = await import("drizzle-orm");
+        const db = await getDb();
+        if (!db) return { count: 0 };
+
+        const statusFilter = input.leadStatus === "all"
+          ? sql`1=1`
+          : eq(leads.status, input.leadStatus);
+
+        const [result] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(leads)
+          .where(
+            and(
+              statusFilter,
+              eq(leads.unsubscribed, 0),
+              sql`${leads.id} NOT IN (
+                SELECT lead_id FROM funnel_lead_progress 
+                WHERE funnel_id = ${input.funnelId} 
+                AND status IN ('active', 'completed')
+              )`
+            )
+          );
+
+        return { count: result?.count || 0 };
+      }),
+
+    // Enfileirar leads existentes em um funil
+    enqueueLeads: publicProcedure
+      .input(z.object({
+        funnelId: z.number(),
+        leadStatus: z.enum(["abandoned", "active", "all"]),
+        batchSize: z.number().min(1).max(5000),
+      }))
+      .mutation(async ({ input }) => {
+        const { enqueueExistingLeads } = await import("./scheduler-funnel");
+        return enqueueExistingLeads(input.funnelId, input.leadStatus, input.batchSize);
+      }),
+  }),
+
   // Router para sistema de suporte por email
   support: supportRouter,
 

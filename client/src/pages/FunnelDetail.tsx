@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Loader2, Eye, Code, Settings, Trash2, Send, ChevronRight, Mail } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Eye, Code, Settings, Trash2, Send, ChevronRight, Mail, Gauge, Users, Play, Pause, RefreshCw } from "lucide-react";
 import { CreateItemModal } from "@/components/CreateItemModal";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { SimplifiedEmailEditor } from "@/components/SimplifiedEmailEditor";
@@ -59,6 +59,15 @@ export default function FunnelDetail() {
   const [deleteTemplateId, setDeleteTemplateId] = useState<number | null>(null);
   const [deleteTemplateName, setDeleteTemplateName] = useState<string>("");
 
+  // Estados para configuração de envio
+  const [dailyLimit, setDailyLimit] = useState(50);
+  const [intervalSeconds, setIntervalSeconds] = useState(30);
+
+  // Estados para enfileiramento
+  const [enqueueStatus, setEnqueueStatus] = useState<"abandoned" | "active" | "all">("abandoned");
+  const [enqueueBatchSize, setEnqueueBatchSize] = useState(100);
+  const [isEnqueuing, setIsEnqueuing] = useState(false);
+
   // Query para obter funil com templates
   const { data: funnelData, refetch: refetchFunnel, isLoading } = trpc.funnels.getWithTemplates.useQuery(
     { funnelId },
@@ -68,6 +77,15 @@ export default function FunnelDetail() {
   // Query para obter estatísticas de emails enviados do funil
   const { data: funnelStats } = trpc.funnels.getEmailStatsByFunnelId.useQuery(
     { funnelId },
+    { enabled: funnelId > 0 }
+  );
+
+  // Query para configuração de envio
+  const { data: sendingConfigData, refetch: refetchSendingConfig } = trpc.sendingConfig.get.useQuery();
+
+  // Query para contar leads elegíveis
+  const { data: eligibleCount, refetch: refetchEligibleCount } = trpc.enqueue.countEligible.useQuery(
+    { funnelId, leadStatus: enqueueStatus },
     { enabled: funnelId > 0 }
   );
 
@@ -112,6 +130,32 @@ export default function FunnelDetail() {
     },
   });
 
+  const updateSendingConfig = trpc.sendingConfig.update.useMutation({
+    onSuccess: () => {
+      toast.success("Configuração de envio atualizada!");
+      refetchSendingConfig();
+    },
+    onError: () => {
+      toast.error("Erro ao atualizar configuração");
+    },
+  });
+
+  const enqueueLeads = trpc.enqueue.enqueueLeads.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(data.message);
+      } else {
+        toast.error(data.message);
+      }
+      setIsEnqueuing(false);
+      refetchEligibleCount();
+    },
+    onError: () => {
+      toast.error("Erro ao enfileirar leads");
+      setIsEnqueuing(false);
+    },
+  });
+
   const previewTemplate = trpc.funnelTemplates.previewWithFirstLead.useQuery(
     { templateId: selectedTemplateId! },
     { enabled: selectedTemplateId !== null && selectedTemplateId > 0 && activeTab === "preview" }
@@ -126,6 +170,19 @@ export default function FunnelDetail() {
       })));
     }
   }, [funnelData]);
+
+  // Sincronizar config de envio
+  useEffect(() => {
+    if (sendingConfigData) {
+      setDailyLimit(sendingConfigData.dailyLimit);
+      setIntervalSeconds(sendingConfigData.intervalSeconds);
+    }
+  }, [sendingConfigData]);
+
+  // Recarregar contagem quando muda o filtro
+  useEffect(() => {
+    refetchEligibleCount();
+  }, [enqueueStatus]);
 
   useEffect(() => {
     if (previewTemplate.data?.success) {
@@ -204,6 +261,29 @@ export default function FunnelDetail() {
     setActiveTab("editor");
   };
 
+  const handleSaveSendingConfig = () => {
+    updateSendingConfig.mutate({
+      dailyLimit,
+      intervalSeconds,
+    });
+  };
+
+  const handleToggleSending = () => {
+    if (!sendingConfigData) return;
+    updateSendingConfig.mutate({
+      enabled: sendingConfigData.enabled === 1 ? 0 : 1,
+    });
+  };
+
+  const handleEnqueue = () => {
+    setIsEnqueuing(true);
+    enqueueLeads.mutate({
+      funnelId,
+      leadStatus: enqueueStatus,
+      batchSize: enqueueBatchSize,
+    });
+  };
+
   const selectedTemplate = selectedTemplateId
     ? localTemplates.find(t => t.id === selectedTemplateId)
     : null;
@@ -233,6 +313,10 @@ export default function FunnelDetail() {
   }
 
   const { funnel } = funnelData;
+
+  const sendingProgress = sendingConfigData
+    ? Math.round((sendingConfigData.emailsSentToday / sendingConfigData.dailyLimit) * 100)
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -266,7 +350,7 @@ export default function FunnelDetail() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-3">
+        <TabsList className="grid w-full max-w-2xl grid-cols-5">
           <TabsTrigger value="templates" className="gap-2">
             Templates
           </TabsTrigger>
@@ -277,6 +361,14 @@ export default function FunnelDetail() {
           <TabsTrigger value="editor" className="gap-2">
             <Code className="h-4 w-4" />
             Editor HTML
+          </TabsTrigger>
+          <TabsTrigger value="sending" className="gap-2">
+            <Gauge className="h-4 w-4" />
+            Envio
+          </TabsTrigger>
+          <TabsTrigger value="enqueue" className="gap-2">
+            <Users className="h-4 w-4" />
+            Enfileirar
           </TabsTrigger>
         </TabsList>
 
@@ -531,7 +623,7 @@ export default function FunnelDetail() {
               ) : !previewTemplate.isLoading && (
                 <div className="text-center py-12 text-muted-foreground">
                   <Eye className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Selecione um template e clique na seta para ver a pré-visualização</p>
+                  <p>Selecione um template na aba "Templates" para pré-visualizar</p>
                 </div>
               )}
             </CardContent>
@@ -597,6 +689,212 @@ export default function FunnelDetail() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* ===== ABA DE CONFIGURAÇÃO DE ENVIO ===== */}
+        <TabsContent value="sending" className="space-y-6">
+          <div className="text-sm text-muted-foreground">Configurações de Envio (Rate Limiting)</div>
+
+          {/* Status atual */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Gauge className="h-5 w-5" />
+                Status de Envio
+              </CardTitle>
+              <CardDescription>
+                Controle o ritmo de envio para proteger a reputação do seu domínio
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Progresso do dia */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Enviados hoje</span>
+                  <span className="font-medium">
+                    {sendingConfigData?.emailsSentToday || 0} / {sendingConfigData?.dailyLimit || 50}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-3">
+                  <div
+                    className={`h-3 rounded-full transition-all ${
+                      sendingProgress >= 90 ? "bg-red-500" : sendingProgress >= 70 ? "bg-yellow-500" : "bg-green-500"
+                    }`}
+                    style={{ width: `${Math.min(sendingProgress, 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {sendingConfigData?.lastSentAt
+                    ? `Último envio: ${new Date(sendingConfigData.lastSentAt).toLocaleString("pt-BR")}`
+                    : "Nenhum envio registrado hoje"}
+                </p>
+              </div>
+
+              {/* Toggle de envio */}
+              <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                <div>
+                  <p className="font-medium text-sm">Envio automático</p>
+                  <p className="text-xs text-muted-foreground">
+                    {sendingConfigData?.enabled === 1 ? "O scheduler está enviando emails" : "O scheduler está pausado"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {sendingConfigData?.enabled === 1 ? (
+                    <Button variant="outline" size="sm" onClick={handleToggleSending} className="gap-1 text-orange-600 border-orange-300 hover:bg-orange-50">
+                      <Pause className="h-3.5 w-3.5" />
+                      Pausar
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={handleToggleSending} className="gap-1 text-green-600 border-green-300 hover:bg-green-50">
+                      <Play className="h-3.5 w-3.5" />
+                      Ativar
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Configurações */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm">Limite diário</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="10000"
+                    value={dailyLimit}
+                    onChange={(e) => setDailyLimit(parseInt(e.target.value) || 50)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Máximo de emails por dia
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Intervalo entre envios (segundos)</Label>
+                  <Input
+                    type="number"
+                    min="5"
+                    max="3600"
+                    value={intervalSeconds}
+                    onChange={(e) => setIntervalSeconds(parseInt(e.target.value) || 30)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Tempo mínimo entre cada email
+                  </p>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleSaveSendingConfig}
+                disabled={updateSendingConfig.isPending}
+                className="w-full"
+              >
+                {updateSendingConfig.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
+                Salvar Configurações
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ===== ABA DE ENFILEIRAMENTO ===== */}
+        <TabsContent value="enqueue" className="space-y-6">
+          <div className="text-sm text-muted-foreground">Enfileirar Leads Existentes</div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Adicionar Leads ao Funil
+              </CardTitle>
+              <CardDescription>
+                Adicione leads existentes a este funil em lote. Os leads mais recentes serão processados primeiro.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Filtro de status */}
+              <div className="space-y-2">
+                <Label className="text-sm">Filtrar por status do lead</Label>
+                <Select
+                  value={enqueueStatus}
+                  onValueChange={(value) => setEnqueueStatus(value as "abandoned" | "active" | "all")}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="abandoned">Carrinho Abandonado</SelectItem>
+                    <SelectItem value="active">Compra Aprovada</SelectItem>
+                    <SelectItem value="all">Todos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Contagem de elegíveis */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Leads elegíveis</p>
+                    <p className="text-xs text-muted-foreground">
+                      Leads que ainda não estão neste funil
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-bold text-cyan-600">
+                      {eligibleCount?.count ?? "..."}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => refetchEligibleCount()}
+                      className="h-8 w-8"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quantidade a enfileirar */}
+              <div className="space-y-2">
+                <Label className="text-sm">Quantidade a enfileirar</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="5000"
+                  value={enqueueBatchSize}
+                  onChange={(e) => setEnqueueBatchSize(parseInt(e.target.value) || 100)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Quantos leads adicionar ao funil nesta operação (máx. 5.000). Os mais recentes serão adicionados primeiro.
+                </p>
+              </div>
+
+              {/* Aviso */}
+              <div className="p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <p className="text-xs text-amber-800 dark:text-amber-200">
+                  <strong>Atenção:</strong> Os leads serão adicionados ao funil e receberão emails conforme o limite diário configurado na aba "Envio". 
+                  O envio é gradual e respeita o intervalo configurado para proteger a reputação do domínio.
+                </p>
+              </div>
+
+              {/* Botão de enfileirar */}
+              <Button
+                onClick={handleEnqueue}
+                disabled={isEnqueuing || !eligibleCount?.count || eligibleCount.count === 0}
+                className="w-full gap-2"
+              >
+                {isEnqueuing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Users className="h-4 w-4" />
+                )}
+                {isEnqueuing
+                  ? "Enfileirando..."
+                  : `Enfileirar ${Math.min(enqueueBatchSize, eligibleCount?.count || 0)} leads`}
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

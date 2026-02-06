@@ -3,11 +3,12 @@
  * Executa a cada 5 minutos para verificar e enviar emails de funis
  * 
  * FUNCIONALIDADE: Envia emails no horário local de cada lead
+ * RATE LIMITING: Respeita limite diário e intervalo entre envios
  */
 
 import { getDb } from "./db";
-import { leads, funnels, funnelTemplates, funnelLeadProgress } from "../drizzle/schema_postgresql";
-import { eq, and, sql, lte, isNotNull, asc } from "drizzle-orm";
+import { leads, funnels, funnelTemplates, funnelLeadProgress, sendingConfig } from "../drizzle/schema_postgresql";
+import { eq, and, sql, lte, isNotNull, asc, desc } from "drizzle-orm";
 
 let funnelSchedulerInterval: NodeJS.Timeout | null = null;
 
@@ -50,8 +51,112 @@ export function stopFunnelScheduler() {
 }
 
 /**
+ * Obter ou criar configuração de envio
+ */
+async function getSendingConfig() {
+  const db = await getDb();
+  if (!db) return null;
+
+  const [config] = await db.select().from(sendingConfig).limit(1);
+  
+  if (!config) {
+    // Criar configuração padrão
+    const [newConfig] = await db.insert(sendingConfig).values({
+      dailyLimit: 50,
+      intervalSeconds: 30,
+      enabled: 1,
+      emailsSentToday: 0,
+      lastResetDate: new Date().toISOString().split("T")[0],
+    }).returning();
+    return newConfig;
+  }
+
+  // Verificar se precisa resetar o contador diário
+  const today = new Date().toISOString().split("T")[0];
+  if (config.lastResetDate !== today) {
+    const [updatedConfig] = await db
+      .update(sendingConfig)
+      .set({
+        emailsSentToday: 0,
+        lastResetDate: today,
+        atualizadoEm: new Date(),
+      })
+      .where(eq(sendingConfig.id, config.id))
+      .returning();
+    return updatedConfig;
+  }
+
+  return config;
+}
+
+/**
+ * Incrementar contador de emails enviados hoje
+ */
+async function incrementEmailsSentToday() {
+  const db = await getDb();
+  if (!db) return;
+
+  await db
+    .update(sendingConfig)
+    .set({
+      emailsSentToday: sql`${sendingConfig.emailsSentToday} + 1`,
+      lastSentAt: new Date(),
+      atualizadoEm: new Date(),
+    })
+    .where(eq(sendingConfig.id, 1));
+}
+
+/**
+ * Verificar se pode enviar email (rate limiting)
+ */
+async function canSendEmail(): Promise<{ allowed: boolean; reason?: string }> {
+  const config = await getSendingConfig();
+  if (!config) {
+    return { allowed: false, reason: "Configuração de envio não disponível" };
+  }
+
+  if (config.enabled !== 1) {
+    return { allowed: false, reason: "Envio está pausado" };
+  }
+
+  if (config.emailsSentToday >= config.dailyLimit) {
+    return { allowed: false, reason: `Limite diário atingido (${config.emailsSentToday}/${config.dailyLimit})` };
+  }
+
+  // Verificar intervalo entre envios
+  if (config.lastSentAt) {
+    const timeSinceLastSend = Date.now() - new Date(config.lastSentAt).getTime();
+    const intervalMs = config.intervalSeconds * 1000;
+    if (timeSinceLastSend < intervalMs) {
+      return { allowed: false, reason: `Aguardando intervalo (${Math.ceil((intervalMs - timeSinceLastSend) / 1000)}s restantes)` };
+    }
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * Esperar o intervalo configurado entre envios
+ */
+async function waitForInterval(): Promise<void> {
+  const config = await getSendingConfig();
+  if (!config) return;
+  
+  const intervalMs = config.intervalSeconds * 1000;
+  
+  if (config.lastSentAt) {
+    const timeSinceLastSend = Date.now() - new Date(config.lastSentAt).getTime();
+    const waitTime = intervalMs - timeSinceLastSend;
+    if (waitTime > 0) {
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+}
+
+/**
  * Processar emails de funis
  * Verifica leads com nextSendAt <= agora e envia os emails correspondentes
+ * RESPEITA rate limiting: limite diário e intervalo entre envios
  */
 async function processFunnelEmails() {
   try {
@@ -64,32 +169,69 @@ async function processFunnelEmails() {
     const now = new Date();
     console.log(`[FunnelScheduler] 🔍 Verificando funis em ${now.toLocaleString("pt-BR")}...`);
 
+    // Verificar se o envio está habilitado
+    const config = await getSendingConfig();
+    if (!config || config.enabled !== 1) {
+      console.log("[FunnelScheduler] ⏸️ Envio está pausado nas configurações");
+      return;
+    }
+
+    // Verificar limite diário
+    if (config.emailsSentToday >= config.dailyLimit) {
+      console.log(`[FunnelScheduler] 🛑 Limite diário atingido (${config.emailsSentToday}/${config.dailyLimit})`);
+      return;
+    }
+
+    const remainingToday = config.dailyLimit - config.emailsSentToday;
+    console.log(`[FunnelScheduler] 📊 Envios hoje: ${config.emailsSentToday}/${config.dailyLimit} (restam ${remainingToday})`);
+
     // Buscar progressos de funis prontos para envio
+    // Ordenar por data de criação do lead (mais novos primeiro)
     const progressReadyForSend = await db
-      .select()
+      .select({
+        progress: funnelLeadProgress,
+        leadCreatedAt: leads.dataCriacao,
+      })
       .from(funnelLeadProgress)
+      .innerJoin(leads, eq(leads.id, funnelLeadProgress.leadId))
       .where(
         and(
           eq(funnelLeadProgress.status, "active"),
           isNotNull(funnelLeadProgress.nextSendAt),
           lte(funnelLeadProgress.nextSendAt, now)
         )
-      );
+      )
+      .orderBy(desc(leads.dataCriacao)) // Mais novos primeiro
+      .limit(remainingToday); // Limitar ao que resta do dia
 
     if (progressReadyForSend.length === 0) {
       console.log("[FunnelScheduler] ✓ Nenhum email de funil pronto para envio");
       return;
     }
 
-    console.log(`[FunnelScheduler] 📧 Encontrados ${progressReadyForSend.length} email(s) de funil prontos`);
+    console.log(`[FunnelScheduler] 📧 Encontrados ${progressReadyForSend.length} email(s) de funil prontos (limitado a ${remainingToday})`);
 
     // Importar funções necessárias
     const { sendEmail } = await import("./email");
     const { replaceTemplateVariables } = await import("./db");
 
+    let sentCount = 0;
+
     // Processar cada progresso
-    for (const progress of progressReadyForSend) {
+    for (const { progress } of progressReadyForSend) {
       try {
+        // Verificar rate limiting antes de cada envio
+        const canSend = await canSendEmail();
+        if (!canSend.allowed) {
+          console.log(`[FunnelScheduler] ⏳ ${canSend.reason} — parando ciclo`);
+          break;
+        }
+
+        // Esperar intervalo entre envios
+        if (sentCount > 0) {
+          await waitForInterval();
+        }
+
         // Buscar o lead
         const [lead] = await db
           .select()
@@ -98,6 +240,22 @@ async function processFunnelEmails() {
 
         if (!lead) {
           console.warn(`[FunnelScheduler] Lead ${progress.leadId} não encontrado`);
+          continue;
+        }
+
+        // Verificar se o lead cancelou inscrição
+        if (lead.unsubscribed === 1) {
+          console.log(`[FunnelScheduler] Lead ${lead.email} cancelou inscrição, pulando...`);
+          // Marcar como cancelado no funil
+          await db
+            .update(funnelLeadProgress)
+            .set({
+              status: "cancelled",
+              nextSendAt: null,
+              nextTemplateId: null,
+              atualizadoEm: new Date(),
+            })
+            .where(eq(funnelLeadProgress.id, progress.id));
           continue;
         }
 
@@ -149,6 +307,10 @@ async function processFunnelEmails() {
 
         if (emailSent) {
           console.log(`[FunnelScheduler] ✅ Email enviado para ${lead.email}`);
+          sentCount++;
+          
+          // Incrementar contador de rate limiting
+          await incrementEmailsSentToday();
           
           // Registrar envio bem-sucedido no histórico
           await recordFunnelEmailSend({
@@ -174,7 +336,6 @@ async function processFunnelEmails() {
 
           if (nextTemplate) {
             // Calcular próximo envio considerando timezone do lead e unidade de delay
-            // CORREÇÃO: Agora suporta corretamente horas, dias e semanas
             const leadTimezone = lead.timezone || "America/Sao_Paulo";
             const { calculateSendTimeWithUnit } = await import("./timezone-utils");
             
@@ -230,7 +391,7 @@ async function processFunnelEmails() {
       }
     }
 
-    console.log("[FunnelScheduler] ✅ Ciclo de processamento de funis concluído");
+    console.log(`[FunnelScheduler] ✅ Ciclo concluído: ${sentCount} email(s) enviados neste ciclo`);
   } catch (error) {
     console.error("[FunnelScheduler] ❌ Erro ao processar funis:", error);
   }
@@ -291,7 +452,6 @@ export async function addLeadToFunnel(leadId: number, funnelId: number) {
     }
 
     // Calcular primeiro envio considerando timezone do lead e unidade de delay
-    // CORREÇÃO: Agora suporta corretamente horas, dias e semanas
     const { calculateSendTimeWithUnit } = await import("./timezone-utils");
     const leadTimezone = lead.timezone || "America/Sao_Paulo";
     
@@ -325,5 +485,120 @@ export async function addLeadToFunnel(leadId: number, funnelId: number) {
   } catch (error) {
     console.error("[FunnelScheduler] ❌ Erro ao adicionar lead ao funil:", error);
     return { success: false, message: "Erro ao adicionar lead ao funil" };
+  }
+}
+
+/**
+ * Enfileirar leads existentes em um funil (em lote)
+ * Adiciona leads filtrados por status, ordenados do mais novo ao mais antigo
+ * @param funnelId - ID do funil
+ * @param leadStatus - Filtro de status ("abandoned", "active", "all")
+ * @param batchSize - Quantidade de leads a enfileirar
+ */
+export async function enqueueExistingLeads(
+  funnelId: number,
+  leadStatus: "abandoned" | "active" | "all",
+  batchSize: number
+): Promise<{ success: boolean; enqueued: number; skipped: number; message: string }> {
+  try {
+    const db = await getDb();
+    if (!db) {
+      return { success: false, enqueued: 0, skipped: 0, message: "Banco de dados não disponível" };
+    }
+
+    // Buscar o funil
+    const [funnel] = await db.select().from(funnels).where(eq(funnels.id, funnelId));
+    if (!funnel) {
+      return { success: false, enqueued: 0, skipped: 0, message: "Funil não encontrado" };
+    }
+
+    // Buscar o primeiro template do funil
+    const [firstTemplate] = await db
+      .select()
+      .from(funnelTemplates)
+      .where(
+        and(
+          eq(funnelTemplates.funnelId, funnelId),
+          eq(funnelTemplates.ativo, 1)
+        )
+      )
+      .orderBy(asc(funnelTemplates.posicao))
+      .limit(1);
+
+    if (!firstTemplate) {
+      return { success: false, enqueued: 0, skipped: 0, message: "Funil não tem templates ativos" };
+    }
+
+    // Buscar leads que NÃO estão no funil, filtrados por status, ordenados do mais novo ao mais antigo
+    // Também exclui leads que cancelaram inscrição
+    const statusFilter = leadStatus === "all" 
+      ? sql`1=1` 
+      : eq(leads.status, leadStatus);
+
+    const eligibleLeads = await db
+      .select({ id: leads.id, timezone: leads.timezone, email: leads.email })
+      .from(leads)
+      .where(
+        and(
+          statusFilter,
+          eq(leads.unsubscribed, 0),
+          sql`${leads.id} NOT IN (
+            SELECT lead_id FROM funnel_lead_progress 
+            WHERE funnel_id = ${funnelId} 
+            AND status IN ('active', 'completed')
+          )`
+        )
+      )
+      .orderBy(desc(leads.dataCriacao)) // Mais novos primeiro
+      .limit(batchSize);
+
+    if (eligibleLeads.length === 0) {
+      return { success: true, enqueued: 0, skipped: 0, message: "Nenhum lead elegível encontrado" };
+    }
+
+    const { calculateSendTimeWithUnit } = await import("./timezone-utils");
+    
+    let enqueued = 0;
+    let skipped = 0;
+
+    for (const lead of eligibleLeads) {
+      try {
+        const leadTimezone = lead.timezone || "America/Sao_Paulo";
+        
+        const nextSendAt = calculateSendTimeWithUnit(
+          firstTemplate.delayValue,
+          firstTemplate.delayUnit,
+          firstTemplate.sendTime,
+          leadTimezone
+        );
+
+        await db.insert(funnelLeadProgress).values({
+          funnelId: funnelId,
+          leadId: lead.id,
+          currentTemplateId: null,
+          nextTemplateId: firstTemplate.id,
+          nextSendAt: nextSendAt,
+          status: "active",
+          startedAt: new Date(),
+        });
+
+        enqueued++;
+      } catch (err) {
+        skipped++;
+        console.warn(`[FunnelScheduler] Erro ao enfileirar lead ${lead.id}:`, err);
+      }
+    }
+
+    console.log(`[FunnelScheduler] 📋 Enfileirados ${enqueued} leads no funil ${funnelId} (${skipped} pulados)`);
+
+    return {
+      success: true,
+      enqueued,
+      skipped,
+      message: `${enqueued} leads adicionados ao funil com sucesso${skipped > 0 ? ` (${skipped} pulados)` : ""}`,
+    };
+  } catch (error) {
+    console.error("[FunnelScheduler] ❌ Erro ao enfileirar leads:", error);
+    return { success: false, enqueued: 0, skipped: 0, message: "Erro ao enfileirar leads" };
   }
 }

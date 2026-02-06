@@ -309,3 +309,25 @@ export const supportResponseHistory = pgTable("support_response_history", {
 
 export type SupportResponseHistory = typeof supportResponseHistory.$inferSelect;
 export type InsertSupportResponseHistory = typeof supportResponseHistory.$inferInsert;
+
+
+// ==================== CONFIGURAÇÃO DE ENVIO (RATE LIMITING) ====================
+
+/**
+ * Configuração global de envio de emails
+ * Controla limites diários, intervalo entre envios e status do envio gradual
+ */
+export const sendingConfig = pgTable("sending_config", {
+  id: serial("id").primaryKey(),
+  dailyLimit: integer("daily_limit").notNull().default(50), // Limite máximo de emails por dia
+  intervalSeconds: integer("interval_seconds").notNull().default(30), // Intervalo mínimo entre envios (em segundos)
+  enabled: integer("enabled").notNull().default(1), // 0 = pausado, 1 = ativo
+  emailsSentToday: integer("emails_sent_today").notNull().default(0), // Contador de emails enviados hoje
+  lastSentAt: timestamp("last_sent_at"), // Último email enviado
+  lastResetDate: varchar("last_reset_date", { length: 10 }), // Data do último reset do contador (YYYY-MM-DD)
+  criadoEm: timestamp("criado_em").defaultNow().notNull(),
+  atualizadoEm: timestamp("atualizado_em").defaultNow().notNull(),
+});
+
+export type SendingConfig = typeof sendingConfig.$inferSelect;
+export type InsertSendingConfig = typeof sendingConfig.$inferInsert;
