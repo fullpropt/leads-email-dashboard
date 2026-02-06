@@ -30,7 +30,10 @@ export const EMAIL_STYLES = {
   button: "display: inline-block; padding: 14px 35px; background-color: #FF0000; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;",
   
   // Links
-  link: "color: #FF0000; text-decoration: none;",
+  link: "color: #FF0000; text-decoration: none; font-weight: bold;",
+  
+  // Email links
+  emailLink: "color: #FF0000; text-decoration: none;",
   
   // Números de passos
   stepNumber: "font-size: 24px; font-weight: bold; color: #FF0000; padding-right: 15px;",
@@ -150,8 +153,11 @@ export function applyInlineStyles(content: string): string {
  * - Títulos (linhas que começam com # ou são curtas e seguidas de linha vazia)
  * - Parágrafos
  * - Listas (linhas que começam com - ou *)
- * - Links (URLs)
- * - Botões (linhas que começam com [BUTTON])
+ * - Listas numeradas (linhas que começam com 1. 2. 3.)
+ * - Links [LINK:texto:url]
+ * - Emails [EMAIL:email@exemplo.com]
+ * - Botões [BUTTON:texto:url]
+ * - URLs automáticas
  * 
  * @param text - Texto simples ou parcialmente formatado
  */
@@ -172,7 +178,7 @@ export function convertTextToHtml(text: string): string {
   const lines = text.split('\n');
   let html = '';
   let inList = false;
-  let listType = '';
+  let listType = ''; // 'ul' ou 'ol'
   
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i].trim();
@@ -180,39 +186,40 @@ export function convertTextToHtml(text: string): string {
     if (!line) {
       // Linha vazia - fechar lista se estiver aberta
       if (inList) {
-        html += `</${listType}>`;
+        html += `</${listType}>\n`;
         inList = false;
+        listType = '';
       }
       continue;
     }
     
     // Detectar títulos com #
     if (line.startsWith('### ')) {
-      if (inList) { html += `</${listType}>`; inList = false; }
-      html += `<h3 style="${EMAIL_STYLES.h3}">${line.substring(4)}</h3>\n`;
+      if (inList) { html += `</${listType}>\n`; inList = false; listType = ''; }
+      html += `<h3 style="${EMAIL_STYLES.h3}">${processInlineFormatting(line.substring(4))}</h3>\n`;
       continue;
     }
     if (line.startsWith('## ')) {
-      if (inList) { html += `</${listType}>`; inList = false; }
-      html += `<h2 style="${EMAIL_STYLES.h2}">${line.substring(3)}</h2>\n`;
+      if (inList) { html += `</${listType}>\n`; inList = false; listType = ''; }
+      html += `<h2 style="${EMAIL_STYLES.h2}">${processInlineFormatting(line.substring(3))}</h2>\n`;
       continue;
     }
     if (line.startsWith('# ')) {
-      if (inList) { html += `</${listType}>`; inList = false; }
-      html += `<h1 style="${EMAIL_STYLES.h1}">${line.substring(2)}</h1>\n`;
+      if (inList) { html += `</${listType}>\n`; inList = false; listType = ''; }
+      html += `<h1 style="${EMAIL_STYLES.h1}">${processInlineFormatting(line.substring(2))}</h1>\n`;
       continue;
     }
     
     // Detectar botões [BUTTON:texto:url]
     const buttonMatch = line.match(/\[BUTTON:([^:]+):([^\]]+)\]/i);
     if (buttonMatch) {
-      if (inList) { html += `</${listType}>`; inList = false; }
+      if (inList) { html += `</${listType}>\n`; inList = false; listType = ''; }
       html += `
         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;">
           <tr>
             <td align="center">
-              <a href="${buttonMatch[2]}" target="_blank" style="${EMAIL_STYLES.button}">
-                ${buttonMatch[1]}
+              <a href="${buttonMatch[2].trim()}" target="_blank" style="${EMAIL_STYLES.button}">
+                ${buttonMatch[1].trim()}
               </a>
             </td>
           </tr>
@@ -220,46 +227,50 @@ export function convertTextToHtml(text: string): string {
       continue;
     }
     
-    // Detectar listas
+    // Detectar listas com - ou *
     if (line.startsWith('- ') || line.startsWith('* ')) {
+      // Se estava em uma lista OL, fechar antes de abrir UL
+      if (inList && listType !== 'ul') {
+        html += `</${listType}>\n`;
+        inList = false;
+        listType = '';
+      }
       if (!inList) {
         listType = 'ul';
-        html += '<ul style="margin: 0 0 25px 20px; padding: 0;">';
+        html += '<ul style="margin: 0 0 25px 20px; padding: 0;">\n';
         inList = true;
       }
-      html += `<li style="margin-bottom: 10px; color: #333333;">${line.substring(2)}</li>\n`;
+      html += `<li style="margin-bottom: 10px; color: #333333; font-size: 16px; line-height: 1.6;">${processInlineFormatting(line.substring(2))}</li>\n`;
       continue;
     }
     
-    // Detectar listas numeradas
-    const numberedMatch = line.match(/^(\d+)\.\s+(.+)$/);
+    // Detectar listas numeradas (aceita "1." "1. " "1) " etc.)
+    const numberedMatch = line.match(/^(\d+)[.)]\s*(.+)$/);
     if (numberedMatch) {
+      // Se estava em uma lista UL, fechar antes de abrir OL
+      if (inList && listType !== 'ol') {
+        html += `</${listType}>\n`;
+        inList = false;
+        listType = '';
+      }
       if (!inList) {
         listType = 'ol';
-        html += '<ol style="margin: 0 0 25px 20px; padding: 0;">';
+        html += '<ol style="margin: 0 0 25px 20px; padding: 0;">\n';
         inList = true;
       }
-      html += `<li style="margin-bottom: 10px; color: #333333;">${numberedMatch[2]}</li>\n`;
+      html += `<li style="margin-bottom: 10px; color: #333333; font-size: 16px; line-height: 1.6;">${processInlineFormatting(numberedMatch[2])}</li>\n`;
       continue;
     }
     
     // Fechar lista se não é item de lista
     if (inList) {
-      html += `</${listType}>`;
+      html += `</${listType}>\n`;
       inList = false;
+      listType = '';
     }
     
-    // Converter URLs em links
-    line = line.replace(
-      /(https?:\/\/[^\s<]+)/g,
-      `<a href="$1" style="${EMAIL_STYLES.link}">$1</a>`
-    );
-    
-    // Converter **texto** em negrito
-    line = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    
-    // Converter *texto* em itálico
-    line = line.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    // Processar formatação inline e criar parágrafo
+    line = processInlineFormatting(line);
     
     // Parágrafo normal
     html += `<p style="${EMAIL_STYLES.p}">${line}</p>\n`;
@@ -267,10 +278,47 @@ export function convertTextToHtml(text: string): string {
   
   // Fechar lista se ainda estiver aberta
   if (inList) {
-    html += `</${listType}>`;
+    html += `</${listType}>\n`;
   }
   
   return html;
+}
+
+/**
+ * Processa formatação inline em uma linha de texto:
+ * - [LINK:texto:url] → link vermelho
+ * - [EMAIL:email] → link mailto vermelho
+ * - [BUTTON:texto:url] inline → botão (tratado separadamente)
+ * - **texto** → negrito
+ * - *texto* → itálico
+ * - URLs automáticas → links vermelhos
+ */
+function processInlineFormatting(line: string): string {
+  // Converter [LINK:texto:url] em links vermelhos
+  line = line.replace(
+    /\[LINK:([^:]+):([^\]]+)\]/gi,
+    `<a href="$2" target="_blank" style="${EMAIL_STYLES.link}">$1</a>`
+  );
+  
+  // Converter [EMAIL:email] em links mailto vermelhos
+  line = line.replace(
+    /\[EMAIL:([^\]]+)\]/gi,
+    `<a href="mailto:$1" style="${EMAIL_STYLES.emailLink}">$1</a>`
+  );
+  
+  // Converter **texto** em negrito
+  line = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  
+  // Converter *texto* em itálico
+  line = line.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  
+  // Converter URLs soltas em links (apenas URLs que não estão já dentro de um href)
+  line = line.replace(
+    /(?<!href="|">)(https?:\/\/[^\s<]+)/g,
+    `<a href="$1" target="_blank" style="${EMAIL_STYLES.link}">$1</a>`
+  );
+  
+  return line;
 }
 
 /**
@@ -410,40 +458,4 @@ export function processEmailTemplate(htmlContent: string, unsubscribeToken?: str
   
   // Envolver com header e footer
   return wrapEmailContent(styledContent, unsubscribeToken);
-}
-
-/**
- * Substitui variáveis do template com dados do lead
- * Variáveis suportadas: {{nome}}, {{email}}, {{produto}}, {{plano}}, {{valor}}
- * 
- * @param template - Template HTML com variáveis
- * @param lead - Dados do lead
- */
-export function replaceTemplateVariables(template: string, lead: {
-  nome: string;
-  email: string;
-  produto?: string | null;
-  plano?: string | null;
-  valor?: number;
-}): string {
-  let result = template;
-  
-  // Substituir variáveis
-  result = result.replace(/\{\{nome\}\}/gi, lead.nome || 'User');
-  result = result.replace(/\{\{email\}\}/gi, lead.email || '');
-  result = result.replace(/\{\{produto\}\}/gi, lead.produto || 'TubeTools');
-  result = result.replace(/\{\{plano\}\}/gi, lead.plano || '');
-  
-  // Formatar valor como moeda
-  if (lead.valor !== undefined) {
-    const valorFormatado = (lead.valor / 100).toLocaleString('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    });
-    result = result.replace(/\{\{valor\}\}/gi, valorFormatado);
-  } else {
-    result = result.replace(/\{\{valor\}\}/gi, '');
-  }
-  
-  return result;
 }

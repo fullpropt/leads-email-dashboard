@@ -27,6 +27,8 @@ const FORMATTING_GUIDE = `
 • Use *texto* para itálico
 • URLs são convertidas automaticamente em links
 • Use [BUTTON:Texto do Botão:https://url.com] para criar um botão
+• Use [LINK:Texto do Link:https://url.com] para criar um link
+• Use [EMAIL:exemplo@email.com] para criar um link de email
 
 **Variáveis disponíveis:**
 • {{nome}} - Nome do lead
@@ -41,9 +43,11 @@ const FORMATTING_GUIDE = `
 Thank you for joining TubeTools.
 
 Here's what you can do:
-- Watch amazing videos
-- Rate your favorites
-- Participate in the community
+1. Watch amazing videos
+2. Rate your favorites
+3. Participate in the community
+
+Visit our [LINK:website:https://tubetoolsacess.work] or contact us at [EMAIL:supfullpropt@gmail.com]
 
 [BUTTON:Start Now:https://tubetoolsacess.work]
 
@@ -157,9 +161,11 @@ export function SimplifiedEmailEditor({
 Thank you for joining TubeTools.
 
 Here's what you can do:
-- Watch amazing videos
-- Rate your favorites
-- Participate in the community
+1. Watch amazing videos
+2. Rate your favorites
+3. Participate in the community
+
+Visit our [LINK:website:https://tubetoolsacess.work] or contact us at [EMAIL:supfullpropt@gmail.com]
 
 [BUTTON:Start Now:https://tubetoolsacess.work]
 
