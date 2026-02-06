@@ -45,7 +45,7 @@ Here's what you can do:
 - Rate your favorites
 - Participate in the community
 
-[BUTTON:Start Now:https://youtbviews.online]
+[BUTTON:Start Now:https://tubetoolsacess.work]
 
 Best regards,
 **The TubeTools Team**
@@ -161,7 +161,7 @@ Here's what you can do:
 - Rate your favorites
 - Participate in the community
 
-[BUTTON:Start Now:https://youtbviews.online]
+[BUTTON:Start Now:https://tubetoolsacess.work]
 
 Best regards,
 **The TubeTools Team**`
@@ -177,7 +177,7 @@ Best regards,
 <table width="100%" cellpadding="0" cellspacing="0" border="0">
   <tr>
     <td align="center">
-      <a href="https://youtbviews.online" target="_blank" style="display: inline-block; padding: 14px 35px; background-color: #FF0000; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+      <a href="https://tubetoolsacess.work" target="_blank" style="display: inline-block; padding: 14px 35px; background-color: #FF0000; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
         Start Exploring Now
       </a>
     </td>
