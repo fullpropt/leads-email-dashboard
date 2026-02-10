@@ -12,6 +12,7 @@ import { startScheduler } from "../scheduler";
 import { startFunnelScheduler } from "../scheduler-funnel";
 import { startSyncScheduler } from "../scheduler-sync-tubetools";
 import { handleMailgunIncomingWebhook } from "../webhooks-support";
+import { handleStripeWebhook } from "../webhooks-stripe";
 
 function isPortAvailable(port: number ): Promise<boolean> {
   return new Promise(resolve => {
@@ -35,6 +36,15 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  // ===== WEBHOOK STRIPE =====
+  // IMPORTANTE: Stripe precisa do body RAW para validar assinatura.
+  // Por isso este endpoint é registrado ANTES do express.json().
+  app.post(
+    "/api/webhooks/stripe",
+    express.raw({ type: "application/json" }),
+    handleStripeWebhook
+  );
   
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
@@ -43,7 +53,7 @@ async function startServer() {
   // GitHub OAuth routes (removed Manus OAuth)
   registerGitHubOAuthRoutes(app);
   
-  // Webhook para PerfectPay
+  // Webhook para PerfectPay (legado)
   app.post("/api/webhooks/perfectpay", async (req, res) => {
     try {
       console.log("[Server] Webhook recebido em /api/webhooks/perfectpay");
@@ -63,11 +73,19 @@ async function startServer() {
     }
   });
 
-  // Health check para o webhook
+  // Health check para o webhook legado
   app.get("/api/webhooks/health", (req, res) => {
     res.status(200).json({
       status: "ok",
       message: "Webhook endpoint está funcionando",
+    });
+  });
+
+  // Health check para webhook do Stripe
+  app.get("/api/webhooks/stripe/health", (req, res) => {
+    res.status(200).json({
+      status: "ok",
+      message: "Stripe webhook endpoint está funcionando",
     });
   });
 
@@ -225,7 +243,8 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/` );
-    console.log(`Webhook endpoint: http://localhost:${port}/api/webhooks/perfectpay`);
+    console.log(`Webhook endpoint (PerfectPay legado): http://localhost:${port}/api/webhooks/perfectpay`);
+    console.log(`Webhook endpoint (Stripe): http://localhost:${port}/api/webhooks/stripe`);
     
     // Inicializar schedulers
     startScheduler();
