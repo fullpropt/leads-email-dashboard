@@ -1,6 +1,7 @@
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
+import { resolveAutoName } from "../name-utils";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 
@@ -28,16 +29,23 @@ export function registerOAuthRoutes(app: Express) {
         return;
       }
 
+      const resolvedName = resolveAutoName({
+        providedName: userInfo.name || null,
+        email: userInfo.email ?? null,
+        identifier: userInfo.openId,
+        fallback: "Usuario",
+      });
+
       await db.upsertUser({
         openId: userInfo.openId,
-        name: userInfo.name || null,
+        name: resolvedName,
         email: userInfo.email ?? null,
         loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
         lastSignedIn: new Date(),
       });
 
       const sessionToken = await sdk.createSessionToken(userInfo.openId, {
-        name: userInfo.name || "",
+        name: resolvedName,
         expiresInMs: ONE_YEAR_MS,
       });
 

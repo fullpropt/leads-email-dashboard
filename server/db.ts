@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { autoSendConfig, emailTemplates, InsertEmailTemplate, InsertLead, InsertUser, Lead, leads, users, funnels, funnelTemplates, funnelLeadProgress, Funnel, FunnelTemplate, FunnelLeadProgress, InsertFunnel, InsertFunnelTemplate, InsertFunnelLeadProgress } from "../drizzle/schema_postgresql";
 import { ENV } from './_core/env';
+import { hasMeaningfulName, resolveAutoName } from "./name-utils";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -32,12 +33,35 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   }
 
   try {
+    const existingUser = await db
+      .select({
+        name: users.name,
+        email: users.email,
+      })
+      .from(users)
+      .where(eq(users.openId, user.openId))
+      .limit(1);
+
+    const currentUser = existingUser[0];
+    const resolvedName = resolveAutoName({
+      providedName: user.name,
+      email: user.email ?? currentUser?.email ?? null,
+      identifier: user.openId,
+      fallback:
+        currentUser?.name && hasMeaningfulName(currentUser.name)
+          ? currentUser.name
+          : "Usuario",
+    });
+
     const values: InsertUser = {
       openId: user.openId,
+      name: resolvedName,
     };
-    const updateSet: Record<string, unknown> = {};
+    const updateSet: Record<string, unknown> = {
+      name: resolvedName,
+    };
 
-    const textFields = ["name", "email", "loginMethod"] as const;
+    const textFields = ["email", "loginMethod"] as const;
     type TextField = (typeof textFields)[number];
 
     const assignNullable = (field: TextField) => {
@@ -1362,7 +1386,12 @@ export async function importAbandonedCartsFromPerfectPay(
         if (existing.length === 0) {
           // Inserir novo lead
           const leadData: InsertLead = {
-            nome: sale.customer?.full_name || "Sem nome",
+            nome: resolveAutoName({
+              providedName: sale.customer?.full_name,
+              email: customerEmail,
+              identifier: sale.customer?.document_number || sale.code || null,
+              fallback: "Lead sem nome",
+            }),
             email: customerEmail,
             produto: sale.product?.name || "Produto não especificado",
             plano: sale.plan?.name || "Plano não especificado",

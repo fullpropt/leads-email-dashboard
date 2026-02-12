@@ -1,6 +1,7 @@
 import axios from "axios";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
+import { resolveAutoName } from "../name-utils";
 import { ENV } from "./env";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
@@ -104,11 +105,17 @@ export function registerGitHubOAuthRoutes(app: Express) {
 
       const githubUser = userResponse.data;
       const openId = `github_${githubUser.id}`;
+      const resolvedName = resolveAutoName({
+        providedName: githubUser.name || githubUser.login,
+        email: githubUser.email,
+        identifier: openId,
+        fallback: "Usuario",
+      });
 
       // Upsert user in database
       await db.upsertUser({
         openId,
-        name: githubUser.name || githubUser.login,
+        name: resolvedName,
         email: githubUser.email,
         loginMethod: "github",
         lastSignedIn: new Date(),
@@ -116,7 +123,7 @@ export function registerGitHubOAuthRoutes(app: Express) {
 
       // Create session token
       const sessionToken = await sdk.createSessionToken(openId, {
-        name: githubUser.name || githubUser.login,
+        name: resolvedName,
         expiresInMs: ONE_YEAR_MS,
       });
 

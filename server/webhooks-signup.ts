@@ -1,4 +1,5 @@
 import { InsertLead } from "../drizzle/schema_postgresql";
+import { hasMeaningfulName, resolveAutoName } from "./name-utils";
 
 /**
  * Processa webhooks de novo cadastro/signup
@@ -19,16 +20,21 @@ export async function processNewSignupWebhook(payload: any) {
 
     // Extrair dados do webhook
     // Suportar múltiplos formatos de payload
-    const customer_name = payload.name || payload.full_name || payload.nome;
     const customer_email = payload.email;
+    const customer_name = resolveAutoName({
+      providedName: payload.name || payload.full_name || payload.nome,
+      email: customer_email,
+      identifier: payload.id || payload.user_id || null,
+      fallback: "Lead sem nome",
+    });
     
     // Validar campos obrigatórios
-    if (!customer_email || !customer_name) {
-      console.warn("[Webhook Novo Cadastro] Email ou nome do cliente não fornecido");
+    if (!customer_email) {
+      console.warn("[Webhook Novo Cadastro] Email do cliente não fornecido");
       console.warn(`[Webhook Novo Cadastro] Payload: ${JSON.stringify(payload)}`);
       return {
         success: false,
-        message: "Email e nome do cliente são obrigatórios",
+        message: "Email do cliente é obrigatório",
       };
     }
 
@@ -68,6 +74,18 @@ export async function processNewSignupWebhook(payload: any) {
       .limit(1);
 
     if (existingLead.length > 0) {
+      const currentLead = existingLead[0];
+      const shouldRefreshName =
+        hasMeaningfulName(payload.name || payload.full_name || payload.nome) ||
+        !hasMeaningfulName(currentLead.nome);
+
+      if (shouldRefreshName) {
+        await db
+          .update(leads)
+          .set({ nome: customer_name })
+          .where(eq(leads.email, customer_email));
+      }
+
       console.log(`[Webhook Novo Cadastro] Lead com email ${customer_email} já existe`);
       return {
         success: true,

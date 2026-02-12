@@ -1,4 +1,5 @@
 import { InsertLead } from "../drizzle/schema_postgresql";
+import { hasMeaningfulName, resolveAutoName } from "./name-utils";
 
 /**
  * Processa webhooks recebidos do PerfectPay
@@ -28,8 +29,13 @@ export async function processWebhook(payload: any) {
     const product = payload.product || {};
     const plan = payload.plan || {};
     
-    const customer_name = customer.full_name;
     const customer_email = customer.email;
+    const customer_name = resolveAutoName({
+      providedName: customer.full_name,
+      email: customer_email,
+      identifier: customer.document_number || payload.code || null,
+      fallback: "Lead sem nome",
+    });
     const product_name = product.name;
     const plan_name = plan.name;
     const sale_value = payload.sale_amount;
@@ -49,12 +55,12 @@ export async function processWebhook(payload: any) {
     console.log(`[Webhook] Dados extraídos - Email: ${customer_email}, Nome: ${customer_name}`);
 
     // Validar campos obrigatórios
-    if (!customer_email || !customer_name) {
-      console.warn("[Webhook] Email ou nome do cliente não fornecido");
+    if (!customer_email) {
+      console.warn("[Webhook] Email do cliente não fornecido");
       console.warn(`[Webhook] Customer data: ${JSON.stringify(customer)}`);
       return {
         success: false,
-        message: "Email e nome do cliente são obrigatórios",
+        message: "Email do cliente é obrigatório",
       };
     }
 
@@ -192,11 +198,14 @@ export async function processWebhook(payload: any) {
 
     if (existingLead.length > 0) {
       console.log(`[Webhook] Lead com email ${customer_email} já existe, atualizando...`);
+      const currentLead = existingLead[0];
+      const shouldRefreshName =
+        hasMeaningfulName(customer.full_name) || !hasMeaningfulName(currentLead.nome);
       // Atualizar lead existente
       await db
         .update(leads)
         .set({
-          nome: leadData.nome,
+          nome: shouldRefreshName ? leadData.nome : currentLead.nome,
           produto: leadData.produto,
           plano: leadData.plano,
           valor: leadData.valor,
