@@ -116,6 +116,89 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function normalizeExistingAutoNames(options?: { batchSize?: number }) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot normalize names: database not available");
+    return { usersUpdated: 0, leadsUpdated: 0 };
+  }
+
+  const batchSize = options?.batchSize ?? 1000;
+  let usersUpdated = 0;
+  let leadsUpdated = 0;
+
+  try {
+    const existingUsers = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        openId: users.openId,
+      })
+      .from(users)
+      .limit(batchSize);
+
+    for (const user of existingUsers) {
+      if (hasMeaningfulName(user.name)) continue;
+
+      const nextName = resolveAutoName({
+        providedName: user.name,
+        email: user.email,
+        identifier: user.openId,
+        fallback: `Usuario ${user.id}`,
+      });
+
+      if (nextName === user.name) continue;
+
+      await db
+        .update(users)
+        .set({ name: nextName })
+        .where(eq(users.id, user.id));
+
+      usersUpdated += 1;
+    }
+
+    const existingLeads = await db
+      .select({
+        id: leads.id,
+        nome: leads.nome,
+        email: leads.email,
+      })
+      .from(leads)
+      .limit(batchSize);
+
+    for (const lead of existingLeads) {
+      if (hasMeaningfulName(lead.nome)) continue;
+
+      const nextName = resolveAutoName({
+        providedName: lead.nome,
+        email: lead.email,
+        identifier: lead.email,
+        fallback: `Lead ${lead.id}`,
+      });
+
+      if (nextName === lead.nome) continue;
+
+      await db
+        .update(leads)
+        .set({ nome: nextName })
+        .where(eq(leads.id, lead.id));
+
+      leadsUpdated += 1;
+    }
+
+    if (usersUpdated > 0 || leadsUpdated > 0) {
+      console.log(
+        `[Database] Nome automatico aplicado: users=${usersUpdated}, leads=${leadsUpdated}`
+      );
+    }
+  } catch (error) {
+    console.error("[Database] Failed to normalize auto names:", error);
+  }
+
+  return { usersUpdated, leadsUpdated };
+}
+
 // ========================================================================
 // LEADS QUERIES
 // ========================================================================
