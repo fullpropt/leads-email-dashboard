@@ -65,6 +65,16 @@ async function resolveSessionUser(loginEmail: string) {
 }
 
 export function registerLocalAuthRoutes(app: Express) {
+  // Legacy compatibility endpoints to prevent stale frontend caches
+  // from breaking sign-in after removing GitHub OAuth.
+  app.get("/api/github/login", (_req: Request, res: Response) => {
+    res.redirect(302, "/login");
+  });
+
+  app.get("/api/github/callback", (_req: Request, res: Response) => {
+    res.redirect(302, "/login");
+  });
+
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     const body = (req.body ?? {}) as LoginBody;
     const email =
