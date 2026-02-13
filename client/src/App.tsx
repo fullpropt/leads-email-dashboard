@@ -11,10 +11,14 @@ import Analytics from "./pages/Analytics";
 import LeadLookup from "./pages/LeadLookup";
 import FunnelDetail from "./pages/FunnelDetail";
 import Support from "./pages/Support";
+import Login from "./pages/Login";
 
 function Router() {
   return (
     <Switch>
+      <Route path={"/login"}>
+        <Login />
+      </Route>
       <Route path={"/"}>
         <DashboardLayout>
           <Leads />

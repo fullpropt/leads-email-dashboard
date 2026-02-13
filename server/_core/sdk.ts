@@ -17,39 +17,8 @@ export type SessionPayload = {
   name: string;
 };
 
-/**
- * GitHub OAuth Service
- * Handles GitHub OAuth authentication flow
- */
-class GitHubOAuthService {
-  /**
-   * Get user information from GitHub using access token
-   * This method is called after successful OAuth callback
-   */
-  async getUserInfo(accessToken: string): Promise<{
-    openId: string;
-    name: string;
-    email: string | null;
-    loginMethod: string;
-  }> {
-    // Note: This method is provided for potential future use or testing
-    // In the current flow, user info is obtained directly in github-oauth.ts
-    return {
-      openId: "",
-      name: "",
-      email: null,
-      loginMethod: "github",
-    };
-  }
-}
-
 class SDKServer {
-  private readonly githubOAuthService: GitHubOAuthService;
-
-  constructor() {
-    this.githubOAuthService = new GitHubOAuthService();
-    console.log("[OAuth] Initialized with GitHub OAuth");
-  }
+  constructor() {}
 
   private parseCookies(cookieHeader: string | undefined) {
     if (!cookieHeader) {
@@ -66,9 +35,7 @@ class SDKServer {
   }
 
   /**
-   * Create a session token for a GitHub user openId
-   * @example
-   * const sessionToken = await sdk.createSessionToken(userInfo.openId);
+   * Create a session token for a user openId.
    */
   async createSessionToken(
     openId: string,
@@ -159,14 +126,13 @@ class SDKServer {
     // If user not in DB, create a new user entry from session data
     if (!user) {
       try {
-        // Extract user info from session
-        const name = session.name || "GitHub User";
+        const name = session.name || "User";
         
         await db.upsertUser({
           openId: sessionUserId,
           name: name,
           email: null,
-          loginMethod: "github",
+          loginMethod: "local",
           lastSignedIn: signedInAt,
         });
         user = await db.getUserByOpenId(sessionUserId);

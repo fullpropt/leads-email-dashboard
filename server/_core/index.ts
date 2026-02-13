@@ -3,7 +3,7 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerGitHubOAuthRoutes } from "./github-oauth";
+import { registerLocalAuthRoutes } from "./local-auth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -36,6 +36,7 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  app.set("trust proxy", 1);
 
   // ===== WEBHOOK STRIPE =====
   // IMPORTANTE: Stripe precisa do body RAW para validar assinatura.
@@ -49,9 +50,9 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  
-  // GitHub OAuth routes (removed Manus OAuth)
-  registerGitHubOAuthRoutes(app);
+
+  // Local auth route (single account with email/password)
+  registerLocalAuthRoutes(app);
   
   // Webhook para PerfectPay (legado)
   app.post("/api/webhooks/perfectpay", async (req, res) => {

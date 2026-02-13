@@ -92,6 +92,34 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get user by email: database not available");
+    return undefined;
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const result = await db
+    .select()
+    .from(users)
+    .where(sql`LOWER(${users.email}) = ${normalizedEmail}`)
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getFirstUser() {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get first user: database not available");
+    return undefined;
+  }
+
+  const result = await db.select().from(users).orderBy(asc(users.id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
 // ========================================================================
 // LEADS QUERIES
 // ========================================================================
