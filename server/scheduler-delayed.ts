@@ -32,6 +32,16 @@ export async function processScheduledEmails() {
     }
 
     try {
+      const { canCurrentServiceProcessQueue } = await import("./email");
+      const queuePermission = await canCurrentServiceProcessQueue();
+      if (!queuePermission.allowed) {
+        if (queuePermission.reason) {
+          console.log(`[Scheduler] ${queuePermission.reason}`);
+        }
+        schedulerRunning = false;
+        return;
+      }
+
       // Buscar leads com email agendado para envio
       const now = new Date();
       

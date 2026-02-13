@@ -11,6 +11,8 @@ import { leads, funnels, funnelTemplates, funnelLeadProgress, sendingConfig } fr
 import { eq, and, sql, lte, isNotNull, asc, desc } from "drizzle-orm";
 
 let funnelSchedulerInterval: NodeJS.Timeout | null = null;
+const emailAccountRotationEnabled =
+  process.env.EMAIL_ACCOUNT_ROTATION_ENABLED === "true";
 
 /**
  * Iniciar o scheduler de funis
@@ -119,7 +121,7 @@ async function canSendEmail(): Promise<{ allowed: boolean; reason?: string }> {
     return { allowed: false, reason: "Envio está pausado" };
   }
 
-  if (config.emailsSentToday >= config.dailyLimit) {
+  if (!emailAccountRotationEnabled && config.emailsSentToday >= config.dailyLimit) {
     return { allowed: false, reason: `Limite diário atingido (${config.emailsSentToday}/${config.dailyLimit})` };
   }
 
@@ -166,6 +168,15 @@ async function processFunnelEmails() {
       return;
     }
 
+    const { canCurrentServiceProcessQueue } = await import("./email");
+    const queuePermission = await canCurrentServiceProcessQueue();
+    if (!queuePermission.allowed) {
+      if (queuePermission.reason) {
+        console.log(`[FunnelScheduler] ${queuePermission.reason}`);
+      }
+      return;
+    }
+
     const now = new Date();
     console.log(`[FunnelScheduler] 🔍 Verificando funis em ${now.toLocaleString("pt-BR")}...`);
 
@@ -177,13 +188,19 @@ async function processFunnelEmails() {
     }
 
     // Verificar limite diário
-    if (config.emailsSentToday >= config.dailyLimit) {
+    if (!emailAccountRotationEnabled && config.emailsSentToday >= config.dailyLimit) {
       console.log(`[FunnelScheduler] 🛑 Limite diário atingido (${config.emailsSentToday}/${config.dailyLimit})`);
       return;
     }
 
-    const remainingToday = config.dailyLimit - config.emailsSentToday;
-    console.log(`[FunnelScheduler] 📊 Envios hoje: ${config.emailsSentToday}/${config.dailyLimit} (restam ${remainingToday})`);
+    const remainingToday = emailAccountRotationEnabled
+      ? 500
+      : config.dailyLimit - config.emailsSentToday;
+    if (emailAccountRotationEnabled) {
+      console.log("[FunnelScheduler] Rotacao por conta ativa (limite global ignorado neste ciclo)");
+    } else {
+      console.log(`[FunnelScheduler] 📊 Envios hoje: ${config.emailsSentToday}/${config.dailyLimit} (restam ${remainingToday})`);
+    }
 
     // Buscar progressos de funis prontos para envio
     // Ordenar por data de criação do lead (mais novos primeiro)

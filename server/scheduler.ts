@@ -60,6 +60,15 @@ async function processDelayedSends() {
       return;
     }
 
+    const { canCurrentServiceProcessQueue } = await import("./email");
+    const queuePermission = await canCurrentServiceProcessQueue();
+    if (!queuePermission.allowed) {
+      if (queuePermission.reason) {
+        console.log(`[Scheduler] ${queuePermission.reason}`);
+      }
+      return;
+    }
+
     const now = new Date();
     console.log(`[Scheduler] 🔍 Verificando envios atrasados em ${now.toLocaleString("pt-BR")}...`);
 

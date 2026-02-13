@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import postgres from "postgres";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerLocalAuthRoutes } from "./local-auth";
 import { appRouter } from "../routers";
@@ -13,6 +14,10 @@ import { startFunnelScheduler } from "../scheduler-funnel";
 import { startSyncScheduler } from "../scheduler-sync-tubetools";
 import { handleMailgunIncomingWebhook } from "../webhooks-support";
 import { handleStripeWebhook } from "../webhooks-stripe";
+
+type SchedulerMode = "leader" | "enabled" | "disabled";
+
+let schedulerLeaderLockClient: ReturnType<typeof postgres> | null = null;
 
 function isPortAvailable(port: number ): Promise<boolean> {
   return new Promise(resolve => {
@@ -31,6 +36,89 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
     }
   }
   throw new Error(`No available port found starting from ${startPort}`);
+}
+
+function getSchedulerMode(): SchedulerMode {
+  const defaultMode =
+    process.env.EMAIL_ACCOUNT_ROTATION_ENABLED === "true" ? "enabled" : "leader";
+  const mode = (process.env.SCHEDULER_MODE || defaultMode).toLowerCase();
+  if (mode === "enabled" || mode === "disabled" || mode === "leader") {
+    return mode;
+  }
+  return defaultMode;
+}
+
+async function acquireSchedulerLeadership(): Promise<boolean> {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    console.warn("[Schedulers] DATABASE_URL ausente; nao foi possivel adquirir lideranca.");
+    return false;
+  }
+
+  const lockKey = Number.parseInt(
+    process.env.SCHEDULER_LEADER_LOCK_KEY || "845001",
+    10
+  );
+
+  if (!Number.isFinite(lockKey)) {
+    console.error(
+      "[Schedulers] SCHEDULER_LEADER_LOCK_KEY invalido; desativando schedulers para seguranca."
+    );
+    return false;
+  }
+
+  try {
+    schedulerLeaderLockClient = postgres(databaseUrl, {
+      max: 1,
+      idle_timeout: 0,
+      connect_timeout: 10,
+    });
+
+    const result = await schedulerLeaderLockClient<{ acquired: boolean }[]>`
+      SELECT pg_try_advisory_lock(${lockKey}) AS acquired
+    `;
+
+    const acquired = Boolean(result[0]?.acquired);
+    if (!acquired) {
+      console.log(
+        `[Schedulers] Lideranca nao adquirida (lock ${lockKey}); outro servico ja esta executando jobs.`
+      );
+      await schedulerLeaderLockClient.end({ timeout: 5 });
+      schedulerLeaderLockClient = null;
+      return false;
+    }
+
+    console.log(`[Schedulers] Lideranca adquirida com lock ${lockKey}.`);
+    return true;
+  } catch (error) {
+    console.error("[Schedulers] Erro ao tentar adquirir lock de lideranca:", error);
+    if (schedulerLeaderLockClient) {
+      await schedulerLeaderLockClient.end({ timeout: 5 });
+      schedulerLeaderLockClient = null;
+    }
+    return false;
+  }
+}
+
+async function startBackgroundSchedulers() {
+  const mode = getSchedulerMode();
+  console.log(`[Schedulers] Modo configurado: ${mode}`);
+
+  if (mode === "disabled") {
+    console.log("[Schedulers] Jobs em background desativados por configuracao.");
+    return;
+  }
+
+  if (mode === "leader") {
+    const isLeader = await acquireSchedulerLeadership();
+    if (!isLeader) {
+      return;
+    }
+  }
+
+  startScheduler();
+  startFunnelScheduler();
+  startSyncScheduler();
 }
 
 async function startServer() {
@@ -53,6 +141,15 @@ async function startServer() {
 
   // Local auth route (single account with email/password)
   registerLocalAuthRoutes(app);
+
+  const { getEmailConfig } = await import("../email");
+  const emailConfig = getEmailConfig();
+  console.log(
+    `[Email] Servico=${emailConfig.service} provider=${emailConfig.provider} configured=${emailConfig.configured}`
+  );
+  if (emailConfig.error) {
+    console.warn(`[Email] Aviso de configuracao: ${emailConfig.error}`);
+  }
   
   // Webhook para PerfectPay (legado)
   app.post("/api/webhooks/perfectpay", async (req, res) => {
@@ -248,9 +345,7 @@ async function startServer() {
     console.log(`Webhook endpoint (Stripe): http://localhost:${port}/api/webhooks/stripe`);
     
     // Inicializar schedulers
-    startScheduler();
-    startFunnelScheduler();
-    startSyncScheduler();
+    void startBackgroundSchedulers();
   });
 }
 
