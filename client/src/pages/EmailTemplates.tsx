@@ -32,6 +32,16 @@ interface FunnelConfig {
   targetSituacao: "all" | "active" | "abandoned";
 }
 
+interface TransmissionConfig {
+  name: string;
+  mode: "immediate" | "scheduled";
+  scheduledAt?: string;
+  sendIntervalSeconds: number;
+  targetStatusPlataforma: "all" | "accessed" | "not_accessed";
+  targetSituacao: "all" | "active" | "abandoned" | "none";
+  sendOrder: "newest_first" | "oldest_first";
+}
+
 interface TemplateBlock {
   id: number;
   nome: string;
@@ -65,6 +75,32 @@ interface FunnelBlock {
   atualizadoEm: Date;
 }
 
+interface TransmissionBlock {
+  id: number;
+  name: string;
+  subject: string;
+  htmlContent: string;
+  mode: "immediate" | "scheduled";
+  scheduledAt: string | null;
+  sendIntervalSeconds: number;
+  targetStatusPlataforma: "all" | "accessed" | "not_accessed";
+  targetSituacao: "all" | "active" | "abandoned" | "none";
+  sendOrder: "newest_first" | "oldest_first";
+  enabled: number;
+  status: "draft" | "scheduled" | "processing" | "completed" | "paused" | "failed";
+  totalRecipients: number;
+  sentCount: number;
+  failedCount: number;
+  pendingCount: number;
+  lastSentAt: string | null;
+  nextRunAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Labels para exibição dos filtros
 const STATUS_PLATAFORMA_LABELS: Record<string, string> = {
   all: "Todos",
@@ -93,26 +129,50 @@ const SITUACAO_SHORT: Record<string, string> = {
   none: "Nenhum",
 };
 
+const TRANSMISSION_STATUS_LABELS: Record<string, string> = {
+  draft: "Rascunho",
+  scheduled: "Agendada",
+  processing: "Processando",
+  completed: "Concluida",
+  paused: "Pausada",
+  failed: "Falhou",
+};
+
+function toDateTimeLocal(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 export default function EmailTemplates() {
   const [, setLocation] = useLocation();
   const [templates, setTemplates] = useState<TemplateBlock[]>([]);
+  const [transmissions, setTransmissions] = useState<TransmissionBlock[]>([]);
   const [previewHtml, setPreviewHtml] = useState("");
   const [activeTab, setActiveTab] = useState("items");
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [previewTemplateId, setPreviewTemplateId] = useState<number | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
+  const [editingTransmissionId, setEditingTransmissionId] = useState<number | null>(null);
   const [editingFunnelId, setEditingFunnelId] = useState<number | null>(null);
 
   // Estados para diálogo de confirmação de exclusão
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteType, setDeleteType] = useState<"template" | "funnel" | null>(null);
+  const [deleteType, setDeleteType] = useState<"template" | "funnel" | "transmission" | null>(null);
   const [deleteItemId, setDeleteItemId] = useState<number | null>(null);
   const [deleteItemName, setDeleteItemName] = useState<string>("");
 
   // Queries
   const { data: allTemplates, refetch: refetchTemplates } = trpc.emailTemplates.list.useQuery();
   const { data: allFunnels, refetch: refetchFunnels } = trpc.funnels.list.useQuery();
+  const { data: allTransmissions, refetch: refetchTransmissions } = trpc.transmissions.list.useQuery();
   const { data: emailSentCounts } = trpc.emailTemplates.getAllEmailSentCounts.useQuery();
   const { data: funnelEmailStats } = trpc.funnels.getEmailStats.useQuery();
 
@@ -230,6 +290,76 @@ export default function EmailTemplates() {
     },
   });
 
+  // Mutations para Transmissoes
+  const createTransmission = trpc.transmissions.create.useMutation({
+    onSuccess: data => {
+      if (data.success) {
+        toast.success("Transmissao criada com sucesso!");
+        refetchTransmissions();
+      } else {
+        toast.error(data.message || "Erro ao criar transmissao");
+      }
+    },
+    onError: () => {
+      toast.error("Erro ao criar transmissao");
+    },
+  });
+
+  const updateTransmission = trpc.transmissions.update.useMutation({
+    onSuccess: data => {
+      if (data.success) {
+        toast.success("Transmissao atualizada!");
+        refetchTransmissions();
+      } else {
+        toast.error(data.message || "Erro ao atualizar transmissao");
+      }
+    },
+    onError: () => {
+      toast.error("Erro ao atualizar transmissao");
+    },
+  });
+
+  const deleteTransmission = trpc.transmissions.delete.useMutation({
+    onSuccess: data => {
+      if (data.success) {
+        toast.success("Transmissao removida com sucesso!");
+        refetchTransmissions();
+      } else {
+        toast.error(data.message || "Erro ao remover transmissao");
+      }
+    },
+    onError: () => {
+      toast.error("Erro ao remover transmissao");
+    },
+  });
+
+  const launchTransmission = trpc.transmissions.launch.useMutation({
+    onSuccess: data => {
+      if (data.success) {
+        toast.success(data.message || "Transmissao enviada/agendada com sucesso");
+        refetchTransmissions();
+      } else {
+        toast.error(data.message || "Erro ao iniciar transmissao");
+      }
+    },
+    onError: () => {
+      toast.error("Erro ao iniciar transmissao");
+    },
+  });
+
+  const setTransmissionEnabled = trpc.transmissions.setEnabled.useMutation({
+    onSuccess: data => {
+      if (data.success) {
+        refetchTransmissions();
+      } else {
+        toast.error(data.message || "Erro ao atualizar status da transmissao");
+      }
+    },
+    onError: () => {
+      toast.error("Erro ao atualizar status da transmissao");
+    },
+  });
+
   // Mutations para envio de email
   const sendImmediateEmail = trpc.email.sendImmediateToAllPending.useMutation({
     onSuccess: (data) => {
@@ -279,6 +409,12 @@ export default function EmailTemplates() {
       })));
     }
   }, [allTemplates]);
+
+  React.useEffect(() => {
+    if (allTransmissions) {
+      setTransmissions(allTransmissions as TransmissionBlock[]);
+    }
+  }, [allTransmissions]);
 
   React.useEffect(() => {
     if (previewTemplate.data?.success) {
@@ -339,6 +475,82 @@ export default function EmailTemplates() {
     });
   };
 
+  const handleCreateTransmission = (config: TransmissionConfig) => {
+    createTransmission.mutate({
+      name: config.name,
+      subject: "Assunto da transmissao",
+      htmlContent: "<p>Conteudo da transmissao</p>",
+      mode: config.mode,
+      scheduledAt:
+        config.mode === "scheduled" && config.scheduledAt
+          ? new Date(config.scheduledAt).toISOString()
+          : null,
+      sendIntervalSeconds: config.sendIntervalSeconds,
+      targetStatusPlataforma: config.targetStatusPlataforma,
+      targetSituacao: config.targetSituacao,
+      sendOrder: config.sendOrder,
+    });
+  };
+
+  const updateTransmissionField = (
+    transmissionId: number,
+    field: keyof TransmissionBlock,
+    value: any
+  ) => {
+    setTransmissions(prev =>
+      prev.map(transmission =>
+        transmission.id === transmissionId
+          ? { ...transmission, [field]: value }
+          : transmission
+      )
+    );
+  };
+
+  const handleSaveTransmission = (transmissionId: number) => {
+    const transmission = transmissions.find(item => item.id === transmissionId);
+    if (!transmission) return;
+    if (!transmission.name || !transmission.subject || !transmission.htmlContent) {
+      toast.error("Preencha nome, assunto e conteudo da transmissao");
+      return;
+    }
+
+    updateTransmission.mutate({
+      id: transmissionId,
+      updates: {
+        name: transmission.name,
+        subject: transmission.subject,
+        htmlContent: transmission.htmlContent,
+        mode: transmission.mode,
+        scheduledAt: transmission.scheduledAt,
+        sendIntervalSeconds: transmission.sendIntervalSeconds,
+        targetStatusPlataforma: transmission.targetStatusPlataforma,
+        targetSituacao: transmission.targetSituacao,
+        sendOrder: transmission.sendOrder,
+      },
+    });
+  };
+
+  const handleLaunchTransmission = (transmissionId: number) => {
+    launchTransmission.mutate({ id: transmissionId });
+  };
+
+  const handleToggleTransmissionEnabled = (
+    transmissionId: number,
+    enabled: boolean
+  ) => {
+    setTransmissionEnabled.mutate({ id: transmissionId, enabled });
+  };
+
+  const handleRemoveTransmission = (
+    transmissionId: number,
+    transmissionName: string
+  ) => {
+    setDeleteType("transmission");
+    setDeleteItemId(transmissionId);
+    setDeleteItemName(transmissionName);
+    setDeleteDialogOpen(true);
+  };
+
   const handleRemoveTemplate = (templateId: number, templateName: string) => {
     setDeleteType("template");
     setDeleteItemId(templateId);
@@ -366,6 +578,8 @@ export default function EmailTemplates() {
       deleteTemplate.mutate({ templateId: deleteItemId });
     } else if (deleteType === "funnel" && deleteItemId) {
       deleteFunnel.mutate({ funnelId: deleteItemId });
+    } else if (deleteType === "transmission" && deleteItemId) {
+      deleteTransmission.mutate({ id: deleteItemId });
     }
     setDeleteDialogOpen(false);
     setDeleteType(null);
@@ -471,7 +685,7 @@ export default function EmailTemplates() {
             {templates.map((template) => (
               <div 
                 key={`template-${template.id}`} 
-                className={`bg-white dark:bg-slate-950 rounded-xl border shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${template.ativo === 0 ? 'opacity-60' : ''}`}
+                className={`bg-white dark:bg-slate-950 rounded-xl border border-sky-100 dark:border-sky-900 border-l-4 border-l-sky-300 dark:border-l-sky-700 shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${template.ativo === 0 ? 'opacity-60' : ''}`}
                 onClick={() => {
                   setSelectedTemplateId(template.id);
                   handlePreview(template.id);
@@ -480,7 +694,7 @@ export default function EmailTemplates() {
                 <div className="px-4 py-3">
                   <div className="flex items-center gap-4">
                     {/* Badge de tipo */}
-                    <div className="px-4 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-400 min-w-[90px] text-center">
+                    <div className="px-4 py-1.5 rounded-full border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950 text-sm font-medium text-sky-600 dark:text-sky-400 min-w-[90px] text-center">
                       Template
                     </div>
                     
@@ -651,11 +865,301 @@ export default function EmailTemplates() {
               </div>
             ))}
 
+            {/* Renderizar Transmissoes */}
+            {transmissions.map((transmission) => (
+              <div
+                key={`transmission-${transmission.id}`}
+                className={`bg-white dark:bg-slate-950 rounded-xl border border-amber-100 dark:border-amber-900 border-l-4 border-l-amber-400 dark:border-l-amber-700 shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${transmission.enabled === 0 ? "opacity-60" : ""}`}
+                onClick={() =>
+                  setEditingTransmissionId(
+                    editingTransmissionId === transmission.id ? null : transmission.id
+                  )
+                }
+              >
+                <div className="px-4 py-3">
+                  <div className="flex items-center gap-4">
+                    <div className="px-4 py-1.5 rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 text-sm font-medium text-amber-600 dark:text-amber-300 min-w-[110px] text-center">
+                      Transmissao
+                    </div>
+
+                    <div className="flex-1">
+                      <span className="text-sm font-medium">{transmission.name}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300">
+                      <span>{SITUACAO_SHORT[transmission.targetSituacao] || transmission.targetSituacao}</span>
+                      <span className="text-slate-400">.</span>
+                      <span>{STATUS_PLATAFORMA_SHORT[transmission.targetStatusPlataforma] || transmission.targetStatusPlataforma}</span>
+                    </div>
+
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      {transmission.sentCount}/{transmission.totalRecipients}
+                    </div>
+
+                    <div className="text-xs text-slate-500 dark:text-slate-400 min-w-[86px] text-right">
+                      {TRANSMISSION_STATUS_LABELS[transmission.status] || transmission.status}
+                    </div>
+
+                    <div
+                      className="flex items-center gap-2"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() =>
+                          setEditingTransmissionId(
+                            editingTransmissionId === transmission.id ? null : transmission.id
+                          )
+                        }
+                        className="h-8 w-8 text-slate-400 hover:text-slate-600"
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleLaunchTransmission(transmission.id)}
+                        disabled={launchTransmission.isPending || transmission.enabled === 0}
+                        className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-200 dark:border-amber-700 dark:hover:bg-amber-950"
+                      >
+                        {launchTransmission.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : transmission.mode === "scheduled" ? (
+                          "Agendar"
+                        ) : (
+                          "Enviar"
+                        )}
+                      </Button>
+
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-slate-200 dark:border-slate-700">
+                        <span className="text-xs text-slate-400">Off</span>
+                        <Switch
+                          checked={transmission.enabled === 1}
+                          onCheckedChange={checked =>
+                            handleToggleTransmissionEnabled(transmission.id, checked)
+                          }
+                          className="data-[state=checked]:bg-amber-500"
+                        />
+                        <span className={`text-xs ${transmission.enabled === 1 ? "text-amber-600 font-medium" : "text-slate-400"}`}>
+                          On
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {editingTransmissionId === transmission.id && (
+                    <div className="mt-4 pt-4 border-t space-y-4" onClick={event => event.stopPropagation()}>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs">Nome</Label>
+                          <Input
+                            value={transmission.name}
+                            onChange={event =>
+                              updateTransmissionField(transmission.id, "name", event.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Assunto</Label>
+                          <Input
+                            value={transmission.subject}
+                            onChange={event =>
+                              updateTransmissionField(
+                                transmission.id,
+                                "subject",
+                                event.target.value
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs">Modo</Label>
+                          <Select
+                            value={transmission.mode}
+                            onValueChange={value =>
+                              updateTransmissionField(
+                                transmission.id,
+                                "mode",
+                                value as "immediate" | "scheduled"
+                              )
+                            }
+                          >
+                            <SelectTrigger className="text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="immediate">Imediato</SelectItem>
+                              <SelectItem value="scheduled">Agendado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Intervalo (segundos)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="3600"
+                            value={transmission.sendIntervalSeconds}
+                            onChange={event =>
+                              updateTransmissionField(
+                                transmission.id,
+                                "sendIntervalSeconds",
+                                Math.max(0, parseInt(event.target.value) || 0)
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      {transmission.mode === "scheduled" && (
+                        <div className="space-y-2">
+                          <Label className="text-xs">Agendar para</Label>
+                          <Input
+                            type="datetime-local"
+                            value={toDateTimeLocal(transmission.scheduledAt)}
+                            onChange={event =>
+                              updateTransmissionField(
+                                transmission.id,
+                                "scheduledAt",
+                                event.target.value
+                                  ? new Date(event.target.value).toISOString()
+                                  : null
+                              )
+                            }
+                          />
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs">Status Plataforma</Label>
+                          <Select
+                            value={transmission.targetStatusPlataforma}
+                            onValueChange={value =>
+                              updateTransmissionField(
+                                transmission.id,
+                                "targetStatusPlataforma",
+                                value as "all" | "accessed" | "not_accessed"
+                              )
+                            }
+                          >
+                            <SelectTrigger className="text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todos</SelectItem>
+                              <SelectItem value="accessed">Ativo</SelectItem>
+                              <SelectItem value="not_accessed">Inativo</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">Situacao</Label>
+                          <Select
+                            value={transmission.targetSituacao}
+                            onValueChange={value =>
+                              updateTransmissionField(
+                                transmission.id,
+                                "targetSituacao",
+                                value as "all" | "active" | "abandoned" | "none"
+                              )
+                            }
+                          >
+                            <SelectTrigger className="text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todos</SelectItem>
+                              <SelectItem value="active">Compra Aprovada</SelectItem>
+                              <SelectItem value="abandoned">Carrinho Abandonado</SelectItem>
+                              <SelectItem value="none">Nenhum</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">Ordem de envio</Label>
+                          <Select
+                            value={transmission.sendOrder}
+                            onValueChange={value =>
+                              updateTransmissionField(
+                                transmission.id,
+                                "sendOrder",
+                                value as "newest_first" | "oldest_first"
+                              )
+                            }
+                          >
+                            <SelectTrigger className="text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="newest_first">Mais novos primeiro</SelectItem>
+                              <SelectItem value="oldest_first">Mais antigos primeiro</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs">Conteudo HTML</Label>
+                        <Textarea
+                          value={transmission.htmlContent}
+                          onChange={event =>
+                            updateTransmissionField(
+                              transmission.id,
+                              "htmlContent",
+                              event.target.value
+                            )
+                          }
+                          className="min-h-[160px]"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground">
+                          Falhas: {transmission.failedCount} | Pendentes: {transmission.pendingCount}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              handleRemoveTransmission(transmission.id, transmission.name)
+                            }
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500 mr-1" />
+                            Remover
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleSaveTransmission(transmission.id)}
+                            disabled={updateTransmission.isPending}
+                          >
+                            {updateTransmission.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              "Salvar"
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+
             {/* Renderizar Funis */}
             {funnels.map((funnel: FunnelBlock) => (
               <div 
                 key={`funnel-${funnel.id}`} 
-                className={`bg-white dark:bg-slate-950 rounded-xl border shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${funnel.ativo === 0 ? 'opacity-60' : ''}`}
+                className={`bg-white dark:bg-slate-950 rounded-xl border border-cyan-100 dark:border-cyan-900 border-l-4 border-l-cyan-400 dark:border-l-cyan-700 shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${funnel.ativo === 0 ? 'opacity-60' : ''}`}
                 onClick={() => handleFunnelClick(funnel.id)}
               >
                 <div className="px-4 py-3">
@@ -794,10 +1298,14 @@ export default function EmailTemplates() {
             <Button
               variant="outline"
               onClick={() => setShowCreateModal(true)}
-              disabled={createTemplate.isPending || createFunnel.isPending}
+              disabled={
+                createTemplate.isPending ||
+                createFunnel.isPending ||
+                createTransmission.isPending
+              }
               className="border-dashed border-cyan-300 text-cyan-600 hover:bg-cyan-50 dark:border-cyan-700 dark:text-cyan-400 dark:hover:bg-cyan-950"
             >
-              {(createTemplate.isPending || createFunnel.isPending) ? (
+              {(createTemplate.isPending || createFunnel.isPending || createTransmission.isPending) ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (
                 <Plus className="h-4 w-4 mr-2" />
@@ -895,6 +1403,7 @@ export default function EmailTemplates() {
         onClose={() => setShowCreateModal(false)}
         onCreateTemplate={handleCreateTemplate}
         onCreateFunnel={handleCreateFunnel}
+        onCreateTransmission={handleCreateTransmission}
       />
 
       {/* Diálogo de confirmação de exclusão */}
@@ -902,15 +1411,28 @@ export default function EmailTemplates() {
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleConfirmDelete}
-        title={deleteType === "template" ? "Excluir Template" : "Excluir Funil"}
+        title={
+          deleteType === "template"
+            ? "Excluir Template"
+            : deleteType === "funnel"
+              ? "Excluir Funil"
+              : "Excluir Transmissao"
+        }
         description={
           deleteType === "template"
-            ? "Tem certeza que deseja excluir este template? Esta ação não pode ser desfeita e todo o histórico de envios relacionado será mantido."
-            : "Tem certeza que deseja excluir este funil? Esta ação não pode ser desfeita e todos os templates dentro do funil serão removidos."
+            ? "Tem certeza que deseja excluir este template? Esta acao nao pode ser desfeita e todo o historico de envios relacionado sera mantido."
+            : deleteType === "funnel"
+              ? "Tem certeza que deseja excluir este funil? Esta acao nao pode ser desfeita e todos os templates dentro do funil serao removidos."
+              : "Tem certeza que deseja excluir esta transmissao? Esta acao nao pode ser desfeita."
         }
         itemName={deleteItemName}
-        isLoading={deleteTemplate.isPending || deleteFunnel.isPending}
+        isLoading={
+          deleteTemplate.isPending ||
+          deleteFunnel.isPending ||
+          deleteTransmission.isPending
+        }
       />
     </div>
   );
 }
+

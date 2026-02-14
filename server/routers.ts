@@ -919,6 +919,84 @@ export const appRouter = router({
       }),
   }),
 
+    // ==================== ROUTER DE TRANSMISSOES ====================
+  transmissions: router({
+    list: publicProcedure.query(async () => {
+      const { listTransmissions } = await import("./transmissions");
+      return listTransmissions();
+    }),
+
+    create: publicProcedure
+      .input(
+        z.object({
+          name: z.string().min(1),
+          subject: z.string().min(1),
+          htmlContent: z.string().min(1),
+          mode: z.enum(["immediate", "scheduled"]).default("immediate"),
+          scheduledAt: z.string().optional().nullable(),
+          sendIntervalSeconds: z.number().min(0).max(3600).default(0),
+          targetStatusPlataforma: z.enum(["all", "accessed", "not_accessed"]).default("all"),
+          targetSituacao: z
+            .enum(["all", "active", "abandoned", "none"])
+            .default("all"),
+          sendOrder: z.enum(["newest_first", "oldest_first"]).default("newest_first"),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { createTransmission } = await import("./transmissions");
+        return createTransmission(input);
+      }),
+
+    update: publicProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          updates: z.object({
+            name: z.string().min(1).optional(),
+            subject: z.string().min(1).optional(),
+            htmlContent: z.string().min(1).optional(),
+            mode: z.enum(["immediate", "scheduled"]).optional(),
+            scheduledAt: z.string().optional().nullable(),
+            sendIntervalSeconds: z.number().min(0).max(3600).optional(),
+            targetStatusPlataforma: z
+              .enum(["all", "accessed", "not_accessed"])
+              .optional(),
+            targetSituacao: z
+              .enum(["all", "active", "abandoned", "none"])
+              .optional(),
+            sendOrder: z
+              .enum(["newest_first", "oldest_first"])
+              .optional(),
+            enabled: z.number().min(0).max(1).optional(),
+          }),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { updateTransmission } = await import("./transmissions");
+        return updateTransmission(input.id, input.updates);
+      }),
+
+    launch: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const { launchTransmission } = await import("./transmissions");
+        return launchTransmission(input.id);
+      }),
+
+    setEnabled: publicProcedure
+      .input(z.object({ id: z.number(), enabled: z.boolean() }))
+      .mutation(async ({ input }) => {
+        const { setTransmissionEnabled } = await import("./transmissions");
+        return setTransmissionEnabled(input.id, input.enabled);
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const { deleteTransmission } = await import("./transmissions");
+        return deleteTransmission(input.id);
+      }),
+  }),
   // ==================== ROUTER DE CONFIGURAÇÃO DE ENVIO (RATE LIMITING) ====================
   sendingConfig: router({
     get: publicProcedure.query(async () => {

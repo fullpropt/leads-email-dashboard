@@ -12,6 +12,7 @@ import { processWebhook } from "../webhooks";
 import { startScheduler } from "../scheduler";
 import { startFunnelScheduler } from "../scheduler-funnel";
 import { startSyncScheduler } from "../scheduler-sync-tubetools";
+import { startTransmissionScheduler } from "../scheduler-transmissions";
 import { handleMailgunIncomingWebhook } from "../webhooks-support";
 import { handleStripeWebhook } from "../webhooks-stripe";
 
@@ -119,6 +120,7 @@ async function startBackgroundSchedulers() {
   startScheduler();
   startFunnelScheduler();
   startSyncScheduler();
+  startTransmissionScheduler();
 }
 
 async function startServer() {
