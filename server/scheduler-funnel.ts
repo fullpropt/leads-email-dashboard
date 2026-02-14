@@ -8,7 +8,7 @@
 
 import { getDb } from "./db";
 import { leads, funnels, funnelTemplates, funnelLeadProgress, sendingConfig } from "../drizzle/schema_postgresql";
-import { eq, and, sql, lte, isNotNull, asc, desc } from "drizzle-orm";
+import { eq, and, or, sql, lte, isNotNull, asc, desc } from "drizzle-orm";
 
 let funnelSchedulerInterval: NodeJS.Timeout | null = null;
 const emailAccountRotationEnabled =
@@ -116,11 +116,6 @@ async function canSendEmail(): Promise<{ allowed: boolean; reason?: string }> {
   if (!config) {
     return { allowed: false, reason: "Configuração de envio não disponível" };
   }
-
-  if (config.enabled !== 1) {
-    return { allowed: false, reason: "Envio está pausado" };
-  }
-
   if (!emailAccountRotationEnabled && config.emailsSentToday >= config.dailyLimit) {
     return { allowed: false, reason: `Limite diário atingido (${config.emailsSentToday}/${config.dailyLimit})` };
   }
@@ -179,14 +174,12 @@ async function processFunnelEmails() {
 
     const now = new Date();
     console.log(`[FunnelScheduler] 🔍 Verificando funis em ${now.toLocaleString("pt-BR")}...`);
-
-    // Verificar se o envio está habilitado
+    // Obter configuracao de ritmo de envio
     const config = await getSendingConfig();
-    if (!config || config.enabled !== 1) {
-      console.log("[FunnelScheduler] ⏸️ Envio está pausado nas configurações");
+    if (!config) {
+      console.log("[FunnelScheduler] Configuracao de envio nao disponivel");
       return;
     }
-
     // Verificar limite diário
     if (!emailAccountRotationEnabled && config.emailsSentToday >= config.dailyLimit) {
       console.log(`[FunnelScheduler] 🛑 Limite diário atingido (${config.emailsSentToday}/${config.dailyLimit})`);
@@ -211,8 +204,10 @@ async function processFunnelEmails() {
       })
       .from(funnelLeadProgress)
       .innerJoin(leads, eq(leads.id, funnelLeadProgress.leadId))
+      .innerJoin(funnels, eq(funnels.id, funnelLeadProgress.funnelId))
       .where(
         and(
+          eq(funnels.ativo, 1),
           eq(funnelLeadProgress.status, "active"),
           isNotNull(funnelLeadProgress.nextSendAt),
           lte(funnelLeadProgress.nextSendAt, now)
@@ -548,9 +543,11 @@ export async function enqueueExistingLeads(
 
     // Buscar leads que NÃO estão no funil, filtrados por status, ordenados do mais novo ao mais antigo
     // Também exclui leads que cancelaram inscrição
-    const statusFilter = leadStatus === "all" 
-      ? sql`1=1` 
-      : eq(leads.status, leadStatus);
+    const statusFilter = leadStatus === "all"
+      ? sql`1=1`
+      : leadStatus === "abandoned"
+        ? or(eq(leads.status, "abandoned"), eq(leads.leadType, "carrinho_abandonado"))
+        : or(eq(leads.status, "active"), eq(leads.leadType, "compra_aprovada"));
 
     const eligibleLeads = await db
       .select({ id: leads.id, timezone: leads.timezone, email: leads.email })
@@ -619,3 +616,4 @@ export async function enqueueExistingLeads(
     return { success: false, enqueued: 0, skipped: 0, message: "Erro ao enfileirar leads" };
   }
 }
+

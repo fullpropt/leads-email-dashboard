@@ -1012,13 +1012,15 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const { getDb } = await import("./db");
         const { leads, funnelLeadProgress } = await import("../drizzle/schema_postgresql");
-        const { eq, and, sql } = await import("drizzle-orm");
+        const { eq, and, or, sql } = await import("drizzle-orm");
         const db = await getDb();
         if (!db) return { count: 0 };
 
         const statusFilter = input.leadStatus === "all"
           ? sql`1=1`
-          : eq(leads.status, input.leadStatus);
+          : input.leadStatus === "abandoned"
+            ? or(eq(leads.status, "abandoned"), eq(leads.leadType, "carrinho_abandonado"))
+            : or(eq(leads.status, "active"), eq(leads.leadType, "compra_aprovada"));
 
         const [result] = await db
           .select({ count: sql<number>`count(*)::int` })

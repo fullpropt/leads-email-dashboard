@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Loader2, Eye, Code, Settings, Trash2, Send, ChevronRight, Mail, Gauge, Users, Play, Pause, RefreshCw } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Eye, Code, Settings, Trash2, Send, ChevronRight, Mail, Gauge, Users, RefreshCw } from "lucide-react";
 import { CreateItemModal } from "@/components/CreateItemModal";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { SimplifiedEmailEditor } from "@/components/SimplifiedEmailEditor";
@@ -265,13 +265,6 @@ export default function FunnelDetail() {
     updateSendingConfig.mutate({
       dailyLimit,
       intervalSeconds,
-    });
-  };
-
-  const handleToggleSending = () => {
-    if (!sendingConfigData) return;
-    updateSendingConfig.mutate({
-      enabled: sendingConfigData.enabled === 1 ? 0 : 1,
     });
   };
 
@@ -729,31 +722,21 @@ export default function FunnelDetail() {
                     : "Nenhum envio registrado hoje"}
                 </p>
               </div>
-
-              {/* Toggle de envio */}
+              {/* Status operacional vinculado ao funil */}
               <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
                 <div>
-                  <p className="font-medium text-sm">Envio automático</p>
+                  <p className="font-medium text-sm">Status operacional</p>
                   <p className="text-xs text-muted-foreground">
-                    {sendingConfigData?.enabled === 1 ? "O scheduler está enviando emails" : "O scheduler está pausado"}
+                    O envio automatico segue o estado do funil (On/Off) na tela anterior.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {sendingConfigData?.enabled === 1 ? (
-                    <Button variant="outline" size="sm" onClick={handleToggleSending} className="gap-1 text-orange-600 border-orange-300 hover:bg-orange-50">
-                      <Pause className="h-3.5 w-3.5" />
-                      Pausar
-                    </Button>
-                  ) : (
-                    <Button variant="outline" size="sm" onClick={handleToggleSending} className="gap-1 text-green-600 border-green-300 hover:bg-green-50">
-                      <Play className="h-3.5 w-3.5" />
-                      Ativar
-                    </Button>
-                  )}
+                  <span className={`text-xs px-2 py-1 rounded-full border ${funnel.ativo === 1 ? "text-cyan-600 border-cyan-200 bg-cyan-50" : "text-slate-500 border-slate-200 bg-slate-100"}`}>
+                    Funil {funnel.ativo === 1 ? "Ativo" : "Inativo"}
+                  </span>
                 </div>
               </div>
-
-              {/* Configurações */}
+              {/* Configuracoes */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-sm">Limite diário</Label>
@@ -921,3 +904,4 @@ export default function FunnelDetail() {
     </div>
   );
 }
+
