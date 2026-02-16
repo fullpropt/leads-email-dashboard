@@ -46,6 +46,7 @@ export type RotationAccountStatus = {
 
 export type RotationOverview = {
   rotationEnabled: boolean;
+  chunkSize: number;
   activeService: string | null;
   accounts: RotationAccountStatus[];
 };
@@ -88,7 +89,7 @@ const rotationChunkSizeRaw = Number.parseInt(
   process.env.EMAIL_ROTATION_CHUNK_SIZE || "100",
   10
 );
-const rotationChunkSize =
+const rotationChunkSizeFromEnv =
   Number.isFinite(rotationChunkSizeRaw) && rotationChunkSizeRaw > 0
     ? rotationChunkSizeRaw
     : 100;
@@ -100,6 +101,7 @@ let providerError: string | null = null;
 let rotationSql: ReturnType<typeof postgres> | null = null;
 let rotationInitialized = false;
 let rotationInitPromise: Promise<boolean> | null = null;
+let rotationChunkSizeCache: { value: number; expiresAt: number } | null = null;
 
 type RotationAccountRowLike = {
   service_name: string;
@@ -186,12 +188,13 @@ function parseDateToIso(value: Date | string | null | undefined): string | null 
 }
 
 function selectActiveAccount<T extends RotationAccountRowLike>(
-  rows: T[]
+  rows: T[],
+  chunkSize: number
 ): T | null {
   const deduped = dedupeAccountsByPriority(rows);
   if (!deduped.length) return null;
 
-  const chunk = Math.max(rotationChunkSize, 1);
+  const chunk = Math.max(chunkSize, 1);
   return deduped
     .slice()
     .sort((a, b) => {
@@ -208,6 +211,58 @@ function selectActiveAccount<T extends RotationAccountRowLike>(
         ? a.service_name.localeCompare(b.service_name)
         : priorityA - priorityB;
     })[0];
+}
+
+async function readRuntimeRotationChunkSize(tx?: any): Promise<number> {
+  if (!rotationEnabled) {
+    return rotationChunkSizeFromEnv;
+  }
+
+  const resolveFromRows = (rows: Array<{ rotation_chunk_size: number | null }>) => {
+    const parsed = Number(rows[0]?.rotation_chunk_size ?? rotationChunkSizeFromEnv);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return rotationChunkSizeFromEnv;
+    }
+    return Math.floor(parsed);
+  };
+
+  if (tx) {
+    try {
+      const rows = await tx<{ rotation_chunk_size: number | null }[]>`
+        SELECT rotation_chunk_size
+        FROM sending_config
+        ORDER BY id ASC
+        LIMIT 1
+      `;
+      return resolveFromRows(rows);
+    } catch {
+      return rotationChunkSizeFromEnv;
+    }
+  }
+
+  const now = Date.now();
+  if (rotationChunkSizeCache && rotationChunkSizeCache.expiresAt > now) {
+    return rotationChunkSizeCache.value;
+  }
+
+  const sql = getRotationSqlClient();
+  if (!sql) {
+    return rotationChunkSizeFromEnv;
+  }
+
+  try {
+    const rows = await sql<{ rotation_chunk_size: number | null }[]>`
+      SELECT rotation_chunk_size
+      FROM sending_config
+      ORDER BY id ASC
+      LIMIT 1
+    `;
+    const value = resolveFromRows(rows);
+    rotationChunkSizeCache = { value, expiresAt: now + 15_000 };
+    return value;
+  } catch {
+    return rotationChunkSizeFromEnv;
+  }
 }
 
 function normalizeProviderSelection(value: string): ProviderSelection {
@@ -383,6 +438,25 @@ async function ensureRotationSetup(): Promise<boolean> {
       `;
 
       await sql`
+        CREATE TABLE IF NOT EXISTS sending_config (
+          id serial PRIMARY KEY,
+          daily_limit integer NOT NULL DEFAULT 50,
+          interval_seconds integer NOT NULL DEFAULT 30,
+          enabled integer NOT NULL DEFAULT 1,
+          emails_sent_today integer NOT NULL DEFAULT 0,
+          last_sent_at timestamptz NULL,
+          last_reset_date varchar(10) NULL,
+          criado_em timestamptz NOT NULL DEFAULT NOW(),
+          atualizado_em timestamptz NOT NULL DEFAULT NOW(),
+          rotation_chunk_size integer NOT NULL DEFAULT 100
+        )
+      `;
+      await sql`
+        ALTER TABLE sending_config
+        ADD COLUMN IF NOT EXISTS rotation_chunk_size integer NOT NULL DEFAULT 100
+      `;
+
+      await sql`
         CREATE INDEX IF NOT EXISTS idx_email_sending_accounts_priority
         ON email_sending_accounts (enabled, priority, service_name)
       `;
@@ -429,7 +503,7 @@ async function ensureRotationSetup(): Promise<boolean> {
 
       rotationInitialized = true;
       console.log(
-        `[Email:${SERVICE_NAME}] Rotacao ativa (priority=${rotationPriority}, limit=${rotationDailyLimit}, chunk=${rotationChunkSize}, enabled=${rotationSenderEnabled})`
+        `[Email:${SERVICE_NAME}] Rotacao ativa (priority=${rotationPriority}, limit=${rotationDailyLimit}, chunk_env=${rotationChunkSizeFromEnv}, enabled=${rotationSenderEnabled})`
       );
       return true;
     } catch (error) {
@@ -458,6 +532,7 @@ async function resetDailyCounters(tx: any) {
 async function readRotationDecision(
   tx: any
 ): Promise<RotationDecision> {
+  const chunkSize = await readRuntimeRotationChunkSize(tx);
   const rows = await tx<{
     service_name: string;
     priority: number;
@@ -480,7 +555,7 @@ async function readRotationDecision(
       AND sent_today < daily_limit
   `;
 
-  const active = selectActiveAccount(rows);
+  const active = selectActiveAccount(rows, chunkSize);
   if (!active) {
     return {
       allowed: false,
@@ -558,7 +633,8 @@ async function acquireRotationSlot(): Promise<RotationSlot> {
         FOR UPDATE
       `;
 
-      const active = selectActiveAccount(activeRows);
+      const chunkSize = await readRuntimeRotationChunkSize(tx);
+      const active = selectActiveAccount(activeRows, chunkSize);
       if (!active) {
         return {
           allowed: false,
@@ -907,7 +983,7 @@ export function getEmailConfig() {
       enabled: rotationEnabled,
       priority: rotationPriority,
       dailyLimit: rotationDailyLimit,
-      chunkSize: rotationChunkSize,
+      chunkSize: rotationChunkSizeFromEnv,
       senderEnabled: rotationSenderEnabled,
     },
     fromEmail:
@@ -937,6 +1013,7 @@ export function getCurrentServiceSenderIdentity() {
 
 export async function getRotationOverview(): Promise<RotationOverview> {
   const identity = getCurrentSenderIdentity();
+  const chunkSize = await readRuntimeRotationChunkSize();
   const fallbackAccount: RotationAccountStatus = {
     serviceName: SERVICE_NAME,
     priority: Number.isFinite(rotationPriority) ? rotationPriority : 100,
@@ -959,6 +1036,7 @@ export async function getRotationOverview(): Promise<RotationOverview> {
   if (!rotationEnabled) {
     return {
       rotationEnabled: false,
+      chunkSize,
       activeService: SERVICE_NAME,
       accounts: [fallbackAccount],
     };
@@ -968,6 +1046,7 @@ export async function getRotationOverview(): Promise<RotationOverview> {
   if (!ready) {
     return {
       rotationEnabled: true,
+      chunkSize,
       activeService: null,
       accounts: [{ ...fallbackAccount, isActive: false }],
     };
@@ -977,6 +1056,7 @@ export async function getRotationOverview(): Promise<RotationOverview> {
   if (!sql) {
     return {
       rotationEnabled: true,
+      chunkSize,
       activeService: null,
       accounts: [{ ...fallbackAccount, isActive: false }],
     };
@@ -1021,6 +1101,7 @@ export async function getRotationOverview(): Promise<RotationOverview> {
     if (!rows.length) {
       return {
         rotationEnabled: true,
+        chunkSize,
         activeService: null,
         accounts: [{ ...fallbackAccount, isActive: false }],
       };
@@ -1030,17 +1111,7 @@ export async function getRotationOverview(): Promise<RotationOverview> {
     const displayRows = dedupeAccountsByPriority(
       enabledRows.length > 0 ? enabledRows : rows
     );
-    const activeService =
-      displayRows.find(row => {
-        const enabled = Number(row.enabled ?? 0) === 1;
-        const dailyLimit = Number.isFinite(Number(row.daily_limit))
-          ? Math.max(Math.floor(Number(row.daily_limit)), 0)
-          : 0;
-        const sentToday = Number.isFinite(Number(row.sent_today))
-          ? Math.max(Math.floor(Number(row.sent_today)), 0)
-          : 0;
-        return enabled && sentToday < dailyLimit;
-      })?.service_name || null;
+    const activeService = selectActiveAccount(displayRows, chunkSize)?.service_name || null;
 
     const accounts = displayRows.map(row => {
       const fromEmail = (row.from_email || "").trim() || DEFAULT_FROM_EMAIL;
@@ -1093,6 +1164,7 @@ export async function getRotationOverview(): Promise<RotationOverview> {
 
     return {
       rotationEnabled: true,
+      chunkSize,
       activeService,
       accounts,
     };
@@ -1100,6 +1172,7 @@ export async function getRotationOverview(): Promise<RotationOverview> {
     console.error(`[Email:${SERVICE_NAME}] Falha ao carregar overview de rotacao`, error);
     return {
       rotationEnabled: true,
+      chunkSize,
       activeService: null,
       accounts: [{ ...fallbackAccount, isActive: false }],
     };

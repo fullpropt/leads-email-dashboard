@@ -1094,17 +1094,23 @@ export const appRouter = router({
     get: publicProcedure.query(async () => {
       const { getDb } = await import("./db");
       const { sendingConfig } = await import("../drizzle/schema_postgresql");
+      const { sql } = await import("drizzle-orm");
       const db = await getDb();
       if (!db) return null;
+
+      await db.execute(sql`
+        ALTER TABLE sending_config
+        ADD COLUMN IF NOT EXISTS rotation_chunk_size integer NOT NULL DEFAULT 100
+      `);
       
       const [config] = await db.select().from(sendingConfig).limit(1);
       
       if (!config) {
         // Criar configuração padrão
-        const { eq } = await import("drizzle-orm");
         const [newConfig] = await db.insert(sendingConfig).values({
           dailyLimit: 50,
           intervalSeconds: 30,
+          rotationChunkSize: 100,
           enabled: 1,
           emailsSentToday: 0,
           lastResetDate: new Date().toISOString().split("T")[0],
@@ -1135,14 +1141,20 @@ export const appRouter = router({
       .input(z.object({
         dailyLimit: z.number().min(1).max(10000).optional(),
         intervalSeconds: z.number().min(5).max(3600).optional(),
+        rotationChunkSize: z.number().min(1).max(1000).optional(),
         enabled: z.number().min(0).max(1).optional(),
       }))
       .mutation(async ({ input }) => {
         const { getDb } = await import("./db");
         const { sendingConfig } = await import("../drizzle/schema_postgresql");
-        const { eq } = await import("drizzle-orm");
+        const { eq, sql } = await import("drizzle-orm");
         const db = await getDb();
         if (!db) return { success: false, message: "Banco de dados não disponível" };
+
+        await db.execute(sql`
+          ALTER TABLE sending_config
+          ADD COLUMN IF NOT EXISTS rotation_chunk_size integer NOT NULL DEFAULT 100
+        `);
 
         // Buscar ou criar config
         let [config] = await db.select().from(sendingConfig).limit(1);
@@ -1150,6 +1162,7 @@ export const appRouter = router({
           [config] = await db.insert(sendingConfig).values({
             dailyLimit: 50,
             intervalSeconds: 30,
+            rotationChunkSize: 100,
             enabled: 1,
             emailsSentToday: 0,
             lastResetDate: new Date().toISOString().split("T")[0],
@@ -1159,6 +1172,7 @@ export const appRouter = router({
         const updates: Record<string, any> = { atualizadoEm: new Date() };
         if (input.dailyLimit !== undefined) updates.dailyLimit = input.dailyLimit;
         if (input.intervalSeconds !== undefined) updates.intervalSeconds = input.intervalSeconds;
+        if (input.rotationChunkSize !== undefined) updates.rotationChunkSize = input.rotationChunkSize;
         if (input.enabled !== undefined) updates.enabled = input.enabled;
 
         const [updated] = await db

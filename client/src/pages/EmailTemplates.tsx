@@ -150,6 +150,7 @@ interface RotationAccountOverview {
 
 interface RotationOverview {
   rotationEnabled: boolean;
+  chunkSize: number;
   activeService: string | null;
   accounts: RotationAccountOverview[];
 }
@@ -245,6 +246,8 @@ export default function EmailTemplates() {
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
   const [editingTransmissionId, setEditingTransmissionId] = useState<number | null>(null);
   const [editingFunnelId, setEditingFunnelId] = useState<number | null>(null);
+  const [rotationChunkDraft, setRotationChunkDraft] = useState<number>(100);
+  const [isEditingRotationChunk, setIsEditingRotationChunk] = useState(false);
   const [expandedTransmissionHtml, setExpandedTransmissionHtml] = useState<
     Record<number, boolean>
   >({});
@@ -259,7 +262,8 @@ export default function EmailTemplates() {
   const { data: allTemplates, refetch: refetchTemplates } = trpc.emailTemplates.list.useQuery();
   const { data: allFunnels, refetch: refetchFunnels } = trpc.funnels.list.useQuery();
   const { data: allTransmissions, refetch: refetchTransmissions } = trpc.transmissions.list.useQuery();
-  const { data: rotationOverview } = trpc.sendingConfig.rotationOverview.useQuery(
+  const { data: sendingConfigData, refetch: refetchSendingConfig } = trpc.sendingConfig.get.useQuery();
+  const { data: rotationOverview, refetch: refetchRotationOverview } = trpc.sendingConfig.rotationOverview.useQuery(
     undefined,
     {
       refetchInterval: 15000,
@@ -459,6 +463,20 @@ export default function EmailTemplates() {
     },
   });
 
+  const updateSendingConfig = trpc.sendingConfig.update.useMutation({
+    onSuccess: async (data) => {
+      if (data.success) {
+        toast.success("Bloco de rotacao atualizado.");
+        await Promise.all([refetchSendingConfig(), refetchRotationOverview()]);
+      } else {
+        toast.error("Erro ao atualizar bloco de rotacao");
+      }
+    },
+    onError: () => {
+      toast.error("Erro ao atualizar bloco de rotacao");
+    },
+  });
+
   // Mutations para envio de email
   const sendImmediateEmail = trpc.email.sendImmediateToAllPending.useMutation({
     onSuccess: (data) => {
@@ -543,6 +561,20 @@ export default function EmailTemplates() {
       );
     }
   }, [allTransmissions]);
+
+  React.useEffect(() => {
+    if (isEditingRotationChunk || updateSendingConfig.isPending) return;
+    const rawValue = Number(
+      sendingConfigData?.rotationChunkSize ?? rotationOverview?.chunkSize ?? 100
+    );
+    const normalized = Number.isFinite(rawValue) && rawValue > 0 ? Math.floor(rawValue) : 100;
+    setRotationChunkDraft(normalized);
+  }, [
+    isEditingRotationChunk,
+    updateSendingConfig.isPending,
+    sendingConfigData?.rotationChunkSize,
+    rotationOverview?.chunkSize,
+  ]);
 
   React.useEffect(() => {
     if (previewTemplate.data?.success) {
@@ -854,6 +886,21 @@ export default function EmailTemplates() {
     );
   };
 
+  const handleSaveRotationChunkSize = () => {
+    const normalized = Number.isFinite(rotationChunkDraft)
+      ? Math.max(1, Math.min(1000, Math.floor(rotationChunkDraft)))
+      : 100;
+    if (
+      Number(
+        sendingConfigData?.rotationChunkSize ?? rotationOverview?.chunkSize ?? 100
+      ) === normalized
+    ) {
+      toast.message("Bloco de rotacao ja esta nesse valor.");
+      return;
+    }
+    updateSendingConfig.mutate({ rotationChunkSize: normalized });
+  };
+
   const openHtmlEditor = (templateId: number) => {
     setSelectedTemplateId(templateId);
     setActiveTab("editor");
@@ -864,6 +911,13 @@ export default function EmailTemplates() {
     : null;
   const rotationData = rotationOverview as RotationOverview | undefined;
   const rotationAccounts = rotationData?.accounts || [];
+  const rotationChunkCurrentRaw = Number(
+    sendingConfigData?.rotationChunkSize ?? rotationData?.chunkSize ?? 100
+  );
+  const rotationChunkCurrent =
+    Number.isFinite(rotationChunkCurrentRaw) && rotationChunkCurrentRaw > 0
+      ? Math.floor(rotationChunkCurrentRaw)
+      : 100;
   const totalSentByServices = rotationAccounts.reduce(
     (sum, account) => sum + Number(account.sentToday || 0),
     0
@@ -903,14 +957,43 @@ export default function EmailTemplates() {
 
       <Card className="border border-cyan-100 dark:border-cyan-900/50">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <CardTitle className="text-base">Envios por servico (hoje)</CardTitle>
               <CardDescription>
-                Painel global de todos os servicos ativos de envio.
+                Painel global de todos os servicos ativos de envio. Rotacao em bloco de{" "}
+                <span className="font-medium">{rotationChunkCurrent}</span> envio(s) por conta.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <div className="flex items-center gap-2 rounded-md border border-slate-200 px-2 py-1 dark:border-slate-700">
+                <Label htmlFor="rotation-chunk-size" className="text-[11px] text-muted-foreground">
+                  Bloco
+                </Label>
+                <Input
+                  id="rotation-chunk-size"
+                  type="number"
+                  min={1}
+                  max={1000}
+                  className="h-7 w-20 text-xs"
+                  value={rotationChunkDraft}
+                  onChange={event =>
+                    setRotationChunkDraft(
+                      Math.max(1, Math.min(1000, Number(event.target.value || 100)))
+                    )
+                  }
+                  onFocus={() => setIsEditingRotationChunk(true)}
+                  onBlur={() => setIsEditingRotationChunk(false)}
+                />
+                <Button
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={handleSaveRotationChunkSize}
+                  disabled={updateSendingConfig.isPending}
+                >
+                  {updateSendingConfig.isPending ? "..." : "Salvar"}
+                </Button>
+              </div>
               {totalAccountsWithAlert > 0 && (
                 <div className="flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300">
                   <AlertTriangle className="h-3.5 w-3.5" />
@@ -929,7 +1012,7 @@ export default function EmailTemplates() {
               Nenhum servico de envio encontrado.
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
               {rotationAccounts.map(account => {
                 const usagePercent =
                   account.dailyLimit > 0
@@ -941,6 +1024,29 @@ export default function EmailTemplates() {
                 const alertLabel = account.lastError
                   ? account.lastError
                   : "Falha de envio detectada nesta conta";
+                const statusInfo = !account.enabled
+                  ? {
+                      label: "Off",
+                      className:
+                        "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+                    }
+                  : account.remaining <= 0
+                    ? {
+                        label: "Limite",
+                        className:
+                          "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+                      }
+                    : account.isActive
+                      ? {
+                          label: "Proxima",
+                          className:
+                            "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-200",
+                        }
+                      : {
+                          label: "Pronta",
+                          className:
+                            "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+                        };
                 return (
                   <div
                     key={account.serviceName}
@@ -969,13 +1075,9 @@ export default function EmailTemplates() {
                           </span>
                         )}
                         <span
-                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                            account.isActive
-                              ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-200"
-                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                          }`}
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusInfo.className}`}
                         >
-                          {account.isActive ? "Ativo" : account.enabled ? "Fila" : "Off"}
+                          {statusInfo.label}
                         </span>
                       </div>
                     </div>
@@ -1015,6 +1117,10 @@ export default function EmailTemplates() {
               })}
             </div>
           )}
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            "Proxima" = conta selecionada para os proximos envios deste bloco. "Pronta" = conta
+            apta para assumir quando o bloco terminar, atingir limite ou ocorrer falha.
+          </p>
           {rotationData?.rotationEnabled === false && (
             <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
               Rotacao por servico desativada nesta instancia.

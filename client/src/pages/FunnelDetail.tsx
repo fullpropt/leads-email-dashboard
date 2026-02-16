@@ -62,6 +62,7 @@ export default function FunnelDetail() {
   // Estados para configuração de envio
   const [dailyLimit, setDailyLimit] = useState(50);
   const [intervalSeconds, setIntervalSeconds] = useState(30);
+  const [rotationChunkSize, setRotationChunkSize] = useState(100);
 
   // Estados para enfileiramento
   const [enqueueStatus, setEnqueueStatus] = useState<"abandoned" | "active" | "all">("abandoned");
@@ -176,6 +177,7 @@ export default function FunnelDetail() {
     if (sendingConfigData) {
       setDailyLimit(sendingConfigData.dailyLimit);
       setIntervalSeconds(sendingConfigData.intervalSeconds);
+      setRotationChunkSize(sendingConfigData.rotationChunkSize || 100);
     }
   }, [sendingConfigData]);
 
@@ -265,6 +267,7 @@ export default function FunnelDetail() {
     updateSendingConfig.mutate({
       dailyLimit,
       intervalSeconds,
+      rotationChunkSize,
     });
   };
 
@@ -555,6 +558,19 @@ export default function FunnelDetail() {
                     </div>
                   )}
                 </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Bloco de rotaÃ§Ã£o por conta</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="1000"
+                    value={rotationChunkSize}
+                    onChange={(e) => setRotationChunkSize(parseInt(e.target.value) || 100)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Quantos envios seguidos por conta antes de alternar.
+                  </p>
+                </div>
               </div>
             ))}
           </div>
@@ -737,7 +753,7 @@ export default function FunnelDetail() {
                 </div>
               </div>
               {/* Configuracoes */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <Label className="text-sm">Limite diário</Label>
                   <Input

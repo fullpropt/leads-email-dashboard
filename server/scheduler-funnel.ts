@@ -59,6 +59,11 @@ async function getSendingConfig() {
   const db = await getDb();
   if (!db) return null;
 
+  await db.execute(sql`
+    ALTER TABLE sending_config
+    ADD COLUMN IF NOT EXISTS rotation_chunk_size integer NOT NULL DEFAULT 100
+  `);
+
   const [config] = await db.select().from(sendingConfig).limit(1);
   
   if (!config) {
@@ -66,6 +71,7 @@ async function getSendingConfig() {
     const [newConfig] = await db.insert(sendingConfig).values({
       dailyLimit: 50,
       intervalSeconds: 30,
+      rotationChunkSize: 100,
       enabled: 1,
       emailsSentToday: 0,
       lastResetDate: new Date().toISOString().split("T")[0],
