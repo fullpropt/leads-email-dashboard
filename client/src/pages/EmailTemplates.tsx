@@ -247,7 +247,6 @@ export default function EmailTemplates() {
   const [editingTransmissionId, setEditingTransmissionId] = useState<number | null>(null);
   const [editingFunnelId, setEditingFunnelId] = useState<number | null>(null);
   const [rotationChunkDraft, setRotationChunkDraft] = useState<number>(100);
-  const [isEditingRotationChunk, setIsEditingRotationChunk] = useState(false);
   const [expandedTransmissionHtml, setExpandedTransmissionHtml] = useState<
     Record<number, boolean>
   >({});
@@ -563,14 +562,13 @@ export default function EmailTemplates() {
   }, [allTransmissions]);
 
   React.useEffect(() => {
-    if (isEditingRotationChunk || updateSendingConfig.isPending) return;
+    if (updateSendingConfig.isPending) return;
     const rawValue = Number(
       sendingConfigData?.rotationChunkSize ?? rotationOverview?.chunkSize ?? 100
     );
     const normalized = Number.isFinite(rawValue) && rawValue > 0 ? Math.floor(rawValue) : 100;
-    setRotationChunkDraft(normalized);
+    setRotationChunkDraft(prev => (prev === normalized ? prev : normalized));
   }, [
-    isEditingRotationChunk,
     updateSendingConfig.isPending,
     sendingConfigData?.rotationChunkSize,
     rotationOverview?.chunkSize,
@@ -982,8 +980,6 @@ export default function EmailTemplates() {
                       Math.max(1, Math.min(1000, Number(event.target.value || 100)))
                     )
                   }
-                  onFocus={() => setIsEditingRotationChunk(true)}
-                  onBlur={() => setIsEditingRotationChunk(false)}
                 />
                 <Button
                   size="sm"

@@ -440,8 +440,8 @@ async function buildRecipientQueue(transmission: TransmissionRow): Promise<numbe
           )
           AND (
             $2 = 'all'
-            OR ($2 = 'active' AND (l.status = 'active' OR l.lead_type = 'compra_aprovada'))
-            OR ($2 = 'abandoned' AND (l.status = 'abandoned' OR l.lead_type = 'carrinho_abandonado'))
+            OR ($2 = 'active' AND l.lead_type = 'compra_aprovada')
+            OR ($2 = 'abandoned' AND l.lead_type = 'carrinho_abandonado')
             OR ($2 = 'none' AND l.lead_type NOT IN ('compra_aprovada', 'carrinho_abandonado'))
           )
       )
@@ -507,8 +507,8 @@ async function getFirstEligibleLead(
         )
         AND (
           $2 = 'all'
-          OR ($2 = 'active' AND (l.status = 'active' OR l.lead_type = 'compra_aprovada'))
-          OR ($2 = 'abandoned' AND (l.status = 'abandoned' OR l.lead_type = 'carrinho_abandonado'))
+          OR ($2 = 'active' AND l.lead_type = 'compra_aprovada')
+          OR ($2 = 'abandoned' AND l.lead_type = 'carrinho_abandonado')
           OR ($2 = 'none' AND l.lead_type NOT IN ('compra_aprovada', 'carrinho_abandonado'))
         )
       ORDER BY ${orderClause}
