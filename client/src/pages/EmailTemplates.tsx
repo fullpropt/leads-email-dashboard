@@ -49,7 +49,8 @@ interface TransmissionConfig {
   name: string;
   mode: "immediate" | "scheduled";
   scheduledAt?: string;
-  sendIntervalSeconds: number;
+  sendIntervalMinSeconds: number;
+  sendIntervalMaxSeconds: number;
   targetStatusPlataforma: "all" | "accessed" | "not_accessed";
   targetSituacao: "all" | "active" | "abandoned" | "none";
   sendOrder: "newest_first" | "oldest_first";
@@ -96,6 +97,8 @@ interface TransmissionBlock {
   mode: "immediate" | "scheduled";
   scheduledAt: string | null;
   sendIntervalSeconds: number;
+  sendIntervalMinSeconds: number;
+  sendIntervalMaxSeconds: number;
   targetStatusPlataforma: "all" | "accessed" | "not_accessed";
   targetSituacao: "all" | "active" | "abandoned" | "none";
   sendOrder: "newest_first" | "oldest_first";
@@ -509,7 +512,28 @@ export default function EmailTemplates() {
 
   React.useEffect(() => {
     if (allTransmissions) {
-      setTransmissions(allTransmissions as TransmissionBlock[]);
+      setTransmissions(
+        (allTransmissions as TransmissionBlock[]).map(transmission => {
+          const min = Math.max(
+            0,
+            Number(
+              transmission.sendIntervalMinSeconds ?? transmission.sendIntervalSeconds ?? 0
+            )
+          );
+          const max = Math.max(
+            min,
+            Number(
+              transmission.sendIntervalMaxSeconds ?? transmission.sendIntervalSeconds ?? min
+            )
+          );
+          return {
+            ...transmission,
+            sendIntervalMinSeconds: min,
+            sendIntervalMaxSeconds: max,
+            sendIntervalSeconds: min,
+          };
+        })
+      );
     }
   }, [allTransmissions]);
 
@@ -614,7 +638,9 @@ export default function EmailTemplates() {
         config.mode === "scheduled" && config.scheduledAt
           ? new Date(config.scheduledAt).toISOString()
           : null,
-      sendIntervalSeconds: config.sendIntervalSeconds,
+      sendIntervalSeconds: config.sendIntervalMinSeconds,
+      sendIntervalMinSeconds: config.sendIntervalMinSeconds,
+      sendIntervalMaxSeconds: config.sendIntervalMaxSeconds,
       targetStatusPlataforma: config.targetStatusPlataforma,
       targetSituacao: config.targetSituacao,
       sendOrder: config.sendOrder,
@@ -642,6 +668,8 @@ export default function EmailTemplates() {
       toast.error("Preencha nome, assunto e conteudo da transmissao");
       return;
     }
+    const safeMin = Math.max(0, Number(transmission.sendIntervalMinSeconds || 0));
+    const safeMax = Math.max(safeMin, Number(transmission.sendIntervalMaxSeconds || safeMin));
 
     updateTransmission.mutate({
       id: transmissionId,
@@ -651,7 +679,9 @@ export default function EmailTemplates() {
         htmlContent: transmission.htmlContent,
         mode: transmission.mode,
         scheduledAt: transmission.scheduledAt,
-        sendIntervalSeconds: transmission.sendIntervalSeconds,
+        sendIntervalSeconds: safeMin,
+        sendIntervalMinSeconds: safeMin,
+        sendIntervalMaxSeconds: safeMax,
         targetStatusPlataforma: transmission.targetStatusPlataforma,
         targetSituacao: transmission.targetSituacao,
         sendOrder: transmission.sendOrder,
@@ -1279,7 +1309,7 @@ export default function EmailTemplates() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-3 gap-4">
                         <div className="space-y-2">
                           <Label className="text-xs">Modo</Label>
                           <Select
@@ -1302,22 +1332,42 @@ export default function EmailTemplates() {
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-xs">Intervalo (segundos)</Label>
+                          <Label className="text-xs">Intervalo minimo (s)</Label>
                           <Input
                             type="number"
                             min="0"
                             max="3600"
-                            value={transmission.sendIntervalSeconds}
+                            value={transmission.sendIntervalMinSeconds}
                             onChange={event =>
                               updateTransmissionField(
                                 transmission.id,
-                                "sendIntervalSeconds",
+                                "sendIntervalMinSeconds",
+                                Math.max(0, parseInt(event.target.value) || 0)
+                              )
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Intervalo maximo (s)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="3600"
+                            value={transmission.sendIntervalMaxSeconds}
+                            onChange={event =>
+                              updateTransmissionField(
+                                transmission.id,
+                                "sendIntervalMaxSeconds",
                                 Math.max(0, parseInt(event.target.value) || 0)
                               )
                             }
                           />
                         </div>
                       </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        O sistema sorteia um valor entre minimo e maximo em cada envio.
+                        Se forem iguais, o intervalo fica fixo.
+                      </p>
 
                       {transmission.mode === "scheduled" && (
                         <div className="space-y-2">

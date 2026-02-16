@@ -1017,7 +1017,9 @@ export const appRouter = router({
           htmlContent: z.string().min(1),
           mode: z.enum(["immediate", "scheduled"]).default("immediate"),
           scheduledAt: z.string().optional().nullable(),
-          sendIntervalSeconds: z.number().min(0).max(3600).default(0),
+          sendIntervalSeconds: z.number().min(0).max(3600).optional(),
+          sendIntervalMinSeconds: z.number().min(0).max(3600).optional(),
+          sendIntervalMaxSeconds: z.number().min(0).max(3600).optional(),
           targetStatusPlataforma: z.enum(["all", "accessed", "not_accessed"]).default("all"),
           targetSituacao: z
             .enum(["all", "active", "abandoned", "none"])
@@ -1041,6 +1043,8 @@ export const appRouter = router({
             mode: z.enum(["immediate", "scheduled"]).optional(),
             scheduledAt: z.string().optional().nullable(),
             sendIntervalSeconds: z.number().min(0).max(3600).optional(),
+            sendIntervalMinSeconds: z.number().min(0).max(3600).optional(),
+            sendIntervalMaxSeconds: z.number().min(0).max(3600).optional(),
             targetStatusPlataforma: z
               .enum(["all", "accessed", "not_accessed"])
               .optional(),

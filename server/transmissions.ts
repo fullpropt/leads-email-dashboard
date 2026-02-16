@@ -29,6 +29,8 @@ export type TransmissionDTO = {
   mode: TransmissionMode;
   scheduledAt: string | null;
   sendIntervalSeconds: number;
+  sendIntervalMinSeconds: number;
+  sendIntervalMaxSeconds: number;
   targetStatusPlataforma: TransmissionPlatformStatus;
   targetSituacao: TransmissionLeadStatus;
   sendOrder: TransmissionSendOrder;
@@ -53,7 +55,9 @@ export type CreateTransmissionInput = {
   htmlContent: string;
   mode: TransmissionMode;
   scheduledAt?: string | null;
-  sendIntervalSeconds: number;
+  sendIntervalSeconds?: number;
+  sendIntervalMinSeconds?: number;
+  sendIntervalMaxSeconds?: number;
   targetStatusPlataforma: TransmissionPlatformStatus;
   targetSituacao: TransmissionLeadStatus;
   sendOrder: TransmissionSendOrder;
@@ -71,6 +75,8 @@ type TransmissionRow = {
   mode: TransmissionMode;
   scheduled_at: Date | string | null;
   send_interval_seconds: number;
+  send_interval_min_seconds: number | null;
+  send_interval_max_seconds: number | null;
   target_status_plataforma: TransmissionPlatformStatus;
   target_situacao: TransmissionLeadStatus;
   send_order: TransmissionSendOrder;
@@ -184,7 +190,62 @@ function sanitizeVariationErrorReason(error: unknown) {
   return `error:${withoutSecrets.slice(0, 180)}`;
 }
 
+function clampIntervalSeconds(value: number | null | undefined) {
+  if (!Number.isFinite(Number(value))) return 0;
+  return Math.max(0, Math.min(3600, Math.floor(Number(value))));
+}
+
+function normalizeIntervalRange(input: {
+  sendIntervalSeconds?: number | null;
+  sendIntervalMinSeconds?: number | null;
+  sendIntervalMaxSeconds?: number | null;
+}): { min: number; max: number; legacy: number } {
+  const legacy = clampIntervalSeconds(input.sendIntervalSeconds ?? 0);
+  let min =
+    input.sendIntervalMinSeconds === undefined || input.sendIntervalMinSeconds === null
+      ? null
+      : clampIntervalSeconds(input.sendIntervalMinSeconds);
+  let max =
+    input.sendIntervalMaxSeconds === undefined || input.sendIntervalMaxSeconds === null
+      ? null
+      : clampIntervalSeconds(input.sendIntervalMaxSeconds);
+
+  if (min === null && max === null) {
+    min = legacy;
+    max = legacy;
+  } else if (min === null) {
+    min = max ?? legacy;
+  } else if (max === null) {
+    max = min;
+  }
+
+  const normalizedMin = min ?? 0;
+  let normalizedMax = max ?? normalizedMin;
+  if (normalizedMax < normalizedMin) {
+    normalizedMax = normalizedMin;
+  }
+
+  return {
+    min: normalizedMin,
+    max: normalizedMax,
+    legacy: normalizedMin,
+  };
+}
+
+function randomIntervalBetween(minSeconds: number, maxSeconds: number) {
+  const min = clampIntervalSeconds(minSeconds);
+  const max = Math.max(min, clampIntervalSeconds(maxSeconds));
+  if (max <= min) return min;
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 function mapTransmission(row: TransmissionRow): TransmissionDTO {
+  const interval = normalizeIntervalRange({
+    sendIntervalSeconds: row.send_interval_seconds,
+    sendIntervalMinSeconds: row.send_interval_min_seconds,
+    sendIntervalMaxSeconds: row.send_interval_max_seconds,
+  });
+
   return {
     id: row.id,
     name: row.name,
@@ -192,7 +253,9 @@ function mapTransmission(row: TransmissionRow): TransmissionDTO {
     htmlContent: row.html_content,
     mode: row.mode,
     scheduledAt: toIso(row.scheduled_at),
-    sendIntervalSeconds: Number(row.send_interval_seconds ?? 0),
+    sendIntervalSeconds: interval.legacy,
+    sendIntervalMinSeconds: interval.min,
+    sendIntervalMaxSeconds: interval.max,
     targetStatusPlataforma: row.target_status_plataforma,
     targetSituacao: row.target_situacao,
     sendOrder: row.send_order,
@@ -231,6 +294,8 @@ async function ensureSchema() {
         mode varchar(20) NOT NULL DEFAULT 'immediate',
         scheduled_at timestamptz NULL,
         send_interval_seconds integer NOT NULL DEFAULT 0,
+        send_interval_min_seconds integer NOT NULL DEFAULT 0,
+        send_interval_max_seconds integer NOT NULL DEFAULT 0,
         target_status_plataforma varchar(20) NOT NULL DEFAULT 'all',
         target_situacao varchar(20) NOT NULL DEFAULT 'all',
         send_order varchar(20) NOT NULL DEFAULT 'newest_first',
@@ -247,6 +312,26 @@ async function ensureSchema() {
         created_at timestamptz NOT NULL DEFAULT NOW(),
         updated_at timestamptz NOT NULL DEFAULT NOW()
       )
+    `;
+
+    await sql`
+      ALTER TABLE email_transmissions
+      ADD COLUMN IF NOT EXISTS send_interval_min_seconds integer NOT NULL DEFAULT 0
+    `;
+
+    await sql`
+      ALTER TABLE email_transmissions
+      ADD COLUMN IF NOT EXISTS send_interval_max_seconds integer NOT NULL DEFAULT 0
+    `;
+
+    await sql`
+      UPDATE email_transmissions
+      SET
+        send_interval_min_seconds = GREATEST(send_interval_seconds, 0),
+        send_interval_max_seconds = GREATEST(send_interval_seconds, 0)
+      WHERE send_interval_seconds > 0
+        AND send_interval_min_seconds = 0
+        AND send_interval_max_seconds = 0
     `;
 
     await sql`
@@ -1017,7 +1102,7 @@ export async function createTransmission(
     await ensureSchema();
     const sql = getSqlClient();
     const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
-    const interval = Math.max(0, Math.floor(input.sendIntervalSeconds || 0));
+    const interval = normalizeIntervalRange(input);
 
     const rows = await sql<TransmissionRow[]>`
       INSERT INTO email_transmissions (
@@ -1027,6 +1112,8 @@ export async function createTransmission(
         mode,
         scheduled_at,
         send_interval_seconds,
+        send_interval_min_seconds,
+        send_interval_max_seconds,
         target_status_plataforma,
         target_situacao,
         send_order,
@@ -1040,7 +1127,9 @@ export async function createTransmission(
         ${input.htmlContent},
         ${input.mode},
         ${scheduledAt},
-        ${interval},
+        ${interval.legacy},
+        ${interval.min},
+        ${interval.max},
         ${input.targetStatusPlataforma},
         ${input.targetSituacao},
         ${input.sendOrder},
@@ -1097,9 +1186,18 @@ export async function updateTransmission(
       setClauses.push(`scheduled_at = $${idx++}`);
       values.push(updates.scheduledAt ? new Date(updates.scheduledAt) : null);
     }
-    if (updates.sendIntervalSeconds !== undefined) {
+    if (
+      updates.sendIntervalSeconds !== undefined ||
+      updates.sendIntervalMinSeconds !== undefined ||
+      updates.sendIntervalMaxSeconds !== undefined
+    ) {
+      const interval = normalizeIntervalRange(updates);
       setClauses.push(`send_interval_seconds = $${idx++}`);
-      values.push(Math.max(0, Math.floor(updates.sendIntervalSeconds)));
+      values.push(interval.legacy);
+      setClauses.push(`send_interval_min_seconds = $${idx++}`);
+      values.push(interval.min);
+      setClauses.push(`send_interval_max_seconds = $${idx++}`);
+      values.push(interval.max);
     }
     if (updates.targetStatusPlataforma !== undefined) {
       setClauses.push(`target_status_plataforma = $${idx++}`);
@@ -1349,8 +1447,15 @@ async function processSingleTransmission(transmissionId: number) {
     WHERE id = ${transmission.id}
   `;
 
-  const intervalSeconds = Math.max(0, Number(transmission.send_interval_seconds ?? 0));
-  const runLimit = intervalSeconds > 0 ? 1 : 25;
+  const intervalRange = normalizeIntervalRange({
+    sendIntervalSeconds: transmission.send_interval_seconds,
+    sendIntervalMinSeconds: transmission.send_interval_min_seconds,
+    sendIntervalMaxSeconds: transmission.send_interval_max_seconds,
+  });
+  const intervalMinSeconds = intervalRange.min;
+  const intervalMaxSeconds = intervalRange.max;
+  const intervalEnabled = intervalMaxSeconds > 0 || intervalMinSeconds > 0;
+  const runLimit = intervalEnabled ? 1 : 25;
   const baseTemplate = await getTransmissionTemplateForCurrentService(
     transmission,
     `send:${toIso(transmission.updated_at) || "na"}`
@@ -1373,12 +1478,12 @@ async function processSingleTransmission(transmissionId: number) {
     const lastSentAtRaw = intervalCheckRows[0]?.last_sent_at ?? null;
     const lastSentAt = lastSentAtRaw ? new Date(String(lastSentAtRaw)) : null;
     if (
-      intervalSeconds > 0 &&
+      intervalMinSeconds > 0 &&
       lastSentAt &&
-      nowLoop.getTime() - lastSentAt.getTime() < intervalSeconds * 1000
+      nowLoop.getTime() - lastSentAt.getTime() < intervalMinSeconds * 1000
     ) {
       const secondsRemaining = Math.ceil(
-        (intervalSeconds * 1000 - (nowLoop.getTime() - lastSentAt.getTime())) / 1000
+        (intervalMinSeconds * 1000 - (nowLoop.getTime() - lastSentAt.getTime())) / 1000
       );
       await scheduleNextRun(transmission.id, Math.max(secondsRemaining, 1));
       return;
@@ -1472,8 +1577,9 @@ async function processSingleTransmission(transmissionId: number) {
       `;
     }
 
-    if (intervalSeconds > 0) {
-      await scheduleNextRun(transmission.id, intervalSeconds);
+    if (intervalEnabled) {
+      const nextInterval = randomIntervalBetween(intervalMinSeconds, intervalMaxSeconds);
+      await scheduleNextRun(transmission.id, nextInterval);
       return;
     }
   }

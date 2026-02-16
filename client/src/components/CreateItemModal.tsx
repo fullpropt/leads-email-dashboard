@@ -21,7 +21,8 @@ interface TransmissionConfig {
   name: string;
   mode: "immediate" | "scheduled";
   scheduledAt?: string;
-  sendIntervalSeconds: number;
+  sendIntervalMinSeconds: number;
+  sendIntervalMaxSeconds: number;
   targetStatusPlataforma: "all" | "accessed" | "not_accessed";
   targetSituacao: "all" | "active" | "abandoned" | "none";
   sendOrder: "newest_first" | "oldest_first";
@@ -60,7 +61,8 @@ export function CreateItemModal({
   const [transmissionName, setTransmissionName] = useState("Nova Transmissao");
   const [transmissionMode, setTransmissionMode] = useState<"immediate" | "scheduled">("immediate");
   const [transmissionScheduledAt, setTransmissionScheduledAt] = useState("");
-  const [transmissionIntervalSeconds, setTransmissionIntervalSeconds] = useState(0);
+  const [transmissionIntervalMinSeconds, setTransmissionIntervalMinSeconds] = useState(10);
+  const [transmissionIntervalMaxSeconds, setTransmissionIntervalMaxSeconds] = useState(30);
   const [transmissionSituacao, setTransmissionSituacao] = useState<
     "all" | "active" | "abandoned" | "none"
   >("all");
@@ -80,7 +82,8 @@ export function CreateItemModal({
     setTransmissionName("Nova Transmissao");
     setTransmissionMode("immediate");
     setTransmissionScheduledAt("");
-    setTransmissionIntervalSeconds(0);
+    setTransmissionIntervalMinSeconds(10);
+    setTransmissionIntervalMaxSeconds(30);
     setTransmissionSituacao("all");
     setTransmissionSendOrder("newest_first");
     setDelayValue(0);
@@ -123,11 +126,15 @@ export function CreateItemModal({
       return;
     }
 
+    const safeMin = Math.max(0, transmissionIntervalMinSeconds || 0);
+    const safeMax = Math.max(safeMin, transmissionIntervalMaxSeconds || safeMin);
+
     onCreateTransmission?.({
       name: transmissionName,
       mode: transmissionMode,
       scheduledAt: transmissionMode === "scheduled" ? transmissionScheduledAt : undefined,
-      sendIntervalSeconds: Math.max(0, transmissionIntervalSeconds),
+      sendIntervalMinSeconds: safeMin,
+      sendIntervalMaxSeconds: safeMax,
       targetStatusPlataforma: statusPlataforma,
       targetSituacao: transmissionSituacao,
       sendOrder: transmissionSendOrder,
@@ -232,7 +239,7 @@ export function CreateItemModal({
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-2">
                       <Label className="text-xs">Modo de envio</Label>
                       <Select
@@ -252,14 +259,31 @@ export function CreateItemModal({
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-xs">Intervalo (segundos)</Label>
+                      <Label className="text-xs">Intervalo minimo (s)</Label>
                       <Input
                         type="number"
                         min={0}
                         max={3600}
-                        value={transmissionIntervalSeconds}
+                        value={transmissionIntervalMinSeconds}
                         onChange={event =>
-                          setTransmissionIntervalSeconds(
+                          setTransmissionIntervalMinSeconds(
+                            Number.isNaN(Number(event.target.value))
+                              ? 0
+                              : Number(event.target.value)
+                          )
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Intervalo maximo (s)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={3600}
+                        value={transmissionIntervalMaxSeconds}
+                        onChange={event =>
+                          setTransmissionIntervalMaxSeconds(
                             Number.isNaN(Number(event.target.value))
                               ? 0
                               : Number(event.target.value)
@@ -268,6 +292,10 @@ export function CreateItemModal({
                       />
                     </div>
                   </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    O sistema sorteia um intervalo entre minimo e maximo a cada envio.
+                    Se forem iguais, o envio fica fixo.
+                  </p>
 
                   {transmissionMode === "scheduled" && (
                     <div className="space-y-2">
