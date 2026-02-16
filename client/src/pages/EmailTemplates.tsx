@@ -155,9 +155,13 @@ export default function EmailTemplates() {
   const [templates, setTemplates] = useState<TemplateBlock[]>([]);
   const [transmissions, setTransmissions] = useState<TransmissionBlock[]>([]);
   const [previewHtml, setPreviewHtml] = useState("");
+  const [previewMode, setPreviewMode] = useState<"template" | "transmission" | null>(null);
+  const [previewSubject, setPreviewSubject] = useState("");
+  const [previewInfo, setPreviewInfo] = useState("");
   const [activeTab, setActiveTab] = useState("items");
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [previewTemplateId, setPreviewTemplateId] = useState<number | null>(null);
+  const [previewTransmissionId, setPreviewTransmissionId] = useState<number | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
   const [editingTransmissionId, setEditingTransmissionId] = useState<number | null>(null);
@@ -397,6 +401,14 @@ export default function EmailTemplates() {
     }
   );
 
+  const previewTransmission = trpc.transmissions.previewWithFirstLead.useQuery(
+    { id: previewTransmissionId! },
+    {
+      enabled: previewTransmissionId !== null && previewTransmissionId > 0,
+      retry: false,
+    }
+  );
+
   React.useEffect(() => {
     if (allTemplates) {
       setTemplates(allTemplates.map(t => ({
@@ -419,12 +431,35 @@ export default function EmailTemplates() {
   React.useEffect(() => {
     if (previewTemplate.data?.success) {
       setPreviewHtml(previewTemplate.data.html);
+      setPreviewMode("template");
+      setPreviewSubject("");
+      setPreviewInfo("");
       setActiveTab("preview");
       toast.success("Prévia gerada com sucesso!");
     } else if (previewTemplate.isError) {
       toast.error("Erro ao gerar pré-visualização");
     }
   }, [previewTemplate.data, previewTemplate.isError]);
+
+  React.useEffect(() => {
+    if (previewTransmission.data?.success) {
+      setPreviewHtml(previewTransmission.data.html);
+      setPreviewMode("transmission");
+      setPreviewSubject(previewTransmission.data.subject || "");
+      if (previewTransmission.data.leadEmail) {
+        setPreviewInfo(`Lead usado no preview: ${previewTransmission.data.leadEmail}`);
+      } else {
+        setPreviewInfo(
+          previewTransmission.data.message ||
+            "Sem lead elegível. Preview gerado com dados de exemplo."
+        );
+      }
+      setActiveTab("preview");
+      toast.success("Prévia da transmissão gerada com sucesso!");
+    } else if (previewTransmission.isError) {
+      toast.error("Erro ao gerar prévia da transmissão");
+    }
+  }, [previewTransmission.data, previewTransmission.isError]);
 
   const updateTemplateField = (templateId: number, field: keyof TemplateBlock, value: any) => {
     setTemplates(prev =>
@@ -619,7 +654,21 @@ export default function EmailTemplates() {
       toast.error("Template não encontrado");
       return;
     }
+    setPreviewMode("template");
+    setPreviewTransmissionId(null);
+    setPreviewSubject("");
+    setPreviewInfo("");
     setPreviewTemplateId(templateId);
+  };
+
+  const handlePreviewTransmission = (transmissionId: number) => {
+    if (!transmissionId) {
+      toast.error("Transmissão não encontrada");
+      return;
+    }
+    setPreviewMode("transmission");
+    setPreviewTemplateId(null);
+    setPreviewTransmissionId(transmissionId);
   };
 
   const handleSendImmediate = (templateId: number) => {
@@ -652,6 +701,15 @@ export default function EmailTemplates() {
 
   // Combinar templates e funis para exibição
   const funnels = allFunnels || [];
+  const isPreviewLoading = previewTemplate.isLoading || previewTransmission.isLoading;
+  const previewDescription =
+    previewMode === "transmission"
+      ? "Visualize como a transmissão será exibida para o primeiro lead elegível."
+      : "Visualize como o email será exibido no primeiro lead";
+  const previewEmptyMessage =
+    previewMode === "transmission"
+      ? 'Selecione uma transmissão e clique em "Visualizar" para ver a prévia.'
+      : 'Selecione um template e clique em "Visualizar Email" para ver a pré-visualização.';
 
   return (
     <div className="space-y-6">
@@ -915,6 +973,23 @@ export default function EmailTemplates() {
                         className="h-8 w-8 text-slate-400 hover:text-slate-600"
                       >
                         <Settings className="h-4 w-4" />
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePreviewTransmission(transmission.id)}
+                        disabled={previewTransmission.isLoading}
+                        className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-200 dark:border-amber-700 dark:hover:bg-amber-950"
+                      >
+                        {previewTransmission.isLoading ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <>
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>Visualizar</span>
+                          </>
+                        )}
                       </Button>
 
                       <Button
@@ -1319,29 +1394,41 @@ export default function EmailTemplates() {
           <Card>
             <CardHeader>
               <CardTitle>Pré-visualização do Email</CardTitle>
-              <CardDescription>
-                Visualize como o email será exibido no primeiro lead
-              </CardDescription>
+              <CardDescription>{previewDescription}</CardDescription>
             </CardHeader>
             <CardContent>
-              {previewTemplate.isLoading && (
+              {isPreviewLoading && (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
               )}
-              {previewHtml && !previewTemplate.isLoading ? (
-                <div className="border rounded-lg bg-gray-50 overflow-hidden">
-                  <iframe
-                    srcDoc={previewHtml}
-                    title="Email Preview"
-                    className="w-full border-0"
-                    style={{ height: "calc(100vh - 280px)", minHeight: "500px" }}
-                  />
+              {previewHtml && !isPreviewLoading ? (
+                <div className="space-y-3">
+                  {previewMode === "transmission" && (
+                    <div className="rounded-md border bg-amber-50/60 dark:bg-amber-950/30 px-3 py-2 text-xs">
+                      {previewSubject && (
+                        <p className="text-amber-800 dark:text-amber-200">
+                          <strong>Assunto:</strong> {previewSubject}
+                        </p>
+                      )}
+                      {previewInfo && (
+                        <p className="text-amber-700 dark:text-amber-300">{previewInfo}</p>
+                      )}
+                    </div>
+                  )}
+                  <div className="border rounded-lg bg-gray-50 overflow-hidden">
+                    <iframe
+                      srcDoc={previewHtml}
+                      title="Email Preview"
+                      className="w-full border-0"
+                      style={{ height: "calc(100vh - 280px)", minHeight: "500px" }}
+                    />
+                  </div>
                 </div>
-              ) : !previewTemplate.isLoading && (
+              ) : !isPreviewLoading && (
                 <div className="text-center py-12 text-muted-foreground">
                   <Eye className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Selecione um template e clique em "Visualizar Email" para ver a pré-visualização</p>
+                  <p>{previewEmptyMessage}</p>
                 </div>
               )}
             </CardContent>
@@ -1435,4 +1522,3 @@ export default function EmailTemplates() {
     </div>
   );
 }
-

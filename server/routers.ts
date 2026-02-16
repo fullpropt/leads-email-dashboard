@@ -926,6 +926,13 @@ export const appRouter = router({
       return listTransmissions();
     }),
 
+    previewWithFirstLead: publicProcedure
+      .input(z.object({ id: z.number().min(1) }))
+      .query(async ({ input }) => {
+        const { previewTransmissionWithFirstLead } = await import("./transmissions");
+        return previewTransmissionWithFirstLead(input.id);
+      }),
+
     create: publicProcedure
       .input(
         z.object({

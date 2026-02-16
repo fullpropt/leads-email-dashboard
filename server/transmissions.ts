@@ -83,8 +83,7 @@ type TransmissionRow = {
   updated_at: Date | string;
 };
 
-type RecipientRow = {
-  recipient_id: number;
+type LeadTemplateRow = {
   lead_id: number;
   nome: string | null;
   email: string;
@@ -92,6 +91,10 @@ type RecipientRow = {
   plano: string | null;
   valor: number | null;
   data_aprovacao: Date | string | null;
+};
+
+type RecipientRow = LeadTemplateRow & {
+  recipient_id: number;
 };
 
 let sqlClient: ReturnType<typeof postgres> | null = null;
@@ -298,6 +301,69 @@ async function buildRecipientQueue(transmission: TransmissionRow): Promise<numbe
   return Number(countRows[0]?.count ?? 0);
 }
 
+async function getFirstEligibleLead(
+  transmission: TransmissionRow
+): Promise<LeadTemplateRow | null> {
+  const sql = getSqlClient();
+  const orderClause =
+    transmission.send_order === "oldest_first"
+      ? "l.data_criacao ASC, l.id ASC"
+      : "l.data_criacao DESC, l.id DESC";
+
+  const rows = (await sql.unsafe(
+    `
+      SELECT
+        l.id AS lead_id,
+        l.nome,
+        l.email,
+        l.produto,
+        l.plano,
+        l.valor,
+        l.data_aprovacao
+      FROM leads l
+      WHERE l.unsubscribed = 0
+        AND (
+          $1 = 'all'
+          OR ($1 = 'accessed' AND l.has_accessed_platform = 1)
+          OR ($1 = 'not_accessed' AND l.has_accessed_platform = 0)
+        )
+        AND (
+          $2 = 'all'
+          OR ($2 = 'active' AND (l.status = 'active' OR l.lead_type = 'compra_aprovada'))
+          OR ($2 = 'abandoned' AND (l.status = 'abandoned' OR l.lead_type = 'carrinho_abandonado'))
+          OR ($2 = 'none' AND l.lead_type NOT IN ('compra_aprovada', 'carrinho_abandonado'))
+        )
+      ORDER BY ${orderClause}
+      LIMIT 1
+    `,
+    [transmission.target_status_plataforma, transmission.target_situacao]
+  )) as LeadTemplateRow[];
+
+  return rows[0] ?? null;
+}
+
+function toTemplateLeadContext(lead: LeadTemplateRow | null) {
+  if (!lead) {
+    return {
+      nome: "Cliente",
+      email: "cliente@example.com",
+      produto: "Produto",
+      plano: "Plano",
+      valor: 0,
+      dataAprovacao: null,
+    } as const;
+  }
+
+  return {
+    nome: lead.nome || "",
+    email: lead.email || "",
+    produto: lead.produto || "",
+    plano: lead.plano || "",
+    valor: lead.valor || 0,
+    dataAprovacao: lead.data_aprovacao || null,
+  } as const;
+}
+
 function nextStatusAndRunAt(transmission: TransmissionRow, totalRecipients: number) {
   const now = new Date();
   const scheduledAt =
@@ -370,6 +436,66 @@ export async function listTransmissions(): Promise<TransmissionDTO[]> {
   `;
 
   return rows.map(mapTransmission);
+}
+
+export async function previewTransmissionWithFirstLead(
+  id: number
+): Promise<{
+  success: boolean;
+  html: string;
+  subject: string;
+  leadEmail: string | null;
+  message?: string;
+}> {
+  try {
+    const transmission = await getTransmissionById(id);
+    if (!transmission) {
+      return {
+        success: false,
+        html: "",
+        subject: "",
+        leadEmail: null,
+        message: "Transmissao nao encontrada",
+      };
+    }
+
+    const lead = await getFirstEligibleLead(transmission);
+    const leadForTemplate = toTemplateLeadContext(lead);
+
+    const htmlWithVariables = replaceTemplateVariables(
+      transmission.html_content,
+      leadForTemplate as any
+    );
+    const subjectWithVariables = replaceTemplateVariables(
+      transmission.subject,
+      leadForTemplate as any
+    );
+
+    let unsubscribeToken: string | undefined;
+    if (lead) {
+      unsubscribeToken = (await generateUnsubscribeToken(lead.lead_id)) || undefined;
+    }
+
+    const html = processEmailTemplate(htmlWithVariables, unsubscribeToken);
+    return {
+      success: true,
+      html,
+      subject: subjectWithVariables,
+      leadEmail: lead?.email ?? null,
+      message: lead
+        ? undefined
+        : "Nenhum lead elegivel encontrado. Previa gerada com dados de exemplo.",
+    };
+  } catch (error) {
+    console.error("[Transmission] Failed to preview transmission", error);
+    return {
+      success: false,
+      html: "",
+      subject: "",
+      leadEmail: null,
+      message: "Falha ao gerar previa",
+    };
+  }
 }
 
 export async function createTransmission(
@@ -760,14 +886,7 @@ async function processSingleTransmission(transmissionId: number) {
       return;
     }
 
-    const leadForTemplate = {
-      nome: recipient.nome || "",
-      email: recipient.email || "",
-      produto: recipient.produto || "",
-      plano: recipient.plano || "",
-      valor: recipient.valor || 0,
-      dataAprovacao: recipient.data_aprovacao || null,
-    } as any;
+    const leadForTemplate = toTemplateLeadContext(recipient);
 
     const htmlWithVariables = replaceTemplateVariables(
       transmission.html_content,
