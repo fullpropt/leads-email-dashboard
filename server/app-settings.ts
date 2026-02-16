@@ -200,11 +200,7 @@ export async function getEmailAiSettingsPublic(): Promise<EmailAiSettingsPublic>
   const provider = normalizeProvider(
     map.get(KEY_EMAIL_AI_PROVIDER) || process.env.EMAIL_AI_PROVIDER || "none"
   );
-  const envEnabled = parseBoolean(
-    process.env.EMAIL_AI_VARIATION_ENABLED,
-    false
-  );
-  const enabled = parseBoolean(map.get(KEY_EMAIL_AI_ENABLED), envEnabled);
+  const enabled = provider !== "none";
   const defaultModel =
     provider === "gemini" ? DEFAULT_GEMINI_MODEL : DEFAULT_OPENAI_MODEL;
   const model =
@@ -279,6 +275,7 @@ export async function updateEmailAiSettings(input: {
   clearApiKey?: boolean;
 }) {
   if (input.enabled !== undefined) {
+    // Mantido por compatibilidade de payloads antigos, sem efeito operacional.
     await setSetting(KEY_EMAIL_AI_ENABLED, input.enabled ? "true" : "false");
   }
   if (input.provider !== undefined) {

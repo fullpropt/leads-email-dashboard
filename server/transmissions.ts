@@ -1,7 +1,13 @@
 import postgres from "postgres";
+import { createHash } from "crypto";
 import { generateUnsubscribeToken, replaceTemplateVariables } from "./db";
 import { processEmailTemplate } from "./emailTemplate";
-import { canCurrentServiceProcessQueue, sendEmail } from "./email";
+import {
+  canCurrentServiceProcessQueue,
+  getCurrentServiceSenderIdentity,
+  listSenderAccountsForVariation,
+  sendEmail,
+} from "./email";
 
 export type TransmissionMode = "immediate" | "scheduled";
 export type TransmissionPlatformStatus = "all" | "accessed" | "not_accessed";
@@ -97,21 +103,34 @@ type RecipientRow = LeadTemplateRow & {
   recipient_id: number;
 };
 
+type TransmissionVariationRow = {
+  id: number;
+  transmission_id: number;
+  service_name: string;
+  from_email: string;
+  from_name: string | null;
+  priority: number;
+  source_signature: string;
+  subject: string;
+  html_content: string;
+  created_at: Date | string;
+  updated_at: Date | string;
+};
+
+export type TransmissionPreviewVariantDTO = {
+  key: string;
+  label: string;
+  serviceName: string;
+  fromEmail: string;
+  subject: string;
+  html: string;
+  applied: boolean;
+  reason?: string;
+};
+
 let sqlClient: ReturnType<typeof postgres> | null = null;
 let schemaReady = false;
 let ensurePromise: Promise<void> | null = null;
-
-function getServiceIdentity() {
-  const serviceName =
-    process.env.MAILMKT_SERVICE_NAME ||
-    process.env.RAILWAY_SERVICE_NAME ||
-    "mailmkt";
-  const fromEmail =
-    process.env.MAILGUN_FROM_EMAIL ||
-    process.env.SENDGRID_FROM_EMAIL ||
-    "noreply@tubetoolsup.uk";
-  return { serviceName, fromEmail };
-}
 
 function getSqlClient() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -135,6 +154,16 @@ function toIso(value: Date | string | null | undefined) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
+}
+
+function buildTransmissionSourceSignature(
+  transmissionOrTemplate: Pick<TransmissionRow, "subject" | "html_content">
+) {
+  const hash = createHash("sha1");
+  hash.update(transmissionOrTemplate.subject || "");
+  hash.update("|");
+  hash.update(transmissionOrTemplate.html_content || "");
+  return hash.digest("hex");
 }
 
 function mapTransmission(row: TransmissionRow): TransmissionDTO {
@@ -218,6 +247,23 @@ async function ensureSchema() {
     `;
 
     await sql`
+      CREATE TABLE IF NOT EXISTS email_transmission_variations (
+        id SERIAL PRIMARY KEY,
+        transmission_id integer NOT NULL REFERENCES email_transmissions(id) ON DELETE CASCADE,
+        service_name varchar(120) NOT NULL,
+        from_email varchar(255) NOT NULL,
+        from_name varchar(120) NULL,
+        priority integer NOT NULL DEFAULT 100,
+        source_signature varchar(64) NOT NULL,
+        subject varchar(500) NOT NULL,
+        html_content text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT NOW(),
+        updated_at timestamptz NOT NULL DEFAULT NOW(),
+        UNIQUE (transmission_id, service_name)
+      )
+    `;
+
+    await sql`
       CREATE INDEX IF NOT EXISTS idx_email_transmissions_schedule
       ON email_transmissions (enabled, status, next_run_at)
     `;
@@ -225,6 +271,11 @@ async function ensureSchema() {
     await sql`
       CREATE INDEX IF NOT EXISTS idx_email_transmission_recipients_queue
       ON email_transmission_recipients (transmission_id, status, position)
+    `;
+
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_email_transmission_variations_lookup
+      ON email_transmission_variations (transmission_id, source_signature, priority, service_name)
     `;
 
     schemaReady = true;
@@ -376,20 +427,206 @@ function toTemplateLeadContext(lead: LeadTemplateRow | null) {
   } as const;
 }
 
-async function getTransmissionVariantTemplate(
+async function clearTransmissionVariations(transmissionId: number) {
+  const sql = getSqlClient();
+  await sql`
+    DELETE FROM email_transmission_variations
+    WHERE transmission_id = ${transmissionId}
+  `;
+}
+
+async function listStoredTransmissionVariations(
+  transmission: TransmissionRow
+): Promise<TransmissionVariationRow[]> {
+  const sql = getSqlClient();
+  const sourceSignature = buildTransmissionSourceSignature(transmission);
+  const rows = await sql<TransmissionVariationRow[]>`
+    SELECT *
+    FROM email_transmission_variations
+    WHERE transmission_id = ${transmission.id}
+      AND source_signature = ${sourceSignature}
+    ORDER BY priority ASC, service_name ASC
+  `;
+  return rows;
+}
+
+function mapVariationToPreview(row: TransmissionVariationRow): TransmissionPreviewVariantDTO {
+  return {
+    key: row.service_name,
+    label: `${row.service_name} (${row.from_email})`,
+    serviceName: row.service_name,
+    fromEmail: row.from_email,
+    subject: row.subject,
+    html: row.html_content,
+    applied: true,
+  };
+}
+
+async function generateSingleTransmissionVariation(
+  transmission: TransmissionRow,
+  scopeSuffix: string,
+  serviceName: string,
+  fromEmail: string
+) {
+  const { applyAICopyVariation } = await import("./email-ai-variation");
+  const variation = await applyAICopyVariation({
+    subject: transmission.subject,
+    html: transmission.html_content,
+    scopeKey: `transmission:${transmission.id}:${scopeSuffix}:${serviceName}`,
+    serviceName,
+    fromEmail,
+  });
+  return variation;
+}
+
+async function generateAndStoreTransmissionVariations(
+  transmission: TransmissionRow,
+  scopeSuffix: string
+): Promise<TransmissionPreviewVariantDTO[]> {
+  const sql = getSqlClient();
+  const sourceSignature = buildTransmissionSourceSignature(transmission);
+  const senderAccounts = await listSenderAccountsForVariation();
+  const accounts = senderAccounts.length
+    ? senderAccounts
+    : [
+        {
+          ...getCurrentServiceSenderIdentity(),
+          priority: 100,
+          enabled: true,
+        },
+      ];
+
+  const uniqueAccounts = new Map<
+    string,
+    {
+      serviceName: string;
+      fromEmail: string;
+      fromName: string;
+      priority: number;
+    }
+  >();
+  for (const account of accounts) {
+    if (!account.serviceName) continue;
+    if (uniqueAccounts.has(account.serviceName)) continue;
+    uniqueAccounts.set(account.serviceName, {
+      serviceName: account.serviceName,
+      fromEmail: account.fromEmail,
+      fromName: account.fromName,
+      priority: Number(account.priority ?? 100),
+    });
+  }
+
+  const generated: TransmissionPreviewVariantDTO[] = [];
+  for (const account of uniqueAccounts.values()) {
+    try {
+      const variation = await generateSingleTransmissionVariation(
+        transmission,
+        scopeSuffix,
+        account.serviceName,
+        account.fromEmail
+      );
+
+      await sql`
+        INSERT INTO email_transmission_variations (
+          transmission_id,
+          service_name,
+          from_email,
+          from_name,
+          priority,
+          source_signature,
+          subject,
+          html_content,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          ${transmission.id},
+          ${account.serviceName},
+          ${account.fromEmail},
+          ${account.fromName},
+          ${account.priority},
+          ${sourceSignature},
+          ${variation.subject},
+          ${variation.html},
+          NOW(),
+          NOW()
+        )
+        ON CONFLICT (transmission_id, service_name)
+        DO UPDATE SET
+          from_email = EXCLUDED.from_email,
+          from_name = EXCLUDED.from_name,
+          priority = EXCLUDED.priority,
+          source_signature = EXCLUDED.source_signature,
+          subject = EXCLUDED.subject,
+          html_content = EXCLUDED.html_content,
+          updated_at = NOW()
+      `;
+
+      generated.push({
+        key: account.serviceName,
+        label: `${account.serviceName} (${account.fromEmail})`,
+        serviceName: account.serviceName,
+        fromEmail: account.fromEmail,
+        subject: variation.subject,
+        html: variation.html,
+        applied: variation.applied,
+        reason: variation.reason,
+      });
+    } catch (error) {
+      console.error("[Transmission] Failed generating variation", error);
+      generated.push({
+        key: account.serviceName,
+        label: `${account.serviceName} (${account.fromEmail})`,
+        serviceName: account.serviceName,
+        fromEmail: account.fromEmail,
+        subject: transmission.subject,
+        html: transmission.html_content,
+        applied: false,
+        reason: "error",
+      });
+    }
+  }
+
+  await sql`
+    DELETE FROM email_transmission_variations
+    WHERE transmission_id = ${transmission.id}
+      AND source_signature <> ${sourceSignature}
+  `;
+
+  return generated;
+}
+
+async function getTransmissionTemplateForCurrentService(
   transmission: TransmissionRow,
   scopeSuffix: string
 ) {
+  const sql = getSqlClient();
+  const identity = getCurrentServiceSenderIdentity();
+  const sourceSignature = buildTransmissionSourceSignature(transmission);
+
+  const storedRows = await sql<TransmissionVariationRow[]>`
+    SELECT *
+    FROM email_transmission_variations
+    WHERE transmission_id = ${transmission.id}
+      AND service_name = ${identity.serviceName}
+      AND source_signature = ${sourceSignature}
+    LIMIT 1
+  `;
+
+  if (storedRows[0]) {
+    return {
+      subject: storedRows[0].subject,
+      html: storedRows[0].html_content,
+    };
+  }
+
   try {
-    const { applyAICopyVariation } = await import("./email-ai-variation");
-    const identity = getServiceIdentity();
-    const variation = await applyAICopyVariation({
-      subject: transmission.subject,
-      html: transmission.html_content,
-      scopeKey: `transmission:${transmission.id}:${scopeSuffix}`,
-      serviceName: identity.serviceName,
-      fromEmail: identity.fromEmail,
-    });
+    const variation = await generateSingleTransmissionVariation(
+      transmission,
+      scopeSuffix,
+      identity.serviceName,
+      identity.fromEmail
+    );
     return {
       subject: variation.subject,
       html: variation.html,
@@ -484,6 +721,7 @@ export async function previewTransmissionWithFirstLead(
   html: string;
   subject: string;
   leadEmail: string | null;
+  variants: TransmissionPreviewVariantDTO[];
   message?: string;
 }> {
   try {
@@ -494,37 +732,76 @@ export async function previewTransmissionWithFirstLead(
         html: "",
         subject: "",
         leadEmail: null,
+        variants: [],
         message: "Transmissao nao encontrada",
       };
     }
 
     const lead = await getFirstEligibleLead(transmission);
     const leadForTemplate = toTemplateLeadContext(lead);
-    const baseTemplate = await getTransmissionVariantTemplate(
-      transmission,
-      `preview:${toIso(transmission.updated_at) || "na"}`
-    );
-
-    const htmlWithVariables = replaceTemplateVariables(
-      baseTemplate.html,
-      leadForTemplate as any
-    );
-    const subjectWithVariables = replaceTemplateVariables(
-      baseTemplate.subject,
-      leadForTemplate as any
-    );
+    const storedVariants = await listStoredTransmissionVariations(transmission);
+    let previewVariants = storedVariants.map(mapVariationToPreview);
+    if (!previewVariants.length) {
+      const identity = getCurrentServiceSenderIdentity();
+      const fallbackTemplate = await getTransmissionTemplateForCurrentService(
+        transmission,
+        `preview:${toIso(transmission.updated_at) || "na"}`
+      );
+      previewVariants = [
+        {
+          key: identity.serviceName,
+          label: `${identity.serviceName} (${identity.fromEmail})`,
+          serviceName: identity.serviceName,
+          fromEmail: identity.fromEmail,
+          subject: fallbackTemplate.subject,
+          html: fallbackTemplate.html,
+          applied: false,
+          reason: "not_generated",
+        },
+      ];
+    }
 
     let unsubscribeToken: string | undefined;
     if (lead) {
       unsubscribeToken = (await generateUnsubscribeToken(lead.lead_id)) || undefined;
     }
 
-    const html = processEmailTemplate(htmlWithVariables, unsubscribeToken);
+    const renderedVariants = previewVariants.map(variant => {
+      const htmlWithVariables = replaceTemplateVariables(
+        variant.html,
+        leadForTemplate as any
+      );
+      const subjectWithVariables = replaceTemplateVariables(
+        variant.subject,
+        leadForTemplate as any
+      );
+      return {
+        ...variant,
+        html: processEmailTemplate(htmlWithVariables, unsubscribeToken),
+        subject: subjectWithVariables,
+      };
+    });
+
+    const firstVariant = renderedVariants[0] || {
+      key: "default",
+      label: "Padrao",
+      serviceName: "default",
+      fromEmail: "noreply@tubetoolsup.uk",
+      subject: transmission.subject,
+      html: processEmailTemplate(
+        replaceTemplateVariables(transmission.html_content, leadForTemplate as any),
+        unsubscribeToken
+      ),
+      applied: false,
+      reason: "fallback",
+    };
+
     return {
       success: true,
-      html,
-      subject: subjectWithVariables,
+      html: firstVariant.html,
+      subject: firstVariant.subject,
       leadEmail: lead?.email ?? null,
+      variants: renderedVariants.length ? renderedVariants : [firstVariant],
       message: lead
         ? undefined
         : "Nenhum lead elegivel encontrado. Previa gerada com dados de exemplo.",
@@ -536,7 +813,48 @@ export async function previewTransmissionWithFirstLead(
       html: "",
       subject: "",
       leadEmail: null,
+      variants: [],
       message: "Falha ao gerar previa",
+    };
+  }
+}
+
+export async function generateTransmissionVariations(
+  id: number
+): Promise<{
+  success: boolean;
+  variants: TransmissionPreviewVariantDTO[];
+  message?: string;
+}> {
+  try {
+    const transmission = await getTransmissionById(id);
+    if (!transmission) {
+      return {
+        success: false,
+        variants: [],
+        message: "Transmissao nao encontrada",
+      };
+    }
+
+    const sourceSignature = buildTransmissionSourceSignature(transmission);
+    const generated = await generateAndStoreTransmissionVariations(
+      transmission,
+      `manual:${sourceSignature}`
+    );
+
+    return {
+      success: true,
+      variants: generated,
+      message: generated.length
+        ? "Variacoes geradas com sucesso"
+        : "Nenhuma variacao gerada",
+    };
+  } catch (error) {
+    console.error("[Transmission] Failed to generate transmission variations", error);
+    return {
+      success: false,
+      variants: [],
+      message: "Falha ao gerar variacoes",
     };
   }
 }
@@ -601,6 +919,8 @@ export async function updateTransmission(
   try {
     await ensureSchema();
     const sql = getSqlClient();
+    const contentChanged =
+      updates.subject !== undefined || updates.htmlContent !== undefined;
 
     const setClauses: string[] = [];
     const values: any[] = [id];
@@ -667,6 +987,10 @@ export async function updateTransmission(
     const rows = (await sql.unsafe(query, values)) as TransmissionRow[];
     if (!rows[0]) {
       return { success: false, message: "Transmission not found" };
+    }
+
+    if (contentChanged) {
+      await clearTransmissionVariations(id);
     }
 
     return { success: true, transmission: mapTransmission(rows[0]) };
@@ -876,7 +1200,7 @@ async function processSingleTransmission(transmissionId: number) {
 
   const intervalSeconds = Math.max(0, Number(transmission.send_interval_seconds ?? 0));
   const runLimit = intervalSeconds > 0 ? 1 : 25;
-  const baseTemplate = await getTransmissionVariantTemplate(
+  const baseTemplate = await getTransmissionTemplateForCurrentService(
     transmission,
     `send:${toIso(transmission.updated_at) || "na"}`
   );

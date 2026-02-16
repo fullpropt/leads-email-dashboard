@@ -58,7 +58,6 @@ export default function SettingsPage() {
     },
   });
 
-  const [aiEnabled, setAiEnabled] = useState(false);
   const [aiProvider, setAiProvider] = useState<AIProvider>("none");
   const [aiModel, setAiModel] = useState("");
   const [rewriteIntensity, setRewriteIntensity] = useState(12);
@@ -75,7 +74,6 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!aiSettings) return;
-    setAiEnabled(aiSettings.enabled);
     setAiProvider((aiSettings.provider || "none") as AIProvider);
     setAiModel(aiSettings.model || "");
     setRewriteIntensity(aiSettings.rewriteIntensity ?? 12);
@@ -90,7 +88,6 @@ export default function SettingsPage() {
 
   const saveAISettings = () => {
     updateEmailAi.mutate({
-      enabled: aiEnabled,
       provider: aiProvider,
       model: aiModel || getDefaultModel(aiProvider),
       rewriteIntensity: Math.max(0, Math.min(40, Math.floor(rewriteIntensity || 0))),
@@ -150,16 +147,6 @@ export default function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <div>
-              <p className="text-sm font-medium">Ativar variacao automatica</p>
-              <p className="text-xs text-muted-foreground">
-                Quando ativo, a IA ajusta assunto e HTML mantendo placeholders e links.
-              </p>
-            </div>
-            <Switch checked={aiEnabled} onCheckedChange={setAiEnabled} />
-          </div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Provider</Label>

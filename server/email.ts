@@ -16,6 +16,15 @@ type RotationSlot = RotationDecision & {
   accounted: boolean;
 };
 
+export type SenderAccountInfo = {
+  serviceName: string;
+  priority: number;
+  enabled: boolean;
+  fromEmail: string;
+  fromName: string;
+  provider: Provider;
+};
+
 const SERVICE_NAME =
   process.env.MAILMKT_SERVICE_NAME ||
   process.env.RAILWAY_SERVICE_NAME ||
@@ -102,6 +111,30 @@ function resolveProvider(): Provider {
   return "none";
 }
 
+function getCurrentSenderIdentity() {
+  if (selectedProvider === "sendgrid") {
+    return {
+      fromEmail: sendGridConfig.fromEmail,
+      fromName: sendGridConfig.fromName,
+      provider: "sendgrid" as Provider,
+    };
+  }
+  if (selectedProvider === "mailgun") {
+    return {
+      fromEmail: mailgunConfig.fromEmail,
+      fromName: mailgunConfig.fromName,
+      provider: "mailgun" as Provider,
+    };
+  }
+
+  const fallbackFrom = process.env.MAILGUN_FROM_EMAIL || process.env.SENDGRID_FROM_EMAIL || "noreply@tubetoolsup.uk";
+  return {
+    fromEmail: fallbackFrom,
+    fromName: process.env.MAILGUN_FROM_NAME || process.env.SENDGRID_FROM_NAME || "TubeTools",
+    provider: "none" as Provider,
+  };
+}
+
 function getRotationSqlClient() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -163,6 +196,9 @@ async function ensureRotationSetup(): Promise<boolean> {
           daily_limit integer NOT NULL DEFAULT 100,
           sent_today integer NOT NULL DEFAULT 0,
           enabled integer NOT NULL DEFAULT 1,
+          from_email varchar(255) NULL,
+          from_name varchar(120) NULL,
+          provider varchar(20) NULL,
           last_reset_date date NOT NULL DEFAULT CURRENT_DATE,
           created_at timestamptz NOT NULL DEFAULT NOW(),
           updated_at timestamptz NOT NULL DEFAULT NOW()
@@ -170,9 +206,24 @@ async function ensureRotationSetup(): Promise<boolean> {
       `;
 
       await sql`
+        ALTER TABLE email_sending_accounts
+        ADD COLUMN IF NOT EXISTS from_email varchar(255) NULL
+      `;
+      await sql`
+        ALTER TABLE email_sending_accounts
+        ADD COLUMN IF NOT EXISTS from_name varchar(120) NULL
+      `;
+      await sql`
+        ALTER TABLE email_sending_accounts
+        ADD COLUMN IF NOT EXISTS provider varchar(20) NULL
+      `;
+
+      await sql`
         CREATE INDEX IF NOT EXISTS idx_email_sending_accounts_priority
         ON email_sending_accounts (enabled, priority, service_name)
       `;
+
+      const identity = getCurrentSenderIdentity();
 
       await sql`
         INSERT INTO email_sending_accounts (
@@ -181,6 +232,9 @@ async function ensureRotationSetup(): Promise<boolean> {
           daily_limit,
           sent_today,
           enabled,
+          from_email,
+          from_name,
+          provider,
           last_reset_date,
           created_at,
           updated_at
@@ -191,6 +245,9 @@ async function ensureRotationSetup(): Promise<boolean> {
           ${rotationDailyLimit},
           0,
           ${rotationSenderEnabled ? 1 : 0},
+          ${identity.fromEmail},
+          ${identity.fromName},
+          ${identity.provider},
           CURRENT_DATE,
           NOW(),
           NOW()
@@ -200,6 +257,9 @@ async function ensureRotationSetup(): Promise<boolean> {
           priority = EXCLUDED.priority,
           daily_limit = EXCLUDED.daily_limit,
           enabled = EXCLUDED.enabled,
+          from_email = EXCLUDED.from_email,
+          from_name = EXCLUDED.from_name,
+          provider = EXCLUDED.provider,
           updated_at = NOW()
       `;
 
@@ -609,4 +669,86 @@ export function getEmailConfig() {
           ? mailgunConfig.fromName
           : null,
   };
+}
+
+export function getCurrentServiceSenderIdentity() {
+  const identity = getCurrentSenderIdentity();
+  return {
+    serviceName: SERVICE_NAME,
+    fromEmail: identity.fromEmail,
+    fromName: identity.fromName,
+    provider: identity.provider,
+  };
+}
+
+export async function listSenderAccountsForVariation(): Promise<SenderAccountInfo[]> {
+  const identity = getCurrentSenderIdentity();
+  const fallback: SenderAccountInfo[] = [
+    {
+      serviceName: SERVICE_NAME,
+      priority: Number.isFinite(rotationPriority) ? rotationPriority : 100,
+      enabled: true,
+      fromEmail: identity.fromEmail,
+      fromName: identity.fromName,
+      provider: identity.provider,
+    },
+  ];
+
+  if (!rotationEnabled) {
+    return fallback;
+  }
+
+  const ready = await ensureRotationSetup();
+  if (!ready) {
+    return fallback;
+  }
+
+  const sql = getRotationSqlClient();
+  if (!sql) {
+    return fallback;
+  }
+
+  try {
+    const rows = await sql<{
+      service_name: string;
+      priority: number;
+      enabled: number;
+      from_email: string | null;
+      from_name: string | null;
+      provider: string | null;
+    }[]>`
+      SELECT
+        service_name,
+        priority,
+        enabled,
+        from_email,
+        from_name,
+        provider
+      FROM email_sending_accounts
+      WHERE enabled = 1
+      ORDER BY priority ASC, service_name ASC
+    `;
+
+    if (!rows.length) {
+      return fallback;
+    }
+
+    return rows.map(row => ({
+      serviceName: row.service_name,
+      priority: Number(row.priority ?? 100),
+      enabled: Number(row.enabled ?? 0) === 1,
+      fromEmail: (row.from_email || "").trim() || "noreply@tubetoolsup.uk",
+      fromName: (row.from_name || "").trim() || row.service_name,
+      provider:
+        row.provider === "sendgrid" || row.provider === "mailgun"
+          ? row.provider
+          : "none",
+    }));
+  } catch (error) {
+    console.error(
+      `[Email:${SERVICE_NAME}] Falha ao listar contas para variacao`,
+      error
+    );
+    return fallback;
+  }
 }

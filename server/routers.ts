@@ -1002,6 +1002,13 @@ export const appRouter = router({
         return previewTransmissionWithFirstLead(input.id);
       }),
 
+    generateVariations: publicProcedure
+      .input(z.object({ id: z.number().min(1) }))
+      .mutation(async ({ input }) => {
+        const { generateTransmissionVariations } = await import("./transmissions");
+        return generateTransmissionVariations(input.id);
+      }),
+
     create: publicProcedure
       .input(
         z.object({

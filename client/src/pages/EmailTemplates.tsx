@@ -28,6 +28,7 @@ import {
   ChevronDown,
   ChevronUp,
   Mail,
+  Sparkles,
 } from "lucide-react";
 import { CreateItemModal } from "@/components/CreateItemModal";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
@@ -113,6 +114,18 @@ interface TransmissionBlock {
   updatedAt: string;
 }
 
+interface TransmissionPreviewVariant {
+  key: string;
+  label: string;
+  serviceName: string;
+  fromEmail: string;
+  subject: string;
+  html: string;
+  applied: boolean;
+  reason?: string;
+}
+
+
 // Labels para exibição dos filtros
 const STATUS_PLATAFORMA_LABELS: Record<string, string> = {
   all: "Todos",
@@ -170,6 +183,8 @@ export default function EmailTemplates() {
   const [previewMode, setPreviewMode] = useState<"template" | "transmission" | null>(null);
   const [previewSubject, setPreviewSubject] = useState("");
   const [previewInfo, setPreviewInfo] = useState("");
+  const [previewVariants, setPreviewVariants] = useState<TransmissionPreviewVariant[]>([]);
+  const [selectedPreviewVariantKey, setSelectedPreviewVariantKey] = useState<string>("");
   const [activeTab, setActiveTab] = useState("items");
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [previewTemplateId, setPreviewTemplateId] = useState<number | null>(null);
@@ -379,6 +394,12 @@ export default function EmailTemplates() {
     },
   });
 
+  const generateTransmissionVariations = trpc.transmissions.generateVariations.useMutation({
+    onError: () => {
+      toast.error("Erro ao gerar variacoes da transmissao");
+    },
+  });
+
   // Mutations para envio de email
   const sendImmediateEmail = trpc.email.sendImmediateToAllPending.useMutation({
     onSuccess: (data) => {
@@ -449,30 +470,39 @@ export default function EmailTemplates() {
       setPreviewMode("template");
       setPreviewSubject("");
       setPreviewInfo("");
+      setPreviewVariants([]);
+      setSelectedPreviewVariantKey("");
       setActiveTab("preview");
-      toast.success("Prévia gerada com sucesso!");
+      toast.success("Previa gerada com sucesso!");
     } else if (previewTemplate.isError) {
-      toast.error("Erro ao gerar pré-visualização");
+      toast.error("Erro ao gerar pre-visualizacao");
     }
   }, [previewTemplate.data, previewTemplate.isError]);
 
   React.useEffect(() => {
     if (previewTransmission.data?.success) {
-      setPreviewHtml(previewTransmission.data.html);
+      const variants = (previewTransmission.data.variants || []) as TransmissionPreviewVariant[];
+      const firstVariant = variants[0];
+
+      setPreviewVariants(variants);
+      setSelectedPreviewVariantKey(firstVariant?.key || "");
+      setPreviewHtml(firstVariant?.html || previewTransmission.data.html || "");
       setPreviewMode("transmission");
-      setPreviewSubject(previewTransmission.data.subject || "");
+      setPreviewSubject(firstVariant?.subject || previewTransmission.data.subject || "");
+
       if (previewTransmission.data.leadEmail) {
         setPreviewInfo(`Lead usado no preview: ${previewTransmission.data.leadEmail}`);
       } else {
         setPreviewInfo(
           previewTransmission.data.message ||
-            "Sem lead elegível. Preview gerado com dados de exemplo."
+            "Sem lead elegivel. Preview gerado com dados de exemplo."
         );
       }
+
       setActiveTab("preview");
-      toast.success("Prévia da transmissão gerada com sucesso!");
+      toast.success("Previa da transmissao gerada com sucesso!");
     } else if (previewTransmission.isError) {
-      toast.error("Erro ao gerar prévia da transmissão");
+      toast.error("Erro ao gerar previa da transmissao");
     }
   }, [previewTransmission.data, previewTransmission.isError]);
 
@@ -666,24 +696,57 @@ export default function EmailTemplates() {
 
   const handlePreview = (templateId: number) => {
     if (!templateId) {
-      toast.error("Template não encontrado");
+      toast.error("Template nao encontrado");
       return;
     }
     setPreviewMode("template");
     setPreviewTransmissionId(null);
     setPreviewSubject("");
     setPreviewInfo("");
+    setPreviewVariants([]);
+    setSelectedPreviewVariantKey("");
     setPreviewTemplateId(templateId);
   };
 
   const handlePreviewTransmission = (transmissionId: number) => {
     if (!transmissionId) {
-      toast.error("Transmissão não encontrada");
+      toast.error("Transmissao nao encontrada");
       return;
     }
     setPreviewMode("transmission");
     setPreviewTemplateId(null);
+    setPreviewVariants([]);
+    setSelectedPreviewVariantKey("");
     setPreviewTransmissionId(transmissionId);
+  };
+
+  const handleSelectPreviewVariant = (variantKey: string) => {
+    setSelectedPreviewVariantKey(variantKey);
+    const variant = previewVariants.find(item => item.key === variantKey);
+    if (!variant) return;
+    setPreviewHtml(variant.html);
+    setPreviewSubject(variant.subject);
+  };
+
+  const handleGenerateTransmissionVariations = async (transmissionId: number) => {
+    try {
+      const result = await generateTransmissionVariations.mutateAsync({ id: transmissionId });
+      if (!result.success) {
+        toast.error(result.message || "Falha ao gerar variacoes");
+        return;
+      }
+      toast.success(result.message || "Variacoes geradas com sucesso");
+      setPreviewMode("transmission");
+      setPreviewTemplateId(null);
+      setActiveTab("preview");
+      if (previewTransmissionId === transmissionId) {
+        await previewTransmission.refetch();
+      } else {
+        setPreviewTransmissionId(transmissionId);
+      }
+    } catch (error) {
+      toast.error("Erro ao gerar variacoes da transmissao");
+    }
   };
 
   const handleSendImmediate = (templateId: number) => {
@@ -714,17 +777,23 @@ export default function EmailTemplates() {
     ? templates.find(t => t.id === selectedTemplateId)
     : null;
 
-  // Combinar templates e funis para exibição
+  // Combinar templates e funis para exibicao
   const funnels = allFunnels || [];
   const isPreviewLoading = previewTemplate.isLoading || previewTransmission.isLoading;
   const previewDescription =
     previewMode === "transmission"
-      ? "Visualize como a transmissão será exibida para o primeiro lead elegível."
-      : "Visualize como o email será exibido no primeiro lead";
+      ? "Visualize como a transmissao sera exibida para o primeiro lead elegivel."
+      : "Visualize como o email sera exibido no primeiro lead";
+  const selectedPreviewVariant =
+    previewMode === "transmission"
+      ? previewVariants.find(item => item.key === selectedPreviewVariantKey) ||
+        previewVariants[0] ||
+        null
+      : null;
   const previewEmptyMessage =
     previewMode === "transmission"
-      ? 'Selecione uma transmissão e clique em "Visualizar" para ver a prévia.'
-      : 'Selecione um template e clique em "Visualizar Email" para ver a pré-visualização.';
+      ? 'Selecione uma transmissao e clique em "Visualizar" para ver a previa.'
+      : 'Selecione um template e clique em "Visualizar Email" para ver a pre-visualizacao.';
 
   return (
     <div className="space-y-6">
@@ -1249,6 +1318,19 @@ export default function EmailTemplates() {
                         </p>
                         <div className="flex items-center gap-2">
                           <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGenerateTransmissionVariations(transmission.id)}
+                            disabled={generateTransmissionVariations.isPending}
+                          >
+                            {generateTransmissionVariations.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                            ) : (
+                              <Sparkles className="h-4 w-4 mr-1" />
+                            )}
+                            Gerar variacoes
+                          </Button>
+                          <Button
                             variant="ghost"
                             size="sm"
                             onClick={() =>
@@ -1451,8 +1533,29 @@ export default function EmailTemplates() {
               )}
               {previewHtml && !isPreviewLoading ? (
                 <div className="space-y-3">
+                  {previewMode === "transmission" && previewVariants.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {previewVariants.map(variant => (
+                        <Button
+                          key={variant.key}
+                          type="button"
+                          size="sm"
+                          variant={selectedPreviewVariantKey === variant.key ? "default" : "outline"}
+                          className="h-8 text-xs"
+                          onClick={() => handleSelectPreviewVariant(variant.key)}
+                        >
+                          {variant.label}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                   {previewMode === "transmission" && (
                     <div className="rounded-md border bg-amber-50/60 dark:bg-amber-950/30 px-3 py-2 text-xs">
+                      {selectedPreviewVariant?.fromEmail && (
+                        <p className="text-amber-700 dark:text-amber-300">
+                          <strong>Conta:</strong> {selectedPreviewVariant.fromEmail}
+                        </p>
+                      )}
                       {previewSubject && (
                         <p className="text-amber-800 dark:text-amber-200">
                           <strong>Assunto:</strong> {previewSubject}

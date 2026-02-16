@@ -196,7 +196,7 @@ async function generateWithGemini(input: VariationInput, apiKey: string, model: 
 export async function applyAICopyVariation(input: VariationInput): Promise<VariationOutput> {
   try {
     const settings = await getEmailAiSettingsRuntime();
-    if (!settings.enabled || settings.provider === "none") {
+    if (settings.provider === "none") {
       return { subject: input.subject, html: input.html, applied: false, reason: "disabled" };
     }
     if (!settings.apiKey) {
