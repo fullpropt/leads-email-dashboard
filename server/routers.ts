@@ -1187,6 +1187,36 @@ export const appRouter = router({
         return { success: true, settings };
       }),
 
+    testEmailAi: publicProcedure.mutation(async () => {
+      const { getEmailAiSettingsRuntime } = await import("./app-settings");
+      const { applyAICopyVariation } = await import("./email-ai-variation");
+
+      const runtime = await getEmailAiSettingsRuntime();
+      const sampleSubject = "Teste rapido {{nome}}";
+      const sampleHtml =
+        "<p>Ola {{nome}}, este eh um teste rapido de variacao.</p><p>Seu produto: {PRODUTO}</p>";
+
+      const result = await applyAICopyVariation({
+        subject: sampleSubject,
+        html: sampleHtml,
+        scopeKey: `settings:test:${Date.now()}`,
+        serviceName: "settings-test",
+        fromEmail: "noreply@test.local",
+      });
+
+      const hasError = Boolean(result.reason?.startsWith("error:"));
+      return {
+        success: !hasError,
+        provider: runtime.provider,
+        model: runtime.model,
+        apiKeyConfigured: Boolean(runtime.apiKey),
+        applied: result.applied,
+        reason: result.reason || null,
+        subjectChanged: result.subject !== sampleSubject,
+        htmlChanged: result.html !== sampleHtml,
+      };
+    }),
+
     getLocalAuthInfo: publicProcedure.query(async () => {
       const { getLocalAuthPublicInfo } = await import("./app-settings");
       return getLocalAuthPublicInfo();

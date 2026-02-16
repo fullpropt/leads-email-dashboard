@@ -91,6 +91,15 @@ function normalizeComparableText(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
+function sanitizeErrorMessage(value: string) {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "unknown_error";
+  const withoutKeys = trimmed
+    .replace(/sk-[a-zA-Z0-9_\-]{8,}/g, "sk-***")
+    .replace(/AIza[0-9A-Za-z\-_]{20,}/g, "AIza***");
+  return withoutKeys.slice(0, 180);
+}
+
 function sanitizeVariation(base: VariationInput, candidate: { subject?: string; html?: string }): VariationOutput {
   const nextSubject = typeof candidate.subject === "string" ? candidate.subject.trim() : "";
   const nextHtml = typeof candidate.html === "string" ? candidate.html.trim() : "";
@@ -353,11 +362,17 @@ export async function applyAICopyVariation(input: VariationInput): Promise<Varia
     return lastResult;
   } catch (error) {
     console.error("[EmailAIVariation] Failed to generate variation", error);
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : JSON.stringify(error);
     return {
       subject: input.subject,
       html: input.html,
       applied: false,
-      reason: "error",
+      reason: `error:${sanitizeErrorMessage(message)}`,
     };
   }
 }

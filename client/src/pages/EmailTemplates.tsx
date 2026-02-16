@@ -171,6 +171,15 @@ const VARIATION_REASON_LABELS: Record<string, string> = {
   error: "Falha ao gerar variacao para esta conta.",
 };
 
+function formatVariationReason(reason: string | undefined) {
+  if (!reason) return "";
+  if (reason.startsWith("error:")) {
+    const detail = reason.slice("error:".length).trim();
+    return detail ? `Falha na IA: ${detail}` : VARIATION_REASON_LABELS.error;
+  }
+  return VARIATION_REASON_LABELS[reason] || reason;
+}
+
 function toDateTimeLocal(value: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -1582,8 +1591,7 @@ export default function EmailTemplates() {
                         selectedPreviewVariant.reason && (
                           <p className="text-amber-700 dark:text-amber-300">
                             <strong>Variacao:</strong>{" "}
-                            {VARIATION_REASON_LABELS[selectedPreviewVariant.reason] ||
-                              selectedPreviewVariant.reason}
+                            {formatVariationReason(selectedPreviewVariant.reason)}
                           </p>
                         )}
                     </div>

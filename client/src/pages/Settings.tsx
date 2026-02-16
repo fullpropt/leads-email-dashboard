@@ -52,6 +52,26 @@ export default function SettingsPage() {
     },
   });
 
+  const testEmailAi = trpc.settings.testEmailAi.useMutation({
+    onSuccess: result => {
+      const base = `Provider: ${result.provider} | Modelo: ${result.model}`;
+      if (result.success && result.applied) {
+        toast.success(`Teste IA OK. ${base}`);
+        return;
+      }
+
+      if (result.reason?.startsWith("error:")) {
+        toast.error(`Falha IA: ${result.reason.replace(/^error:/, "").trim()}`);
+        return;
+      }
+
+      toast.message(`Teste IA sem variacao. Motivo: ${result.reason || "desconhecido"}`);
+    },
+    onError: () => {
+      toast.error("Falha ao testar IA.");
+    },
+  });
+
   const changeLocalPassword = trpc.settings.changeLocalPassword.useMutation({
     onSuccess: async result => {
       if (result.success) {
@@ -282,6 +302,19 @@ export default function SettingsPage() {
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : null}
             Salvar configuracoes de IA
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => testEmailAi.mutate()}
+            disabled={testEmailAi.isPending}
+          >
+            {testEmailAi.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : null}
+            Testar IA
           </Button>
         </CardContent>
       </Card>
