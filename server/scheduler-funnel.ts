@@ -226,8 +226,21 @@ async function processFunnelEmails() {
     // Importar funções necessárias
     const { sendEmail } = await import("./email");
     const { replaceTemplateVariables } = await import("./db");
+    const { applyAICopyVariation } = await import("./email-ai-variation");
+    const serviceName =
+      process.env.MAILMKT_SERVICE_NAME ||
+      process.env.RAILWAY_SERVICE_NAME ||
+      "mailmkt";
+    const fromEmail =
+      process.env.MAILGUN_FROM_EMAIL ||
+      process.env.SENDGRID_FROM_EMAIL ||
+      "noreply@tubetoolsup.uk";
 
     let sentCount = 0;
+    const variedTemplateCache = new Map<
+      number,
+      { subject: string; html: string }
+    >();
 
     // Processar cada progresso
     for (const { progress } of progressReadyForSend) {
@@ -295,9 +308,27 @@ async function processFunnelEmails() {
 
         console.log(`[FunnelScheduler] 📤 Enviando template "${template.nome}" para ${lead.email}`);
 
+        let baseTemplate = variedTemplateCache.get(template.id);
+        if (!baseTemplate) {
+          const varied = await applyAICopyVariation({
+            subject: template.assunto,
+            html: template.htmlContent || "",
+            scopeKey: `funnel-template:${template.id}:${String(
+              template.atualizadoEm || ""
+            )}`,
+            serviceName,
+            fromEmail,
+          });
+          baseTemplate = { subject: varied.subject, html: varied.html };
+          variedTemplateCache.set(template.id, baseTemplate);
+        }
+
         // Substituir variáveis no template (HTML e assunto)
-        const htmlContent = replaceTemplateVariables(template.htmlContent || "", lead);
-        const processedSubject = replaceTemplateVariables(template.assunto, lead);
+        const htmlContent = replaceTemplateVariables(baseTemplate.html || "", lead);
+        const processedSubject = replaceTemplateVariables(
+          baseTemplate.subject,
+          lead
+        );
         
         // Gerar/obter token de unsubscribe para o lead
         const { generateUnsubscribeToken } = await import("./db");

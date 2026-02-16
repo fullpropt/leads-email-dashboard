@@ -10,16 +10,6 @@ type LoginBody = {
   password?: unknown;
 };
 
-function getLocalAuthEmail() {
-  const configuredEmail =
-    process.env.LOCAL_AUTH_EMAIL || process.env.ADMIN_EMAIL || "";
-  return configuredEmail.trim().toLowerCase();
-}
-
-function getLocalAuthPassword() {
-  return process.env.LOCAL_AUTH_PASSWORD || process.env.ADMIN_PASSWORD || "";
-}
-
 function getLocalOpenId() {
   return ENV.ownerOpenId || "local_admin";
 }
@@ -86,24 +76,25 @@ export function registerLocalAuthRoutes(app: Express) {
       return res.status(400).json({ error: "Email and password are required" });
     }
 
-    const configuredEmail = getLocalAuthEmail();
-    const configuredPassword = getLocalAuthPassword();
+    const { verifyLocalAuthCredentials } = await import("../app-settings");
+    const verification = await verifyLocalAuthCredentials(email, password);
 
-    if (!configuredEmail || !configuredPassword) {
+    if (!verification.success && verification.reason === "not_configured") {
       return res.status(500).json({
         error:
-          "Local auth not configured. Set LOCAL_AUTH_EMAIL and LOCAL_AUTH_PASSWORD.",
+          "Local auth not configured. Set LOCAL_AUTH_EMAIL and LOCAL_AUTH_PASSWORD or configure on Settings page.",
       });
     }
 
-    if (email !== configuredEmail || password !== configuredPassword) {
+    if (!verification.success) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
     try {
-      const user = await resolveSessionUser(email);
+      const resolvedEmail = verification.email || email;
+      const user = await resolveSessionUser(resolvedEmail);
       const sessionToken = await sdk.createSessionToken(user.openId, {
-        name: user.name || email,
+        name: user.name || resolvedEmail,
         expiresInMs: ONE_YEAR_MS,
       });
 
@@ -117,7 +108,7 @@ export function registerLocalAuthRoutes(app: Express) {
         success: true,
         user: {
           name: user.name,
-          email: user.email || email,
+          email: user.email || resolvedEmail,
         },
       });
     } catch (error) {

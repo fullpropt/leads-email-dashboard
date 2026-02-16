@@ -101,6 +101,18 @@ let sqlClient: ReturnType<typeof postgres> | null = null;
 let schemaReady = false;
 let ensurePromise: Promise<void> | null = null;
 
+function getServiceIdentity() {
+  const serviceName =
+    process.env.MAILMKT_SERVICE_NAME ||
+    process.env.RAILWAY_SERVICE_NAME ||
+    "mailmkt";
+  const fromEmail =
+    process.env.MAILGUN_FROM_EMAIL ||
+    process.env.SENDGRID_FROM_EMAIL ||
+    "noreply@tubetoolsup.uk";
+  return { serviceName, fromEmail };
+}
+
 function getSqlClient() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -364,6 +376,33 @@ function toTemplateLeadContext(lead: LeadTemplateRow | null) {
   } as const;
 }
 
+async function getTransmissionVariantTemplate(
+  transmission: TransmissionRow,
+  scopeSuffix: string
+) {
+  try {
+    const { applyAICopyVariation } = await import("./email-ai-variation");
+    const identity = getServiceIdentity();
+    const variation = await applyAICopyVariation({
+      subject: transmission.subject,
+      html: transmission.html_content,
+      scopeKey: `transmission:${transmission.id}:${scopeSuffix}`,
+      serviceName: identity.serviceName,
+      fromEmail: identity.fromEmail,
+    });
+    return {
+      subject: variation.subject,
+      html: variation.html,
+    };
+  } catch (error) {
+    console.error("[Transmission] Failed to apply AI variation", error);
+    return {
+      subject: transmission.subject,
+      html: transmission.html_content,
+    };
+  }
+}
+
 function nextStatusAndRunAt(transmission: TransmissionRow, totalRecipients: number) {
   const now = new Date();
   const scheduledAt =
@@ -461,13 +500,17 @@ export async function previewTransmissionWithFirstLead(
 
     const lead = await getFirstEligibleLead(transmission);
     const leadForTemplate = toTemplateLeadContext(lead);
+    const baseTemplate = await getTransmissionVariantTemplate(
+      transmission,
+      `preview:${toIso(transmission.updated_at) || "na"}`
+    );
 
     const htmlWithVariables = replaceTemplateVariables(
-      transmission.html_content,
+      baseTemplate.html,
       leadForTemplate as any
     );
     const subjectWithVariables = replaceTemplateVariables(
-      transmission.subject,
+      baseTemplate.subject,
       leadForTemplate as any
     );
 
@@ -560,7 +603,7 @@ export async function updateTransmission(
     const sql = getSqlClient();
 
     const setClauses: string[] = [];
-    const values: unknown[] = [id];
+    const values: any[] = [id];
     let idx = 2;
 
     if (updates.name !== undefined) {
@@ -833,6 +876,10 @@ async function processSingleTransmission(transmissionId: number) {
 
   const intervalSeconds = Math.max(0, Number(transmission.send_interval_seconds ?? 0));
   const runLimit = intervalSeconds > 0 ? 1 : 25;
+  const baseTemplate = await getTransmissionVariantTemplate(
+    transmission,
+    `send:${toIso(transmission.updated_at) || "na"}`
+  );
 
   for (let i = 0; i < runLimit; i += 1) {
     const nowLoop = new Date();
@@ -889,12 +936,12 @@ async function processSingleTransmission(transmissionId: number) {
     const leadForTemplate = toTemplateLeadContext(recipient);
 
     const htmlWithVariables = replaceTemplateVariables(
-      transmission.html_content,
-      leadForTemplate
+      baseTemplate.html,
+      leadForTemplate as any
     );
     const subjectWithVariables = replaceTemplateVariables(
-      transmission.subject,
-      leadForTemplate
+      baseTemplate.subject,
+      leadForTemplate as any
     );
     const unsubscribeToken = await generateUnsubscribeToken(recipient.lead_id);
     const processedHtml = processEmailTemplate(

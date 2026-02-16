@@ -23,6 +23,19 @@ export async function processScheduledEmails() {
     const { and, eq, lte, isNotNull, sql } = await import("drizzle-orm");
     const { sendEmail } = await import("./email");
     const { replaceTemplateVariables, updateLeadEmailStatus } = await import("./db");
+    const { applyAICopyVariation } = await import("./email-ai-variation");
+    const serviceName =
+      process.env.MAILMKT_SERVICE_NAME ||
+      process.env.RAILWAY_SERVICE_NAME ||
+      "mailmkt";
+    const fromEmail =
+      process.env.MAILGUN_FROM_EMAIL ||
+      process.env.SENDGRID_FROM_EMAIL ||
+      "noreply@tubetoolsup.uk";
+    const variedTemplateCache = new Map<
+      number,
+      { subject: string; html: string }
+    >();
 
     const db = await getDb();
     if (!db) {
@@ -92,9 +105,24 @@ export async function processScheduledEmails() {
           for (const template of templates) {
             try {
               console.log(`[Scheduler] Enviando template '${template.nome}' para ${lead.email}`);
+
+              let baseTemplate = variedTemplateCache.get(template.id);
+              if (!baseTemplate) {
+                const varied = await applyAICopyVariation({
+                  subject: template.assunto,
+                  html: template.htmlContent,
+                  scopeKey: `delayed-template:${template.id}:${String(
+                    template.atualizadoEm || ""
+                  )}`,
+                  serviceName,
+                  fromEmail,
+                });
+                baseTemplate = { subject: varied.subject, html: varied.html };
+                variedTemplateCache.set(template.id, baseTemplate);
+              }
               
-              const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
-              const processedSubject = replaceTemplateVariables(template.assunto, lead);
+              const htmlContent = replaceTemplateVariables(baseTemplate.html, lead);
+              const processedSubject = replaceTemplateVariables(baseTemplate.subject, lead);
               
               // Gerar/obter token de unsubscribe para o lead
               const { generateUnsubscribeToken } = await import("./db");

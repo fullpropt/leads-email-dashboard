@@ -12,6 +12,7 @@ import LeadLookup from "./pages/LeadLookup";
 import FunnelDetail from "./pages/FunnelDetail";
 import Support from "./pages/Support";
 import Login from "./pages/Login";
+import SettingsPage from "./pages/Settings";
 
 function Router() {
   return (
@@ -52,6 +53,11 @@ function Router() {
       <Route path={"/support"}>
         <DashboardLayout>
           <Support />
+        </DashboardLayout>
+      </Route>
+      <Route path={"/settings"}>
+        <DashboardLayout>
+          <SettingsPage />
         </DashboardLayout>
       </Route>
       <Route path={"/404"} component={NotFound} />

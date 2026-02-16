@@ -111,6 +111,24 @@ async function processDelayedSends() {
     // Importar funções necessárias
     const { sendEmail } = await import("./email");
     const { replaceTemplateVariables } = await import("./db");
+    const { applyAICopyVariation } = await import("./email-ai-variation");
+    const serviceName =
+      process.env.MAILMKT_SERVICE_NAME ||
+      process.env.RAILWAY_SERVICE_NAME ||
+      "mailmkt";
+    const fromEmail =
+      process.env.MAILGUN_FROM_EMAIL ||
+      process.env.SENDGRID_FROM_EMAIL ||
+      "noreply@tubetoolsup.uk";
+    const baseTemplate = await applyAICopyVariation({
+      subject: template.assunto,
+      html: template.htmlContent || "",
+      scopeKey: `legacy-delayed-template:${template.id}:${String(
+        template.atualizadoEm || ""
+      )}`,
+      serviceName,
+      fromEmail,
+    });
 
     // Processar cada lead - enviar apenas UM template
     for (const lead of leadsReadyForSend) {
@@ -120,8 +138,8 @@ async function processDelayedSends() {
         console.log(`[Scheduler] 📧 Enviando template "${template.nome}" para ${lead.email}`);
 
         // Substituir variáveis no template (HTML e assunto)
-        const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
-        const processedSubject = replaceTemplateVariables(template.assunto, lead);
+        const htmlContent = replaceTemplateVariables(baseTemplate.html, lead);
+        const processedSubject = replaceTemplateVariables(baseTemplate.subject, lead);
         
         // Gerar/obter token de unsubscribe para o lead
         const { generateUnsubscribeToken } = await import("./db");

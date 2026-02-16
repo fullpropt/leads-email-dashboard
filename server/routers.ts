@@ -473,8 +473,26 @@ export const appRouter = router({
           return { success: false, message: "Nenhum template encontrado" };
         }
 
-        // Substituir variáveis no HTML usando função utilitária
-        const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+        const { applyAICopyVariation } = await import("./email-ai-variation");
+        const serviceName =
+          process.env.MAILMKT_SERVICE_NAME ||
+          process.env.RAILWAY_SERVICE_NAME ||
+          "mailmkt";
+        const fromEmail =
+          process.env.MAILGUN_FROM_EMAIL ||
+          process.env.SENDGRID_FROM_EMAIL ||
+          "noreply@tubetoolsup.uk";
+        const baseTemplate = await applyAICopyVariation({
+          subject: template.assunto,
+          html: template.htmlContent,
+          scopeKey: `template:${template.id || "active"}:send-to-lead`,
+          serviceName,
+          fromEmail,
+        });
+
+        // Substituir variáveis no HTML/assunto usando função utilitária
+        const htmlContent = replaceTemplateVariables(baseTemplate.html, lead);
+        const processedSubject = replaceTemplateVariables(baseTemplate.subject, lead);
         
         // Gerar/obter token de unsubscribe para o lead
         const { generateUnsubscribeToken } = await import("./db");
@@ -487,7 +505,7 @@ export const appRouter = router({
         // Enviar email
         const success = await sendEmail({
           to: lead.email,
-          subject: template.assunto,
+          subject: processedSubject,
           html: processedHtml,
         });
 
@@ -528,15 +546,32 @@ export const appRouter = router({
         // Importar processEmailTemplate e generateUnsubscribeToken uma vez fora do loop
         const { processEmailTemplate } = await import("./emailTemplate");
         const { generateUnsubscribeToken } = await import("./db");
+        const { applyAICopyVariation } = await import("./email-ai-variation");
+        const serviceName =
+          process.env.MAILMKT_SERVICE_NAME ||
+          process.env.RAILWAY_SERVICE_NAME ||
+          "mailmkt";
+        const fromEmail =
+          process.env.MAILGUN_FROM_EMAIL ||
+          process.env.SENDGRID_FROM_EMAIL ||
+          "noreply@tubetoolsup.uk";
+        const baseTemplate = await applyAICopyVariation({
+          subject: template.assunto,
+          html: template.htmlContent,
+          scopeKey: `template:${template.id}:send-immediate`,
+          serviceName,
+          fromEmail,
+        });
         
         for (const lead of pendingLeads) {
-          const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+          const htmlContent = replaceTemplateVariables(baseTemplate.html, lead);
+          const processedSubject = replaceTemplateVariables(baseTemplate.subject, lead);
           const unsubscribeToken = await generateUnsubscribeToken(lead.id);
           const processedHtml = processEmailTemplate(htmlContent, unsubscribeToken || undefined);
 
           const success = await sendEmail({
             to: lead.email,
-            subject: template.assunto,
+            subject: processedSubject,
             html: processedHtml,
           });
 
@@ -585,15 +620,32 @@ export const appRouter = router({
         // Importar processEmailTemplate e generateUnsubscribeToken uma vez fora do loop
         const { processEmailTemplate } = await import("./emailTemplate");
         const { generateUnsubscribeToken } = await import("./db");
+        const { applyAICopyVariation } = await import("./email-ai-variation");
+        const serviceName =
+          process.env.MAILMKT_SERVICE_NAME ||
+          process.env.RAILWAY_SERVICE_NAME ||
+          "mailmkt";
+        const fromEmail =
+          process.env.MAILGUN_FROM_EMAIL ||
+          process.env.SENDGRID_FROM_EMAIL ||
+          "noreply@tubetoolsup.uk";
+        const baseTemplate = await applyAICopyVariation({
+          subject: template.assunto,
+          html: template.htmlContent,
+          scopeKey: `template:${template.id}:send-all`,
+          serviceName,
+          fromEmail,
+        });
 
         for (const lead of leads) {
-          const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+          const htmlContent = replaceTemplateVariables(baseTemplate.html, lead);
+          const processedSubject = replaceTemplateVariables(baseTemplate.subject, lead);
           const unsubscribeToken = await generateUnsubscribeToken(lead.id);
           const processedHtml = processEmailTemplate(htmlContent, unsubscribeToken || undefined);
 
           const success = await sendEmail({
             to: lead.email,
-            subject: template.assunto,
+            subject: processedSubject,
             html: processedHtml,
           });
 
@@ -644,15 +696,32 @@ export const appRouter = router({
         // Importar processEmailTemplate e generateUnsubscribeToken uma vez fora do loop
         const { processEmailTemplate } = await import("./emailTemplate");
         const { generateUnsubscribeToken } = await import("./db");
+        const { applyAICopyVariation } = await import("./email-ai-variation");
+        const serviceName =
+          process.env.MAILMKT_SERVICE_NAME ||
+          process.env.RAILWAY_SERVICE_NAME ||
+          "mailmkt";
+        const fromEmail =
+          process.env.MAILGUN_FROM_EMAIL ||
+          process.env.SENDGRID_FROM_EMAIL ||
+          "noreply@tubetoolsup.uk";
+        const baseTemplate = await applyAICopyVariation({
+          subject: template.assunto,
+          html: template.htmlContent,
+          scopeKey: `template:${template.id}:send-selected`,
+          serviceName,
+          fromEmail,
+        });
 
         for (const lead of selectedLeads) {
           try {
-            const htmlContent = replaceTemplateVariables(template.htmlContent, lead);
+            const htmlContent = replaceTemplateVariables(baseTemplate.html, lead);
+            const processedSubject = replaceTemplateVariables(baseTemplate.subject, lead);
             const unsubscribeToken = await generateUnsubscribeToken(lead.id);
             const processedHtml = processEmailTemplate(htmlContent, unsubscribeToken || undefined);
             const success = await sendEmail({
               to: lead.email,
-              subject: template.assunto,
+              subject: processedSubject,
               html: processedHtml,
             });
 
@@ -1083,6 +1152,51 @@ export const appRouter = router({
           .returning();
 
         return { success: true, config: updated };
+      }),
+  }),
+
+  // ==================== ROUTER DE CONFIGURACOES GERAIS ====================
+  settings: router({
+    getEmailAi: publicProcedure.query(async () => {
+      const { getEmailAiSettingsPublic } = await import("./app-settings");
+      return getEmailAiSettingsPublic();
+    }),
+
+    updateEmailAi: publicProcedure
+      .input(
+        z.object({
+          enabled: z.boolean().optional(),
+          provider: z.enum(["none", "openai", "gemini"]).optional(),
+          model: z.string().min(1).max(120).optional(),
+          rewriteIntensity: z.number().min(0).max(40).optional(),
+          extraInstructions: z.string().max(2000).optional(),
+          apiKey: z.string().optional(),
+          clearApiKey: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { updateEmailAiSettings } = await import("./app-settings");
+        const settings = await updateEmailAiSettings(input);
+        return { success: true, settings };
+      }),
+
+    getLocalAuthInfo: publicProcedure.query(async () => {
+      const { getLocalAuthPublicInfo } = await import("./app-settings");
+      return getLocalAuthPublicInfo();
+    }),
+
+    changeLocalPassword: publicProcedure
+      .input(
+        z.object({
+          currentEmail: z.string().email(),
+          currentPassword: z.string().min(1),
+          newEmail: z.string().email().optional(),
+          newPassword: z.string().min(6),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { changeLocalAuthCredentials } = await import("./app-settings");
+        return changeLocalAuthCredentials(input);
       }),
   }),
 
