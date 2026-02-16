@@ -113,6 +113,8 @@ type TransmissionVariationRow = {
   source_signature: string;
   subject: string;
   html_content: string;
+  ai_applied: number;
+  ai_reason: string | null;
   created_at: Date | string;
   updated_at: Date | string;
 };
@@ -258,10 +260,22 @@ async function ensureSchema() {
         source_signature varchar(64) NOT NULL,
         subject varchar(500) NOT NULL,
         html_content text NOT NULL,
+        ai_applied integer NOT NULL DEFAULT 0,
+        ai_reason varchar(120) NULL,
         created_at timestamptz NOT NULL DEFAULT NOW(),
         updated_at timestamptz NOT NULL DEFAULT NOW(),
         UNIQUE (transmission_id, service_name)
       )
+    `;
+
+    await sql`
+      ALTER TABLE email_transmission_variations
+      ADD COLUMN IF NOT EXISTS ai_applied integer NOT NULL DEFAULT 0
+    `;
+
+    await sql`
+      ALTER TABLE email_transmission_variations
+      ADD COLUMN IF NOT EXISTS ai_reason varchar(120) NULL
     `;
 
     await sql`
@@ -462,10 +476,12 @@ async function listStoredTransmissionVariations(
     const priority = Number.isFinite(Number(row.priority)) ? Number(row.priority) : 100;
     const fromEmail = (row.from_email || "").trim().toLowerCase();
     const updatedAtTs = new Date(String(row.updated_at || "")).getTime() || 0;
+    const aiApplied = Number(row.ai_applied ?? 0) === 1;
 
     let score = 0;
     if (fromEmail && fromEmail !== DEFAULT_FROM_EMAIL) score += 4;
     if (/@mg\d+\./i.test(fromEmail)) score += 1;
+    if (aiApplied) score += 2;
 
     const existing = byPriority.get(priority);
     const candidate = {
@@ -497,6 +513,8 @@ async function listStoredTransmissionVariations(
 }
 
 function mapVariationToPreview(row: TransmissionVariationRow): TransmissionPreviewVariantDTO {
+  const applied = Number(row.ai_applied ?? 0) === 1;
+  const reason = (row.ai_reason || "").trim();
   return {
     key: row.service_name,
     label: `${row.service_name} (${row.from_email})`,
@@ -504,7 +522,8 @@ function mapVariationToPreview(row: TransmissionVariationRow): TransmissionPrevi
     fromEmail: row.from_email,
     subject: row.subject,
     html: row.html_content,
-    applied: true,
+    applied,
+    reason: applied ? undefined : reason || "not_generated",
   };
 }
 
@@ -582,6 +601,8 @@ async function generateAndStoreTransmissionVariations(
           source_signature,
           subject,
           html_content,
+          ai_applied,
+          ai_reason,
           created_at,
           updated_at
         )
@@ -594,6 +615,8 @@ async function generateAndStoreTransmissionVariations(
           ${sourceSignature},
           ${variation.subject},
           ${variation.html},
+          ${variation.applied ? 1 : 0},
+          ${variation.reason || null},
           NOW(),
           NOW()
         )
@@ -605,6 +628,8 @@ async function generateAndStoreTransmissionVariations(
           source_signature = EXCLUDED.source_signature,
           subject = EXCLUDED.subject,
           html_content = EXCLUDED.html_content,
+          ai_applied = EXCLUDED.ai_applied,
+          ai_reason = EXCLUDED.ai_reason,
           updated_at = NOW()
       `;
 
@@ -898,15 +923,20 @@ export async function generateTransmissionVariations(
     const sourceSignature = buildTransmissionSourceSignature(transmission);
     const generated = await generateAndStoreTransmissionVariations(
       transmission,
-      `manual:${sourceSignature}`
+      `manual:${sourceSignature}:${Date.now()}`
     );
+
+    const appliedCount = generated.filter(item => item.applied).length;
+    const failedCount = generated.length - appliedCount;
+    const message =
+      failedCount > 0
+        ? `Variacoes geradas: ${appliedCount}/${generated.length}. ${failedCount} conta(s) sem alteracao.`
+        : `Variacoes geradas com sucesso (${appliedCount}/${generated.length}).`;
 
     return {
       success: true,
       variants: generated,
-      message: generated.length
-        ? "Variacoes geradas com sucesso"
-        : "Nenhuma variacao gerada",
+      message: generated.length ? message : "Nenhuma variacao gerada",
     };
   } catch (error) {
     console.error("[Transmission] Failed to generate transmission variations", error);

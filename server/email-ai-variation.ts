@@ -19,13 +19,37 @@ type VariationOutput = {
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_GENERATION_ATTEMPTS = 3;
+const CACHE_VERSION = "v2";
 const variationCache = new Map<
   string,
   { subject: string; html: string; expiresAt: number }
 >();
 
+function hashString(value: string) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function getServiceStyleHint(input: VariationInput) {
+  const styles = [
+    "direct and concise wording",
+    "warm and reassuring wording",
+    "professional and objective wording",
+    "friendly and conversational wording",
+    "confident and benefit-oriented wording",
+  ];
+  const seed = `${input.serviceName}|${input.fromEmail}`;
+  return styles[hashString(seed) % styles.length];
+}
+
 function getCacheKey(input: VariationInput, provider: string, model: string, rewriteIntensity: number, extraInstructions: string) {
   const hash = createHash("sha1");
+  hash.update(CACHE_VERSION);
+  hash.update("|");
   hash.update(provider);
   hash.update("|");
   hash.update(model);
@@ -108,8 +132,20 @@ function sanitizeVariation(base: VariationInput, candidate: { subject?: string; 
   };
 }
 
-async function generateWithOpenAI(input: VariationInput, apiKey: string, model: string, rewriteIntensity: number, extraInstructions: string) {
+async function generateWithOpenAI(
+  input: VariationInput,
+  apiKey: string,
+  model: string,
+  rewriteIntensity: number,
+  extraInstructions: string,
+  attempt: number
+) {
   const client = new OpenAI({ apiKey });
+  const styleHint = getServiceStyleHint(input);
+  const attemptRule =
+    attempt > 1
+      ? "Previous attempt was too similar. Make clearer lexical changes in subject and at least one body sentence."
+      : "";
 
   const systemPrompt = [
     "You rewrite email copy with subtle lexical variation.",
@@ -118,9 +154,11 @@ async function generateWithOpenAI(input: VariationInput, apiKey: string, model: 
     "- Keep same language, intent and CTA.",
     `- Rewrite only around ${rewriteIntensity}% of wording.`,
     "- You must change at least one sentence in subject or html.",
+    `- Use a distinct writing style for this account: ${styleHint}.`,
     "- Keep all placeholders exactly unchanged ({{...}} and {UPPER_CASE}).",
     "- Keep links, href/src URLs and unsubscribe semantics unchanged.",
     "- Keep valid HTML and similar structure/length.",
+    attemptRule,
     extraInstructions ? `Extra instructions: ${extraInstructions}` : "",
   ]
     .filter(Boolean)
@@ -140,7 +178,7 @@ async function generateWithOpenAI(input: VariationInput, apiKey: string, model: 
 
   const response = await client.chat.completions.create({
     model,
-    temperature: 0.5,
+    temperature: attempt > 1 ? 0.85 : 0.65,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: systemPrompt },
@@ -152,7 +190,19 @@ async function generateWithOpenAI(input: VariationInput, apiKey: string, model: 
   return JSON.parse(extractJsonText(content));
 }
 
-async function generateWithGemini(input: VariationInput, apiKey: string, model: string, rewriteIntensity: number, extraInstructions: string) {
+async function generateWithGemini(
+  input: VariationInput,
+  apiKey: string,
+  model: string,
+  rewriteIntensity: number,
+  extraInstructions: string,
+  attempt: number
+) {
+  const styleHint = getServiceStyleHint(input);
+  const attemptRule =
+    attempt > 1
+      ? "Previous attempt was too similar. Make clearer lexical changes in subject and at least one body sentence."
+      : "";
   const systemPrompt = [
     "Rewrite the following email copy with subtle lexical variation.",
     "Return JSON only: {\"subject\":\"...\",\"html\":\"...\"}",
@@ -160,9 +210,11 @@ async function generateWithGemini(input: VariationInput, apiKey: string, model: 
     "- Keep same language, intent and CTA.",
     `- Rewrite approximately ${rewriteIntensity}% of wording.`,
     "- You must change at least one sentence in subject or html.",
+    `- Use a distinct writing style for this account: ${styleHint}.`,
     "- Keep all placeholders unchanged ({{...}} and {UPPER_CASE}).",
     "- Keep all links exactly unchanged.",
     "- Preserve valid HTML structure.",
+    attemptRule,
     extraInstructions ? `Extra instructions: ${extraInstructions}` : "",
   ]
     .filter(Boolean)
@@ -190,7 +242,7 @@ async function generateWithGemini(input: VariationInput, apiKey: string, model: 
       },
     ],
     generationConfig: {
-      temperature: 0.5,
+      temperature: attempt > 1 ? 0.85 : 0.65,
       maxOutputTokens: 4096,
     },
   };
@@ -214,7 +266,8 @@ async function generateWithGemini(input: VariationInput, apiKey: string, model: 
 
 async function generateRawCandidate(
   input: VariationInput,
-  settings: Awaited<ReturnType<typeof getEmailAiSettingsRuntime>>
+  settings: Awaited<ReturnType<typeof getEmailAiSettingsRuntime>>,
+  attempt: number
 ) {
   if (settings.provider === "openai") {
     return generateWithOpenAI(
@@ -222,7 +275,8 @@ async function generateRawCandidate(
       settings.apiKey,
       settings.model,
       settings.rewriteIntensity,
-      settings.extraInstructions
+      settings.extraInstructions,
+      attempt
     );
   }
 
@@ -231,7 +285,8 @@ async function generateRawCandidate(
     settings.apiKey,
     settings.model,
     settings.rewriteIntensity,
-    settings.extraInstructions
+    settings.extraInstructions,
+    attempt
   );
 }
 
@@ -277,7 +332,7 @@ export async function applyAICopyVariation(input: VariationInput): Promise<Varia
               scopeKey: `${input.scopeKey}:retry:${attempt}`,
             };
 
-      const rawCandidate = await generateRawCandidate(attemptInput, settings);
+      const rawCandidate = await generateRawCandidate(attemptInput, settings, attempt);
       const sanitized = sanitizeVariation(input, rawCandidate || {});
 
       if (sanitized.applied) {

@@ -1549,10 +1549,15 @@ export default function EmailTemplates() {
                           type="button"
                           size="sm"
                           variant={selectedPreviewVariantKey === variant.key ? "default" : "outline"}
-                          className="h-8 text-xs"
+                          className={`h-8 text-xs ${
+                            !variant.applied && selectedPreviewVariantKey !== variant.key
+                              ? "border-amber-300 text-amber-700 hover:bg-amber-50"
+                              : ""
+                          }`}
                           onClick={() => handleSelectPreviewVariant(variant.key)}
                         >
                           {variant.label}
+                          {!variant.applied ? " - sem variacao" : ""}
                         </Button>
                       ))}
                     </div>
