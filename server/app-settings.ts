@@ -124,7 +124,7 @@ function maskApiKey(apiKey: string) {
   if (apiKey.length <= 8) return "********";
   const start = apiKey.slice(0, 4);
   const end = apiKey.slice(-4);
-  return `${start}${"*".repeat(Math.max(4, apiKey.length - 8))}${end}`;
+  return `${start}...${end}`;
 }
 
 async function getSettingMap(keys: string[]) {

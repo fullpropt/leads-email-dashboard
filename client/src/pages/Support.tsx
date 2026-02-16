@@ -36,6 +36,8 @@ import {
   Send,
   RefreshCw,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Clock,
   AlertCircle,
   CheckCircle2,
@@ -94,6 +96,8 @@ export default function Support() {
   const [aiInstructions, setAiInstructions] = useState("");
   const [editedResponse, setEditedResponse] = useState({ subject: "", bodyHtml: "" });
   const [showSendConfirm, setShowSendConfirm] = useState(false);
+  const [showAiInstructions, setShowAiInstructions] = useState(false);
+  const [showResponseHtmlEditor, setShowResponseHtmlEditor] = useState(false);
 
   // Queries
   const statsQuery = trpc.support.getStats.useQuery();
@@ -510,13 +514,40 @@ export default function Support() {
                   <TabsContent value="response" className="mt-4 space-y-4">
                     {/* AI Instructions */}
                     <div className="space-y-2">
-                      <Label>Instruções para a IA</Label>
-                      <Textarea
-                        placeholder="Ex: Responda de forma mais formal, mencione que estamos investigando o problema..."
-                        value={aiInstructions}
-                        onChange={(e) => setAiInstructions(e.target.value)}
-                        rows={3}
-                      />
+                      <div className="flex items-center justify-between">
+                        <Label>Instrucoes para a IA</Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setShowAiInstructions(prev => !prev)}
+                        >
+                          {showAiInstructions ? (
+                            <>
+                              <ChevronUp className="h-3.5 w-3.5 mr-1" />
+                              Recolher
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="h-3.5 w-3.5 mr-1" />
+                              Expandir
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      {showAiInstructions ? (
+                        <Textarea
+                          placeholder="Ex: Responda de forma mais formal, mencione que estamos investigando o problema..."
+                          value={aiInstructions}
+                          onChange={(e) => setAiInstructions(e.target.value)}
+                          rows={3}
+                        />
+                      ) : (
+                        <div className="rounded-md border bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-muted-foreground">
+                          Campo recolhido para economizar espaco na tela.
+                        </div>
+                      )}
                       <div className="flex gap-2">
                         <Button
                           onClick={handleGenerateResponse}
@@ -655,15 +686,42 @@ export default function Support() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Conteúdo (HTML)</Label>
-              <Textarea
-                value={editedResponse.bodyHtml}
-                onChange={(e) =>
-                  setEditedResponse({ ...editedResponse, bodyHtml: e.target.value })
-                }
-                rows={10}
-                className="font-mono text-sm"
-              />
+              <div className="flex items-center justify-between">
+                <Label>Conteudo (HTML)</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setShowResponseHtmlEditor(prev => !prev)}
+                >
+                  {showResponseHtmlEditor ? (
+                    <>
+                      <ChevronUp className="h-3.5 w-3.5 mr-1" />
+                      Recolher
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-3.5 w-3.5 mr-1" />
+                      Expandir
+                    </>
+                  )}
+                </Button>
+              </div>
+              {showResponseHtmlEditor ? (
+                <Textarea
+                  value={editedResponse.bodyHtml}
+                  onChange={(e) =>
+                    setEditedResponse({ ...editedResponse, bodyHtml: e.target.value })
+                  }
+                  rows={10}
+                  className="font-mono text-sm"
+                />
+              ) : (
+                <div className="rounded-md border bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-muted-foreground">
+                  Campo recolhido para economizar espaco na tela.
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Eye, Code, FileText, Info, Loader2 } from "lucide-react";
+import { Eye, Code, FileText, Info, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface SimplifiedEmailEditorProps {
@@ -14,31 +13,30 @@ interface SimplifiedEmailEditorProps {
   isPreviewLoading?: boolean;
 }
 
-// Guia de formatação para o usuário
 const FORMATTING_GUIDE = `
-**Guia de Formatação Simplificada:**
+**Guia de Formatacao Simplificada:**
 
-• Use # para título principal (H1)
-• Use ## para subtítulo (H2)
-• Use ### para título menor (H3)
-• Use - ou * para listas
-• Use 1. 2. 3. para listas numeradas
-• Use **texto** para negrito
-• Use *texto* para itálico
-• URLs são convertidas automaticamente em links
-• Use [BUTTON:Texto do Botão:https://url.com] para criar um botão
-• Use [LINK:Texto do Link:https://url.com] para criar um link
-• Use [EMAIL:exemplo@email.com] para criar um link de email
-• Use uma linha vazia para separar parágrafos
+- Use # para titulo principal (H1)
+- Use ## para subtitulo (H2)
+- Use ### para titulo menor (H3)
+- Use - ou * para listas
+- Use 1. 2. 3. para listas numeradas
+- Use **texto** para negrito
+- Use *texto* para italico
+- URLs sao convertidas automaticamente em links
+- Use [BUTTON:Texto do Botao:https://url.com] para criar um botao
+- Use [LINK:Texto do Link:https://url.com] para criar um link
+- Use [EMAIL:exemplo@email.com] para criar um link de email
+- Use uma linha vazia para separar paragrafos
 
-**Importante:** Linhas consecutivas sem linha vazia entre elas serão agrupadas no mesmo parágrafo.
+**Importante:** Linhas consecutivas sem linha vazia entre elas serao agrupadas no mesmo paragrafo.
 
-**Variáveis disponíveis:**
-• {{nome}} - Nome do lead
-• {{email}} - Email do lead
-• {{produto}} - Nome do produto
-• {{plano}} - Plano adquirido
-• {{valor}} - Valor da compra
+**Variaveis disponiveis:**
+- {{nome}} - Nome do lead
+- {{email}} - Email do lead
+- {{produto}} - Nome do produto
+- {{plano}} - Plano adquirido
+- {{valor}} - Valor da compra
 
 **Exemplo:**
 # Welcome, {{nome}}!
@@ -58,11 +56,6 @@ Best regards,
 **The TubeTools Team**
 `.trim();
 
-/**
- * Componente de edição simplificada de emails
- * Permite criar emails usando texto simples ou HTML
- * O sistema aplica automaticamente estilos CSS, header e footer
- */
 export function SimplifiedEmailEditor({
   htmlContent,
   onContentChange,
@@ -71,13 +64,13 @@ export function SimplifiedEmailEditor({
 }: SimplifiedEmailEditorProps) {
   const [editorMode, setEditorMode] = useState<"simple" | "html">("simple");
   const [showGuide, setShowGuide] = useState(false);
+  const [contentExpanded, setContentExpanded] = useState(false);
 
-  // Detectar se o conteúdo é HTML complexo
-  const isComplexHtml = htmlContent.trim().toLowerCase().startsWith('<!doctype') || 
-                        htmlContent.trim().toLowerCase().startsWith('<html') ||
-                        /<(table|div|style)\b/i.test(htmlContent);
+  const isComplexHtml =
+    htmlContent.trim().toLowerCase().startsWith("<!doctype") ||
+    htmlContent.trim().toLowerCase().startsWith("<html") ||
+    /<(table|div|style)\b/i.test(htmlContent);
 
-  // Usar modo HTML automaticamente se o conteúdo for HTML complexo
   useEffect(() => {
     if (isComplexHtml) {
       setEditorMode("html");
@@ -87,7 +80,7 @@ export function SimplifiedEmailEditor({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Tabs value={editorMode} onValueChange={(v) => setEditorMode(v as "simple" | "html")}>
+        <Tabs value={editorMode} onValueChange={v => setEditorMode(v as "simple" | "html") }>
           <TabsList>
             <TabsTrigger value="simple" className="gap-2">
               <FileText className="h-4 w-4" />
@@ -133,33 +126,54 @@ export function SimplifiedEmailEditor({
         <Alert>
           <Info className="h-4 w-4" />
           <AlertDescription>
-            <pre className="whitespace-pre-wrap text-xs font-mono mt-2">
-              {FORMATTING_GUIDE}
-            </pre>
+            <pre className="whitespace-pre-wrap text-xs font-mono mt-2">{FORMATTING_GUIDE}</pre>
           </AlertDescription>
         </Alert>
       )}
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">
-            {editorMode === "simple" ? "Conteúdo do Email" : "Código HTML"}
-          </CardTitle>
-          <CardDescription className="text-xs">
-            {editorMode === "simple" 
-              ? "Digite o texto do seu email. O sistema aplicará automaticamente os estilos, header e footer com link de unsubscribe."
-              : "Edite o código HTML diretamente. Se não incluir estrutura completa (DOCTYPE/html), o sistema adicionará header e footer automaticamente."
-            }
-          </CardDescription>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-sm font-medium">
+                {editorMode === "simple" ? "Conteudo do Email" : "Codigo HTML"}
+              </CardTitle>
+              <CardDescription className="text-xs">
+                {editorMode === "simple"
+                  ? "Digite o texto do seu email. O sistema aplicara automaticamente estilos, header e footer com link de unsubscribe."
+                  : "Edite o codigo HTML diretamente. Se nao incluir estrutura completa (DOCTYPE/html), o sistema adicionara header e footer automaticamente."}
+              </CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs shrink-0"
+              onClick={() => setContentExpanded(prev => !prev)}
+            >
+              {contentExpanded ? (
+                <>
+                  <ChevronUp className="h-3.5 w-3.5 mr-1" />
+                  Recolher
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3.5 w-3.5 mr-1" />
+                  Expandir
+                </>
+              )}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          <Textarea
-            value={htmlContent}
-            onChange={(e) => onContentChange(e.target.value)}
-            className={`min-h-[400px] ${editorMode === "html" ? "font-mono text-sm" : ""}`}
-            placeholder={
-              editorMode === "simple"
-                ? `# Welcome, {{nome}}!
+          {contentExpanded ? (
+            <Textarea
+              value={htmlContent}
+              onChange={e => onContentChange(e.target.value)}
+              className={`min-h-[400px] ${editorMode === "html" ? "font-mono text-sm" : ""}`}
+              placeholder={
+                editorMode === "simple"
+                  ? `# Welcome, {{nome}}!
 
 Thank you for joining TubeTools.
 
@@ -174,7 +188,7 @@ Visit our [LINK:website:https://tubetoolsacess.work] or contact us at [EMAIL:sup
 
 Best regards,
 **The TubeTools Team**`
-                : `<h1 style="font-size: 28px; font-weight: bold; color: #000000; margin-bottom: 20px;">
+                  : `<h1 style="font-size: 28px; font-weight: bold; color: #000000; margin-bottom: 20px;">
   Welcome to TubeTools, {{nome}}!
 </h1>
 
@@ -192,8 +206,13 @@ Best regards,
     </td>
   </tr>
 </table>`
-            }
-          />
+              }
+            />
+          ) : (
+            <div className="rounded-md border bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-muted-foreground">
+              Editor recolhido para economizar espaco na tela.
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -203,9 +222,9 @@ Best regards,
         </p>
         <ul className="list-disc list-inside ml-2 space-y-0.5">
           <li>Header com logo TubeTools</li>
-          <li>Estilos CSS padronizados (cores, fontes, botões)</li>
-          <li>Footer com informações de contato</li>
-          <li>Link de unsubscribe automático</li>
+          <li>Estilos CSS padronizados (cores, fontes, botoes)</li>
+          <li>Footer com informacoes de contato</li>
+          <li>Link de unsubscribe automatico</li>
         </ul>
       </div>
     </div>

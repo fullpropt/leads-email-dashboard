@@ -16,7 +16,19 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Eye, Send, Loader2, Plus, Trash2, Code, Settings, ChevronRight, Mail } from "lucide-react";
+import {
+  Eye,
+  Send,
+  Loader2,
+  Plus,
+  Trash2,
+  Code,
+  Settings,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Mail,
+} from "lucide-react";
 import { CreateItemModal } from "@/components/CreateItemModal";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { SimplifiedEmailEditor } from "@/components/SimplifiedEmailEditor";
@@ -166,6 +178,9 @@ export default function EmailTemplates() {
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
   const [editingTransmissionId, setEditingTransmissionId] = useState<number | null>(null);
   const [editingFunnelId, setEditingFunnelId] = useState<number | null>(null);
+  const [expandedTransmissionHtml, setExpandedTransmissionHtml] = useState<
+    Record<number, boolean>
+  >({});
 
   // Estados para diálogo de confirmação de exclusão
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -1182,18 +1197,50 @@ export default function EmailTemplates() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label className="text-xs">Conteudo HTML</Label>
-                        <Textarea
-                          value={transmission.htmlContent}
-                          onChange={event =>
-                            updateTransmissionField(
-                              transmission.id,
-                              "htmlContent",
-                              event.target.value
-                            )
-                          }
-                          className="min-h-[160px]"
-                        />
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Conteudo HTML</Label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() =>
+                              setExpandedTransmissionHtml(prev => ({
+                                ...prev,
+                                [transmission.id]: !prev[transmission.id],
+                              }))
+                            }
+                          >
+                            {expandedTransmissionHtml[transmission.id] ? (
+                              <>
+                                <ChevronUp className="h-3.5 w-3.5 mr-1" />
+                                Recolher
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="h-3.5 w-3.5 mr-1" />
+                                Expandir
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                        {expandedTransmissionHtml[transmission.id] ? (
+                          <Textarea
+                            value={transmission.htmlContent}
+                            onChange={event =>
+                              updateTransmissionField(
+                                transmission.id,
+                                "htmlContent",
+                                event.target.value
+                              )
+                            }
+                            className="min-h-[220px] font-mono text-xs"
+                          />
+                        ) : (
+                          <div className="rounded-md border bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-muted-foreground">
+                            Campo recolhido para economizar espaco na tela.
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between">

@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Loader2, Sparkles, Shield, KeyRound } from "lucide-react";
+import { Loader2, Sparkles, Shield, KeyRound, ChevronDown, ChevronUp } from "lucide-react";
 
 type AIProvider = "none" | "openai" | "gemini";
 
@@ -16,6 +16,13 @@ function getDefaultModel(provider: AIProvider) {
   if (provider === "gemini") return "gemini-2.0-flash-lite-001";
   if (provider === "openai") return "gpt-4o-mini";
   return "";
+}
+
+function compactMaskedKey(masked: string | null | undefined) {
+  if (!masked) return "";
+  const normalized = masked.trim();
+  if (normalized.length <= 18) return normalized;
+  return `${normalized.slice(0, 6)}...${normalized.slice(-4)}`;
 }
 
 export default function SettingsPage() {
@@ -56,6 +63,7 @@ export default function SettingsPage() {
   const [aiModel, setAiModel] = useState("");
   const [rewriteIntensity, setRewriteIntensity] = useState(12);
   const [extraInstructions, setExtraInstructions] = useState("");
+  const [showExtraInstructions, setShowExtraInstructions] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [clearApiKey, setClearApiKey] = useState(false);
 
@@ -195,7 +203,12 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label>API Key {aiSettings?.apiKeyMasked ? `(atual: ${aiSettings.apiKeyMasked})` : ""}</Label>
+              <Label>API Key</Label>
+              {aiSettings?.apiKeyMasked ? (
+                <p className="text-xs text-muted-foreground">
+                  Atual: <span className="font-mono">{compactMaskedKey(aiSettings.apiKeyMasked)}</span>
+                </p>
+              ) : null}
               <Input
                 type="password"
                 value={apiKey}
@@ -210,13 +223,40 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-2">
-            <Label>Instrucoes extras para a IA (opcional)</Label>
-            <Textarea
-              value={extraInstructions}
-              onChange={event => setExtraInstructions(event.target.value)}
-              placeholder="Ex: manter tom mais formal, evitar palavras muito promocionais..."
-              className="min-h-[100px]"
-            />
+            <div className="flex items-center justify-between">
+              <Label>Instrucoes extras para a IA (opcional)</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setShowExtraInstructions(prev => !prev)}
+              >
+                {showExtraInstructions ? (
+                  <>
+                    <ChevronUp className="h-3.5 w-3.5 mr-1" />
+                    Recolher
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-3.5 w-3.5 mr-1" />
+                    Expandir
+                  </>
+                )}
+              </Button>
+            </div>
+            {showExtraInstructions ? (
+              <Textarea
+                value={extraInstructions}
+                onChange={event => setExtraInstructions(event.target.value)}
+                placeholder="Ex: manter tom mais formal, evitar palavras muito promocionais..."
+                className="min-h-[100px]"
+              />
+            ) : (
+              <div className="rounded-md border bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-muted-foreground">
+                Campo recolhido para economizar espaco na tela.
+              </div>
+            )}
           </div>
 
           <Button
@@ -313,21 +353,6 @@ export default function SettingsPage() {
             )}
             Atualizar email e senha local
           </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Sugestoes rapidas</CardTitle>
-          <CardDescription>
-            Melhorias recomendadas para reduzir risco operacional.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>1. Definir uma API key diferente por ambiente (producao e teste).</p>
-          <p>2. Usar senha local forte e rotacao periodica.</p>
-          <p>3. Monitorar taxa de entrega e spam por remetente para ajustar intensidade da IA.</p>
-          <p>4. Revisar templates base para manter placeholders padronizados.</p>
         </CardContent>
       </Card>
     </div>
