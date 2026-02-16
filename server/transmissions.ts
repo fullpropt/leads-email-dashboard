@@ -169,6 +169,21 @@ function buildTransmissionSourceSignature(
   return hash.digest("hex");
 }
 
+function sanitizeVariationErrorReason(error: unknown) {
+  const raw =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : JSON.stringify(error);
+  const trimmed = (raw || "").trim();
+  if (!trimmed) return "error:unknown_error";
+  const withoutSecrets = trimmed
+    .replace(/sk-[a-zA-Z0-9_\-]{8,}/g, "sk-***")
+    .replace(/AIza[0-9A-Za-z\-_]{20,}/g, "AIza***");
+  return `error:${withoutSecrets.slice(0, 180)}`;
+}
+
 function mapTransmission(row: TransmissionRow): TransmissionDTO {
   return {
     id: row.id,
@@ -645,6 +660,53 @@ async function generateAndStoreTransmissionVariations(
       });
     } catch (error) {
       console.error("[Transmission] Failed generating variation", error);
+      const reason = sanitizeVariationErrorReason(error);
+      try {
+        await sql`
+          INSERT INTO email_transmission_variations (
+            transmission_id,
+            service_name,
+            from_email,
+            from_name,
+            priority,
+            source_signature,
+            subject,
+            html_content,
+            ai_applied,
+            ai_reason,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            ${transmission.id},
+            ${account.serviceName},
+            ${account.fromEmail},
+            ${account.fromName},
+            ${account.priority},
+            ${sourceSignature},
+            ${transmission.subject},
+            ${transmission.html_content},
+            0,
+            ${reason},
+            NOW(),
+            NOW()
+          )
+          ON CONFLICT (transmission_id, service_name)
+          DO UPDATE SET
+            from_email = EXCLUDED.from_email,
+            from_name = EXCLUDED.from_name,
+            priority = EXCLUDED.priority,
+            source_signature = EXCLUDED.source_signature,
+            subject = EXCLUDED.subject,
+            html_content = EXCLUDED.html_content,
+            ai_applied = EXCLUDED.ai_applied,
+            ai_reason = EXCLUDED.ai_reason,
+            updated_at = NOW()
+        `;
+      } catch (persistError) {
+        console.error("[Transmission] Failed to persist variation error", persistError);
+      }
+
       generated.push({
         key: account.serviceName,
         label: `${account.serviceName} (${account.fromEmail})`,
@@ -653,7 +715,7 @@ async function generateAndStoreTransmissionVariations(
         subject: transmission.subject,
         html: transmission.html_content,
         applied: false,
-        reason: "error",
+        reason,
       });
     }
   }
