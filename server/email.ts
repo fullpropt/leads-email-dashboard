@@ -36,6 +36,12 @@ export type RotationAccountStatus = {
   sentToday: number;
   remaining: number;
   isActive: boolean;
+  failuresToday: number;
+  consecutiveFailures: number;
+  lastFailureAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+  hasAlert: boolean;
 };
 
 export type RotationOverview = {
@@ -78,6 +84,14 @@ const rotationDailyLimit = Number.parseInt(
   process.env.EMAIL_SENDER_DAILY_LIMIT || "100",
   10
 );
+const rotationChunkSizeRaw = Number.parseInt(
+  process.env.EMAIL_ROTATION_CHUNK_SIZE || "100",
+  10
+);
+const rotationChunkSize =
+  Number.isFinite(rotationChunkSizeRaw) && rotationChunkSizeRaw > 0
+    ? rotationChunkSizeRaw
+    : 100;
 const rotationSenderEnabled = process.env.EMAIL_SENDER_ENABLED !== "false";
 
 let selectedProvider: Provider = "none";
@@ -90,6 +104,8 @@ let rotationInitPromise: Promise<boolean> | null = null;
 type RotationAccountRowLike = {
   service_name: string;
   priority: number | null;
+  daily_limit?: number | null;
+  sent_today?: number | null;
   from_email: string | null;
   from_name?: string | null;
   provider: string | null;
@@ -153,6 +169,45 @@ function dedupeAccountsByPriority<T extends RotationAccountRowLike>(rows: T[]): 
       const { __score: _score, __updatedAtTs: _updatedAtTs, ...row } = item;
       return row as unknown as T;
     });
+}
+
+function normalizePositiveInt(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const rounded = Math.floor(parsed);
+  return rounded >= 0 ? rounded : fallback;
+}
+
+function parseDateToIso(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function selectActiveAccount<T extends RotationAccountRowLike>(
+  rows: T[]
+): T | null {
+  const deduped = dedupeAccountsByPriority(rows);
+  if (!deduped.length) return null;
+
+  const chunk = Math.max(rotationChunkSize, 1);
+  return deduped
+    .slice()
+    .sort((a, b) => {
+      const sentA = normalizePositiveInt(a.sent_today, 0);
+      const sentB = normalizePositiveInt(b.sent_today, 0);
+      const bucketA = Math.floor(sentA / chunk);
+      const bucketB = Math.floor(sentB / chunk);
+
+      if (bucketA !== bucketB) return bucketA - bucketB;
+
+      const priorityA = normalizeAccountPriority(a.priority);
+      const priorityB = normalizeAccountPriority(b.priority);
+      return priorityA === priorityB
+        ? a.service_name.localeCompare(b.service_name)
+        : priorityA - priorityB;
+    })[0];
 }
 
 function normalizeProviderSelection(value: string): ProviderSelection {
@@ -306,6 +361,26 @@ async function ensureRotationSetup(): Promise<boolean> {
         ALTER TABLE email_sending_accounts
         ADD COLUMN IF NOT EXISTS provider varchar(20) NULL
       `;
+      await sql`
+        ALTER TABLE email_sending_accounts
+        ADD COLUMN IF NOT EXISTS failures_today integer NOT NULL DEFAULT 0
+      `;
+      await sql`
+        ALTER TABLE email_sending_accounts
+        ADD COLUMN IF NOT EXISTS consecutive_failures integer NOT NULL DEFAULT 0
+      `;
+      await sql`
+        ALTER TABLE email_sending_accounts
+        ADD COLUMN IF NOT EXISTS last_failure_at timestamptz NULL
+      `;
+      await sql`
+        ALTER TABLE email_sending_accounts
+        ADD COLUMN IF NOT EXISTS last_success_at timestamptz NULL
+      `;
+      await sql`
+        ALTER TABLE email_sending_accounts
+        ADD COLUMN IF NOT EXISTS last_error text NULL
+      `;
 
       await sql`
         CREATE INDEX IF NOT EXISTS idx_email_sending_accounts_priority
@@ -354,7 +429,7 @@ async function ensureRotationSetup(): Promise<boolean> {
 
       rotationInitialized = true;
       console.log(
-        `[Email:${SERVICE_NAME}] Rotacao ativa (priority=${rotationPriority}, limit=${rotationDailyLimit}, enabled=${rotationSenderEnabled})`
+        `[Email:${SERVICE_NAME}] Rotacao ativa (priority=${rotationPriority}, limit=${rotationDailyLimit}, chunk=${rotationChunkSize}, enabled=${rotationSenderEnabled})`
       );
       return true;
     } catch (error) {
@@ -372,6 +447,8 @@ async function resetDailyCounters(tx: any) {
   await tx`
     UPDATE email_sending_accounts
     SET sent_today = 0,
+        failures_today = 0,
+        consecutive_failures = 0,
         last_reset_date = CURRENT_DATE,
         updated_at = NOW()
     WHERE last_reset_date <> CURRENT_DATE
@@ -403,7 +480,7 @@ async function readRotationDecision(
       AND sent_today < daily_limit
   `;
 
-  const active = dedupeAccountsByPriority(rows)[0];
+  const active = selectActiveAccount(rows);
   if (!active) {
     return {
       allowed: false,
@@ -481,7 +558,7 @@ async function acquireRotationSlot(): Promise<RotationSlot> {
         FOR UPDATE
       `;
 
-      const active = dedupeAccountsByPriority(activeRows)[0];
+      const active = selectActiveAccount(activeRows);
       if (!active) {
         return {
           allowed: false,
@@ -567,6 +644,48 @@ async function releaseRotationSlot() {
   }
 }
 
+async function markRotationSuccess() {
+  if (!rotationEnabled) return;
+  const sql = getRotationSqlClient();
+  if (!sql) return;
+
+  try {
+    await sql`
+      UPDATE email_sending_accounts
+      SET
+        consecutive_failures = 0,
+        last_success_at = NOW(),
+        last_error = NULL,
+        updated_at = NOW()
+      WHERE service_name = ${SERVICE_NAME}
+    `;
+  } catch (error) {
+    console.error(`[Email:${SERVICE_NAME}] Falha ao atualizar sucesso de envio`, error);
+  }
+}
+
+async function markRotationFailure(errorMessage: string) {
+  if (!rotationEnabled) return;
+  const sql = getRotationSqlClient();
+  if (!sql) return;
+
+  const safeMessage = errorMessage.trim().slice(0, 500) || "Falha ao enviar email";
+  try {
+    await sql`
+      UPDATE email_sending_accounts
+      SET
+        failures_today = failures_today + 1,
+        consecutive_failures = consecutive_failures + 1,
+        last_failure_at = NOW(),
+        last_error = ${safeMessage},
+        updated_at = NOW()
+      WHERE service_name = ${SERVICE_NAME}
+    `;
+  } catch (error) {
+    console.error(`[Email:${SERVICE_NAME}] Falha ao registrar erro de envio`, error);
+  }
+}
+
 selectedProvider = resolveProvider();
 
 if (selectedProvider === "sendgrid") {
@@ -592,7 +711,12 @@ interface SendEmailParams {
   skipProcessing?: boolean;
 }
 
-async function sendViaSendgrid(params: SendEmailParams): Promise<boolean> {
+type SendAttemptResult = {
+  ok: boolean;
+  error?: string;
+};
+
+async function sendViaSendgrid(params: SendEmailParams): Promise<SendAttemptResult> {
   const from = params.from || sendGridConfig.fromEmail;
   const fromName = params.fromName || sendGridConfig.fromName;
 
@@ -611,7 +735,7 @@ async function sendViaSendgrid(params: SendEmailParams): Promise<boolean> {
     console.log(
       `[Email:${SERVICE_NAME}] SendGrid enviou para ${params.to} (status ${response[0].statusCode})`
     );
-    return true;
+    return { ok: true };
   } catch (error: any) {
     console.error(`[Email:${SERVICE_NAME}] Erro SendGrid`, error);
     if (error?.response) {
@@ -621,11 +745,16 @@ async function sendViaSendgrid(params: SendEmailParams): Promise<boolean> {
         JSON.stringify(error.response.body, null, 2)
       );
     }
-    return false;
+    const apiError =
+      error?.response?.body?.errors?.[0]?.message ||
+      error?.response?.body?.message ||
+      error?.message ||
+      "SendGrid error";
+    return { ok: false, error: String(apiError) };
   }
 }
 
-async function sendViaMailgun(params: SendEmailParams): Promise<boolean> {
+async function sendViaMailgun(params: SendEmailParams): Promise<SendAttemptResult> {
   const from = params.from || mailgunConfig.fromEmail;
   const fromName = params.fromName || mailgunConfig.fromName;
 
@@ -653,7 +782,7 @@ async function sendViaMailgun(params: SendEmailParams): Promise<boolean> {
     console.log(
       `[Email:${SERVICE_NAME}] Mailgun enviou para ${params.to} (status ${response.status})`
     );
-    return true;
+    return { ok: true };
   } catch (error: any) {
     console.error(`[Email:${SERVICE_NAME}] Erro Mailgun`, error);
     if (error?.response) {
@@ -663,7 +792,12 @@ async function sendViaMailgun(params: SendEmailParams): Promise<boolean> {
         JSON.stringify(error.response.data, null, 2)
       );
     }
-    return false;
+    const apiError =
+      error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      error?.message ||
+      "Mailgun error";
+    return { ok: false, error: String(apiError) };
   }
 }
 
@@ -711,21 +845,26 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
     return false;
   }
 
-  let sent = false;
+  let result: SendAttemptResult = { ok: false, error: providerError || "Provider de email nao configurado" };
   if (selectedProvider === "sendgrid") {
-    sent = await sendViaSendgrid(params);
+    result = await sendViaSendgrid(params);
   } else if (selectedProvider === "mailgun") {
-    sent = await sendViaMailgun(params);
+    result = await sendViaMailgun(params);
   } else {
     console.error(`[Email:${SERVICE_NAME}] Envio bloqueado: ${providerError}`);
-    sent = false;
+    result = { ok: false, error: providerError || "Provider de email nao configurado" };
   }
 
-  if (!sent && slot.accounted) {
+  if (result.ok && slot.accounted) {
+    await markRotationSuccess();
+  }
+
+  if (!result.ok && slot.accounted) {
+    await markRotationFailure(result.error || "Falha ao enviar email");
     await releaseRotationSlot();
   }
 
-  return sent;
+  return result.ok;
 }
 
 export function isEmailConfigured(): boolean {
@@ -768,6 +907,7 @@ export function getEmailConfig() {
       enabled: rotationEnabled,
       priority: rotationPriority,
       dailyLimit: rotationDailyLimit,
+      chunkSize: rotationChunkSize,
       senderEnabled: rotationSenderEnabled,
     },
     fromEmail:
@@ -808,6 +948,12 @@ export async function getRotationOverview(): Promise<RotationOverview> {
     sentToday: 0,
     remaining: Number.isFinite(rotationDailyLimit) ? Math.max(rotationDailyLimit, 0) : 0,
     isActive: true,
+    failuresToday: 0,
+    consecutiveFailures: 0,
+    lastFailureAt: null,
+    lastSuccessAt: null,
+    lastError: null,
+    hasAlert: false,
   };
 
   if (!rotationEnabled) {
@@ -842,10 +988,15 @@ export async function getRotationOverview(): Promise<RotationOverview> {
       priority: number | null;
       daily_limit: number | null;
       sent_today: number | null;
+      failures_today: number | null;
+      consecutive_failures: number | null;
       enabled: number | null;
       from_email: string | null;
       from_name: string | null;
       provider: string | null;
+      last_failure_at: Date | string | null;
+      last_success_at: Date | string | null;
+      last_error: string | null;
       updated_at: Date | string | null;
     }[]>`
       SELECT
@@ -853,10 +1004,15 @@ export async function getRotationOverview(): Promise<RotationOverview> {
         priority,
         daily_limit,
         sent_today,
+        failures_today,
+        consecutive_failures,
         enabled,
         from_email,
         from_name,
         provider,
+        last_failure_at,
+        last_success_at,
+        last_error,
         updated_at
       FROM email_sending_accounts
       ORDER BY priority ASC, service_name ASC
@@ -899,6 +1055,21 @@ export async function getRotationOverview(): Promise<RotationOverview> {
       const sentToday = Number.isFinite(Number(row.sent_today))
         ? Math.max(Math.floor(Number(row.sent_today)), 0)
         : 0;
+      const failuresToday = Number.isFinite(Number(row.failures_today))
+        ? Math.max(Math.floor(Number(row.failures_today)), 0)
+        : 0;
+      const consecutiveFailures = Number.isFinite(Number(row.consecutive_failures))
+        ? Math.max(Math.floor(Number(row.consecutive_failures)), 0)
+        : 0;
+      const lastFailureAt = parseDateToIso(row.last_failure_at);
+      const lastSuccessAt = parseDateToIso(row.last_success_at);
+      const lastError = (row.last_error || "").trim() || null;
+      const hasAlert =
+        failuresToday > 0 ||
+        (consecutiveFailures > 0 &&
+          (!lastSuccessAt ||
+            !lastFailureAt ||
+            new Date(lastFailureAt).getTime() >= new Date(lastSuccessAt).getTime()));
       const remaining = Math.max(dailyLimit - sentToday, 0);
       return {
         serviceName: row.service_name,
@@ -911,6 +1082,12 @@ export async function getRotationOverview(): Promise<RotationOverview> {
         sentToday,
         remaining,
         isActive: row.service_name === activeService,
+        failuresToday,
+        consecutiveFailures,
+        lastFailureAt,
+        lastSuccessAt,
+        lastError,
+        hasAlert,
       } satisfies RotationAccountStatus;
     });
 

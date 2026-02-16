@@ -29,6 +29,7 @@ import {
   ChevronUp,
   Mail,
   Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 import { CreateItemModal } from "@/components/CreateItemModal";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
@@ -139,6 +140,12 @@ interface RotationAccountOverview {
   sentToday: number;
   remaining: number;
   isActive: boolean;
+  failuresToday: number;
+  consecutiveFailures: number;
+  lastFailureAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+  hasAlert: boolean;
 }
 
 interface RotationOverview {
@@ -865,6 +872,7 @@ export default function EmailTemplates() {
     (sum, account) => sum + Number(account.dailyLimit || 0),
     0
   );
+  const totalAccountsWithAlert = rotationAccounts.filter(account => account.hasAlert).length;
 
   // Combinar templates e funis para exibicao
   const funnels = allFunnels || [];
@@ -902,8 +910,16 @@ export default function EmailTemplates() {
                 Painel global de todos os servicos ativos de envio.
               </CardDescription>
             </div>
-            <div className="text-sm font-medium text-cyan-700 dark:text-cyan-300">
-              {totalSentByServices} / {totalLimitByServices}
+            <div className="flex items-center gap-3">
+              {totalAccountsWithAlert > 0 && (
+                <div className="flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {totalAccountsWithAlert} com falha
+                </div>
+              )}
+              <div className="text-sm font-medium text-cyan-700 dark:text-cyan-300">
+                {totalSentByServices} / {totalLimitByServices}
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -913,7 +929,7 @@ export default function EmailTemplates() {
               Nenhum servico de envio encontrado.
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
               {rotationAccounts.map(account => {
                 const usagePercent =
                   account.dailyLimit > 0
@@ -922,48 +938,77 @@ export default function EmailTemplates() {
                         Math.round((account.sentToday / account.dailyLimit) * 100)
                       )
                     : 0;
+                const alertLabel = account.lastError
+                  ? account.lastError
+                  : "Falha de envio detectada nesta conta";
                 return (
                   <div
                     key={account.serviceName}
-                    className={`rounded-lg border p-3 transition-colors ${
+                    className={`rounded-md border px-2.5 py-2 transition-colors ${
                       account.isActive
                         ? "border-cyan-300 bg-cyan-50/60 dark:border-cyan-700 dark:bg-cyan-950/20"
-                        : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"
+                        : account.hasAlert
+                          ? "border-amber-300/80 bg-amber-50/40 dark:border-amber-700/70 dark:bg-amber-950/20"
+                          : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="truncate text-sm font-semibold">{account.serviceName}</div>
-                      <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                          account.isActive
-                            ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-200"
-                            : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                        }`}
-                      >
-                        {account.isActive ? "Ativo" : account.enabled ? "Fila" : "Desativado"}
-                      </span>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] font-semibold">{account.serviceName}</div>
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          {account.fromEmail}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {account.hasAlert && (
+                          <span
+                            title={alertLabel}
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                          >
+                            <AlertTriangle className="h-3 w-3" />
+                          </span>
+                        )}
+                        <span
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                            account.isActive
+                              ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-200"
+                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                          }`}
+                        >
+                          {account.isActive ? "Ativo" : account.enabled ? "Fila" : "Off"}
+                        </span>
+                      </div>
                     </div>
-                    <div className="mt-1 truncate text-xs text-muted-foreground">
-                      {account.fromEmail}
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-sm">
-                      <span className="font-medium">
+
+                    <div className="mt-2 flex items-center justify-between text-xs">
+                      <span className="font-semibold">
                         {account.sentToday} / {account.dailyLimit}
                       </span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-[11px] text-muted-foreground">
                         resta {account.remaining}
                       </span>
                     </div>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
                       <div
                         className={`h-full ${
-                          account.isActive ? "bg-cyan-500" : "bg-slate-500"
+                          account.hasAlert
+                            ? "bg-amber-500"
+                            : account.isActive
+                              ? "bg-cyan-500"
+                              : "bg-slate-500"
                         }`}
                         style={{ width: `${usagePercent}%` }}
                       />
                     </div>
-                    <div className="mt-1 text-[11px] text-muted-foreground">
-                      Prioridade {account.priority} - {PROVIDER_LABELS[account.provider]}
+                    <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                      <span>
+                        P{account.priority} · {PROVIDER_LABELS[account.provider]}
+                      </span>
+                      {account.hasAlert && (
+                        <span title={alertLabel}>
+                          falhas: {account.failuresToday}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
