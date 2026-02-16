@@ -12,10 +12,21 @@ import { Loader2, Sparkles, Shield, KeyRound, ChevronDown, ChevronUp } from "luc
 
 type AIProvider = "none" | "openai" | "gemini";
 
+const MODEL_OPTIONS: Record<AIProvider, string[]> = {
+  none: [],
+  openai: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"],
+  gemini: ["gemini-2.0-flash-lite-001", "gemini-2.0-flash", "gemini-1.5-flash"],
+};
+
 function getDefaultModel(provider: AIProvider) {
-  if (provider === "gemini") return "gemini-2.0-flash-lite-001";
-  if (provider === "openai") return "gpt-4o-mini";
-  return "";
+  return MODEL_OPTIONS[provider][0] || "";
+}
+
+function normalizeModelForProvider(provider: AIProvider, currentModel: string) {
+  const options = MODEL_OPTIONS[provider];
+  if (!options.length) return "";
+  if (options.includes(currentModel)) return currentModel;
+  return options[0];
 }
 
 function compactMaskedKey(masked: string | null | undefined) {
@@ -74,8 +85,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!aiSettings) return;
-    setAiProvider((aiSettings.provider || "none") as AIProvider);
-    setAiModel(aiSettings.model || "");
+    const provider = (aiSettings.provider || "none") as AIProvider;
+    setAiProvider(provider);
+    setAiModel(normalizeModelForProvider(provider, aiSettings.model || ""));
     setRewriteIntensity(aiSettings.rewriteIntensity ?? 12);
     setExtraInstructions(aiSettings.extraInstructions || "");
   }, [aiSettings]);
@@ -100,9 +112,7 @@ export default function SettingsPage() {
   const handleProviderChange = (value: string) => {
     const provider = value as AIProvider;
     setAiProvider(provider);
-    if (!aiModel.trim()) {
-      setAiModel(getDefaultModel(provider));
-    }
+    setAiModel(current => normalizeModelForProvider(provider, current));
   };
 
   const handleChangePassword = () => {
@@ -164,11 +174,28 @@ export default function SettingsPage() {
 
             <div className="space-y-2 md:col-span-2">
               <Label>Modelo</Label>
-              <Input
-                value={aiModel}
-                onChange={event => setAiModel(event.target.value)}
-                placeholder={getDefaultModel(aiProvider) || "Informe o modelo"}
-              />
+              <Select
+                value={aiProvider === "none" ? undefined : aiModel}
+                onValueChange={setAiModel}
+                disabled={aiProvider === "none"}
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      aiProvider === "none"
+                        ? "Selecione um provider"
+                        : "Selecione um modelo"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {MODEL_OPTIONS[aiProvider].map(model => (
+                    <SelectItem key={model} value={model}>
+                      {model}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
