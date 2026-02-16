@@ -870,8 +870,12 @@ export async function getRotationOverview(): Promise<RotationOverview> {
       };
     }
 
-    const activeRows = dedupeAccountsByPriority(
-      rows.filter(row => {
+    const enabledRows = rows.filter(row => Number(row.enabled ?? 0) === 1);
+    const displayRows = dedupeAccountsByPriority(
+      enabledRows.length > 0 ? enabledRows : rows
+    );
+    const activeService =
+      displayRows.find(row => {
         const enabled = Number(row.enabled ?? 0) === 1;
         const dailyLimit = Number.isFinite(Number(row.daily_limit))
           ? Math.max(Math.floor(Number(row.daily_limit)), 0)
@@ -880,11 +884,9 @@ export async function getRotationOverview(): Promise<RotationOverview> {
           ? Math.max(Math.floor(Number(row.sent_today)), 0)
           : 0;
         return enabled && sentToday < dailyLimit;
-      })
-    );
-    const activeService = activeRows[0]?.service_name || null;
+      })?.service_name || null;
 
-    const accounts = rows.map(row => {
+    const accounts = displayRows.map(row => {
       const fromEmail = (row.from_email || "").trim() || DEFAULT_FROM_EMAIL;
       const fromName = (row.from_name || "").trim() || row.service_name;
       const provider =
