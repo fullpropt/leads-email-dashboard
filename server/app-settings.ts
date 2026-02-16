@@ -23,6 +23,14 @@ export type EmailAiSettingsPublic = {
   extraInstructions: string;
   apiKeyConfigured: boolean;
   apiKeyMasked: string | null;
+  apiKeyConfiguredByProvider: {
+    openai: boolean;
+    gemini: boolean;
+  };
+  apiKeyMaskedByProvider: {
+    openai: string | null;
+    gemini: string | null;
+  };
 };
 
 export type EmailAiSettingsRuntime = {
@@ -43,7 +51,10 @@ export type LocalAuthPublicInfo = {
 const KEY_EMAIL_AI_ENABLED = "email_ai_enabled";
 const KEY_EMAIL_AI_PROVIDER = "email_ai_provider";
 const KEY_EMAIL_AI_MODEL = "email_ai_model";
+// Legacy single-key storage (kept for backward compatibility/migration fallback).
 const KEY_EMAIL_AI_API_KEY = "email_ai_api_key";
+const KEY_EMAIL_AI_API_KEY_OPENAI = "email_ai_api_key_openai";
+const KEY_EMAIL_AI_API_KEY_GEMINI = "email_ai_api_key_gemini";
 const KEY_EMAIL_AI_REWRITE_INTENSITY = "email_ai_rewrite_intensity";
 const KEY_EMAIL_AI_EXTRA_INSTRUCTIONS = "email_ai_extra_instructions";
 
@@ -102,6 +113,50 @@ function normalizeProvider(value: string | null | undefined): AIProvider {
     return raw;
   }
   return "none";
+}
+
+function getProviderSettingKey(provider: Exclude<AIProvider, "none">) {
+  return provider === "openai"
+    ? KEY_EMAIL_AI_API_KEY_OPENAI
+    : KEY_EMAIL_AI_API_KEY_GEMINI;
+}
+
+function getEnvApiKeyForProvider(provider: AIProvider) {
+  if (provider === "openai") return process.env.OPENAI_API_KEY || "";
+  if (provider === "gemini") return process.env.GEMINI_API_KEY || "";
+  return "";
+}
+
+function getStoredApiKeyForProvider(
+  map: Map<string, string | null>,
+  provider: AIProvider
+) {
+  if (provider === "none") return "";
+
+  const providerKey = getProviderSettingKey(provider);
+  const providerStored = (map.get(providerKey) || "").trim();
+  if (providerStored) {
+    return providerStored;
+  }
+
+  // Use legacy key only if no provider-specific keys are configured yet.
+  const openaiStored = (map.get(KEY_EMAIL_AI_API_KEY_OPENAI) || "").trim();
+  const geminiStored = (map.get(KEY_EMAIL_AI_API_KEY_GEMINI) || "").trim();
+  const legacyStored = (map.get(KEY_EMAIL_AI_API_KEY) || "").trim();
+  if (!openaiStored && !geminiStored) {
+    return legacyStored;
+  }
+
+  return "";
+}
+
+function resolveApiKeyForProvider(
+  map: Map<string, string | null>,
+  provider: AIProvider
+) {
+  const stored = getStoredApiKeyForProvider(map, provider);
+  const env = getEnvApiKeyForProvider(provider);
+  return stored || env;
 }
 
 function parseBoolean(value: string | null | undefined, fallback: boolean) {
@@ -193,6 +248,8 @@ export async function getEmailAiSettingsPublic(): Promise<EmailAiSettingsPublic>
     KEY_EMAIL_AI_PROVIDER,
     KEY_EMAIL_AI_MODEL,
     KEY_EMAIL_AI_API_KEY,
+    KEY_EMAIL_AI_API_KEY_OPENAI,
+    KEY_EMAIL_AI_API_KEY_GEMINI,
     KEY_EMAIL_AI_REWRITE_INTENSITY,
     KEY_EMAIL_AI_EXTRA_INSTRUCTIONS,
   ]);
@@ -221,14 +278,14 @@ export async function getEmailAiSettingsPublic(): Promise<EmailAiSettingsPublic>
     process.env.EMAIL_AI_EXTRA_INSTRUCTIONS ||
     "";
 
-  const storedApiKey = map.get(KEY_EMAIL_AI_API_KEY) || "";
-  const envApiKey =
+  const openaiApiKey = resolveApiKeyForProvider(map, "openai");
+  const geminiApiKey = resolveApiKeyForProvider(map, "gemini");
+  const apiKey =
     provider === "openai"
-      ? process.env.OPENAI_API_KEY || ""
+      ? openaiApiKey
       : provider === "gemini"
-        ? process.env.GEMINI_API_KEY || ""
+        ? geminiApiKey
         : "";
-  const apiKey = storedApiKey || envApiKey;
 
   return {
     enabled,
@@ -238,22 +295,27 @@ export async function getEmailAiSettingsPublic(): Promise<EmailAiSettingsPublic>
     extraInstructions,
     apiKeyConfigured: Boolean(apiKey),
     apiKeyMasked: apiKey ? maskApiKey(apiKey) : null,
+    apiKeyConfiguredByProvider: {
+      openai: Boolean(openaiApiKey),
+      gemini: Boolean(geminiApiKey),
+    },
+    apiKeyMaskedByProvider: {
+      openai: openaiApiKey ? maskApiKey(openaiApiKey) : null,
+      gemini: geminiApiKey ? maskApiKey(geminiApiKey) : null,
+    },
   };
 }
 
 export async function getEmailAiSettingsRuntime(): Promise<EmailAiSettingsRuntime> {
   const publicSettings = await getEmailAiSettingsPublic();
-  const map = await getSettingMap([KEY_EMAIL_AI_API_KEY]);
+  const map = await getSettingMap([
+    KEY_EMAIL_AI_API_KEY,
+    KEY_EMAIL_AI_API_KEY_OPENAI,
+    KEY_EMAIL_AI_API_KEY_GEMINI,
+  ]);
 
   const provider = publicSettings.provider;
-  const storedApiKey = map.get(KEY_EMAIL_AI_API_KEY) || "";
-  const envApiKey =
-    provider === "openai"
-      ? process.env.OPENAI_API_KEY || ""
-      : provider === "gemini"
-        ? process.env.GEMINI_API_KEY || ""
-        : "";
-  const apiKey = storedApiKey || envApiKey;
+  const apiKey = resolveApiKeyForProvider(map, provider);
 
   return {
     enabled: publicSettings.enabled,
@@ -291,12 +353,33 @@ export async function updateEmailAiSettings(input: {
   if (input.extraInstructions !== undefined) {
     await setSetting(KEY_EMAIL_AI_EXTRA_INSTRUCTIONS, input.extraInstructions.trim());
   }
+
+  let providerForApiKey: AIProvider = "none";
+  if (input.provider !== undefined) {
+    providerForApiKey = normalizeProvider(input.provider);
+  } else if (input.apiKey !== undefined || input.clearApiKey) {
+    const map = await getSettingMap([KEY_EMAIL_AI_PROVIDER]);
+    providerForApiKey = normalizeProvider(
+      map.get(KEY_EMAIL_AI_PROVIDER) || process.env.EMAIL_AI_PROVIDER || "none"
+    );
+  }
+
   if (input.clearApiKey) {
-    await setSetting(KEY_EMAIL_AI_API_KEY, null);
+    if (providerForApiKey === "openai" || providerForApiKey === "gemini") {
+      await setSetting(getProviderSettingKey(providerForApiKey), null);
+    } else {
+      await setSetting(KEY_EMAIL_AI_API_KEY_OPENAI, null);
+      await setSetting(KEY_EMAIL_AI_API_KEY_GEMINI, null);
+      await setSetting(KEY_EMAIL_AI_API_KEY, null);
+    }
   } else if (input.apiKey !== undefined) {
     const normalized = input.apiKey.trim();
     if (normalized.length > 0) {
-      await setSetting(KEY_EMAIL_AI_API_KEY, normalized);
+      if (providerForApiKey === "openai" || providerForApiKey === "gemini") {
+        await setSetting(getProviderSettingKey(providerForApiKey), normalized);
+      } else {
+        await setSetting(KEY_EMAIL_AI_API_KEY, normalized);
+      }
     }
   }
 

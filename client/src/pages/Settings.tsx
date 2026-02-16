@@ -36,6 +36,12 @@ function compactMaskedKey(masked: string | null | undefined) {
   return `${normalized.slice(0, 6)}...${normalized.slice(-4)}`;
 }
 
+function providerLabel(provider: AIProvider) {
+  if (provider === "openai") return "OpenAI";
+  if (provider === "gemini") return "Gemini";
+  return "IA";
+}
+
 export default function SettingsPage() {
   const { data: aiSettings, refetch: refetchAiSettings } = trpc.settings.getEmailAi.useQuery();
   const { data: localAuthInfo, refetch: refetchLocalAuthInfo } = trpc.settings.getLocalAuthInfo.useQuery();
@@ -102,6 +108,13 @@ export default function SettingsPage() {
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
+
+  const selectedProviderMaskedKey =
+    aiProvider === "openai"
+      ? aiSettings?.apiKeyMaskedByProvider?.openai || null
+      : aiProvider === "gemini"
+        ? aiSettings?.apiKeyMaskedByProvider?.gemini || null
+        : aiSettings?.apiKeyMasked || null;
 
   useEffect(() => {
     if (!aiSettings) return;
@@ -238,9 +251,10 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>API Key</Label>
-              {aiSettings?.apiKeyMasked ? (
+              {selectedProviderMaskedKey ? (
                 <p className="text-xs text-muted-foreground">
-                  Atual: <span className="font-mono">{compactMaskedKey(aiSettings.apiKeyMasked)}</span>
+                  Atual ({providerLabel(aiProvider)}):{" "}
+                  <span className="font-mono">{compactMaskedKey(selectedProviderMaskedKey)}</span>
                 </p>
               ) : null}
               <Input
@@ -251,7 +265,9 @@ export default function SettingsPage() {
               />
               <div className="flex items-center gap-2">
                 <Switch checked={clearApiKey} onCheckedChange={setClearApiKey} />
-                <span className="text-xs text-muted-foreground">Limpar chave salva</span>
+                <span className="text-xs text-muted-foreground">
+                  Limpar chave salva do provider selecionado
+                </span>
               </div>
             </div>
           </div>
