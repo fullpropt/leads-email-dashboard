@@ -951,7 +951,10 @@ export async function updateLeadPlatformAccessStatus(leadId: number, hasAccessed
       .set({ hasAccessedPlatform: hasAccessed ? 1 : 0 })
       .where(eq(leads.id, leadId));
 
-    console.log(`[Database] Lead ${leadId} platform access status updated: ${hasAccessed}`);
+    // Debug opcional: evita spam de logs por lead em producao.
+    if (process.env.SYNC_LOG_PLATFORM_ACCESS_UPDATES === "true") {
+      console.log(`[Database] Lead ${leadId} platform access status updated: ${hasAccessed}`);
+    }
     return true;
   } catch (error) {
     console.error("[Database] Error updating platform access status:", error);

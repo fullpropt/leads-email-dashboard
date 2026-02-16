@@ -51,8 +51,8 @@ function isNoisySyncLog(message: string): boolean {
   // Ex: [Sync TubeTools] ✅ email@dominio.com - Acessou a plataforma
   if (message.startsWith("[Sync TubeTools] ✅")) return true;
 
-  // Ex: [Database] Lead 123 platform access status updated: false
-  if (/^\[Database\]\sLead\s\d+\splatform access status updated:\sfalse\b/i.test(message)) {
+  // Ex: [Database] Lead 123 platform access status updated: true|false
+  if (/^\[Database\]\sLead\s\d+\splatform access status updated:\s(?:true|false)\b/i.test(message)) {
     return true;
   }
 
