@@ -18,6 +18,7 @@ type VariationOutput = {
 };
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const MAX_GENERATION_ATTEMPTS = 3;
 const variationCache = new Map<
   string,
   { subject: string; html: string; expiresAt: number }
@@ -62,6 +63,10 @@ function containsAllTokens(base: string, candidate: string) {
   return tokens.every(token => candidate.includes(token));
 }
 
+function normalizeComparableText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function sanitizeVariation(base: VariationInput, candidate: { subject?: string; html?: string }): VariationOutput {
   const nextSubject = typeof candidate.subject === "string" ? candidate.subject.trim() : "";
   const nextHtml = typeof candidate.html === "string" ? candidate.html.trim() : "";
@@ -84,6 +89,18 @@ function sanitizeVariation(base: VariationInput, candidate: { subject?: string; 
     };
   }
 
+  if (
+    normalizeComparableText(nextSubject) === normalizeComparableText(base.subject) &&
+    normalizeComparableText(nextHtml) === normalizeComparableText(base.html)
+  ) {
+    return {
+      subject: base.subject,
+      html: base.html,
+      applied: false,
+      reason: "no_change",
+    };
+  }
+
   return {
     subject: nextSubject,
     html: nextHtml,
@@ -100,6 +117,7 @@ async function generateWithOpenAI(input: VariationInput, apiKey: string, model: 
     "Rules:",
     "- Keep same language, intent and CTA.",
     `- Rewrite only around ${rewriteIntensity}% of wording.`,
+    "- You must change at least one sentence in subject or html.",
     "- Keep all placeholders exactly unchanged ({{...}} and {UPPER_CASE}).",
     "- Keep links, href/src URLs and unsubscribe semantics unchanged.",
     "- Keep valid HTML and similar structure/length.",
@@ -141,6 +159,7 @@ async function generateWithGemini(input: VariationInput, apiKey: string, model: 
     "Rules:",
     "- Keep same language, intent and CTA.",
     `- Rewrite approximately ${rewriteIntensity}% of wording.`,
+    "- You must change at least one sentence in subject or html.",
     "- Keep all placeholders unchanged ({{...}} and {UPPER_CASE}).",
     "- Keep all links exactly unchanged.",
     "- Preserve valid HTML structure.",
@@ -193,6 +212,29 @@ async function generateWithGemini(input: VariationInput, apiKey: string, model: 
   return JSON.parse(extractJsonText(content));
 }
 
+async function generateRawCandidate(
+  input: VariationInput,
+  settings: Awaited<ReturnType<typeof getEmailAiSettingsRuntime>>
+) {
+  if (settings.provider === "openai") {
+    return generateWithOpenAI(
+      input,
+      settings.apiKey,
+      settings.model,
+      settings.rewriteIntensity,
+      settings.extraInstructions
+    );
+  }
+
+  return generateWithGemini(
+    input,
+    settings.apiKey,
+    settings.model,
+    settings.rewriteIntensity,
+    settings.extraInstructions
+  );
+}
+
 export async function applyAICopyVariation(input: VariationInput): Promise<VariationOutput> {
   try {
     const settings = await getEmailAiSettingsRuntime();
@@ -219,34 +261,41 @@ export async function applyAICopyVariation(input: VariationInput): Promise<Varia
       };
     }
 
-    let rawCandidate: any;
-    if (settings.provider === "openai") {
-      rawCandidate = await generateWithOpenAI(
-        input,
-        settings.apiKey,
-        settings.model,
-        settings.rewriteIntensity,
-        settings.extraInstructions
-      );
-    } else {
-      rawCandidate = await generateWithGemini(
-        input,
-        settings.apiKey,
-        settings.model,
-        settings.rewriteIntensity,
-        settings.extraInstructions
-      );
+    let lastResult: VariationOutput = {
+      subject: input.subject,
+      html: input.html,
+      applied: false,
+      reason: "no_change",
+    };
+
+    for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
+      const attemptInput: VariationInput =
+        attempt === 1
+          ? input
+          : {
+              ...input,
+              scopeKey: `${input.scopeKey}:retry:${attempt}`,
+            };
+
+      const rawCandidate = await generateRawCandidate(attemptInput, settings);
+      const sanitized = sanitizeVariation(input, rawCandidate || {});
+
+      if (sanitized.applied) {
+        variationCache.set(cacheKey, {
+          subject: sanitized.subject,
+          html: sanitized.html,
+          expiresAt: Date.now() + CACHE_TTL_MS,
+        });
+        return sanitized;
+      }
+
+      lastResult = sanitized;
+      if (sanitized.reason !== "no_change") {
+        break;
+      }
     }
 
-    const sanitized = sanitizeVariation(input, rawCandidate || {});
-    if (sanitized.applied) {
-      variationCache.set(cacheKey, {
-        subject: sanitized.subject,
-        html: sanitized.html,
-        expiresAt: Date.now() + CACHE_TTL_MS,
-      });
-    }
-    return sanitized;
+    return lastResult;
   } catch (error) {
     console.error("[EmailAIVariation] Failed to generate variation", error);
     return {

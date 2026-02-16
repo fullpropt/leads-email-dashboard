@@ -163,6 +163,14 @@ const TRANSMISSION_STATUS_LABELS: Record<string, string> = {
   failed: "Falhou",
 };
 
+const VARIATION_REASON_LABELS: Record<string, string> = {
+  disabled: "IA desativada.",
+  missing_api_key: "API key da IA ausente.",
+  no_change: "A IA retornou texto igual; gere novamente ou aumente a intensidade.",
+  not_generated: "Variacao ainda nao foi gerada.",
+  error: "Falha ao gerar variacao para esta conta.",
+};
+
 function toDateTimeLocal(value: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -1564,6 +1572,15 @@ export default function EmailTemplates() {
                       {previewInfo && (
                         <p className="text-amber-700 dark:text-amber-300">{previewInfo}</p>
                       )}
+                      {selectedPreviewVariant &&
+                        !selectedPreviewVariant.applied &&
+                        selectedPreviewVariant.reason && (
+                          <p className="text-amber-700 dark:text-amber-300">
+                            <strong>Variacao:</strong>{" "}
+                            {VARIATION_REASON_LABELS[selectedPreviewVariant.reason] ||
+                              selectedPreviewVariant.reason}
+                          </p>
+                        )}
                     </div>
                   )}
                   <div className="border rounded-lg bg-gray-50 overflow-hidden">

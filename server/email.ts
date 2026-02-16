@@ -29,19 +29,20 @@ const SERVICE_NAME =
   process.env.MAILMKT_SERVICE_NAME ||
   process.env.RAILWAY_SERVICE_NAME ||
   "mailmkt";
+const DEFAULT_FROM_EMAIL = "noreply@tubetoolsup.uk";
 
 const providerSelectionRaw = (process.env.EMAIL_PROVIDER || "auto").toLowerCase();
 
 const sendGridConfig = {
   apiKey: process.env.SENDGRID_API_KEY || "",
-  fromEmail: process.env.SENDGRID_FROM_EMAIL || "noreply@tubetoolsup.uk",
+  fromEmail: process.env.SENDGRID_FROM_EMAIL || DEFAULT_FROM_EMAIL,
   fromName: process.env.SENDGRID_FROM_NAME || "TubeTools",
 };
 
 const mailgunConfig = {
   apiKey: process.env.MAILGUN_API_KEY || "",
   domain: process.env.MAILGUN_DOMAIN || "",
-  fromEmail: process.env.MAILGUN_FROM_EMAIL || "noreply@tubetoolsup.uk",
+  fromEmail: process.env.MAILGUN_FROM_EMAIL || DEFAULT_FROM_EMAIL,
   fromName: process.env.MAILGUN_FROM_NAME || "TubeTools",
   baseUrl: process.env.MAILGUN_BASE_URL || "https://api.mailgun.net",
 };
@@ -66,6 +67,65 @@ let providerError: string | null = null;
 let rotationSql: ReturnType<typeof postgres> | null = null;
 let rotationInitialized = false;
 let rotationInitPromise: Promise<boolean> | null = null;
+
+type RotationAccountRowLike = {
+  service_name: string;
+  priority: number | null;
+  from_email: string | null;
+  provider: string | null;
+  updated_at: Date | string | null;
+};
+
+function normalizeAccountPriority(value: number | null | undefined) {
+  const parsed = Number(value ?? 100);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
+}
+
+function computeAccountScore(row: RotationAccountRowLike) {
+  const fromEmail = (row.from_email || "").trim().toLowerCase() || DEFAULT_FROM_EMAIL;
+  const updatedAtTs = new Date(String(row.updated_at || "")).getTime() || 0;
+  let score = 0;
+  if (fromEmail !== DEFAULT_FROM_EMAIL) score += 4;
+  if (row.provider === "sendgrid" || row.provider === "mailgun") score += 2;
+  if (/@mg\d+\./i.test(fromEmail)) score += 1;
+  if (row.service_name === SERVICE_NAME) score += 1;
+  return { score, updatedAtTs };
+}
+
+function dedupeAccountsByPriority<T extends RotationAccountRowLike>(rows: T[]): T[] {
+  const byPriority = new Map<number, T & { __score: number; __updatedAtTs: number }>();
+
+  for (const row of rows) {
+    const priority = normalizeAccountPriority(row.priority);
+    const { score, updatedAtTs } = computeAccountScore(row);
+    const candidate = {
+      ...row,
+      priority,
+      __score: score,
+      __updatedAtTs: updatedAtTs,
+    } as T & { __score: number; __updatedAtTs: number };
+    const existing = byPriority.get(priority);
+
+    if (
+      !existing ||
+      candidate.__score > existing.__score ||
+      (candidate.__score === existing.__score &&
+        (candidate.__updatedAtTs > existing.__updatedAtTs ||
+          (candidate.__updatedAtTs === existing.__updatedAtTs &&
+            candidate.service_name.localeCompare(existing.service_name) < 0)))
+    ) {
+      byPriority.set(priority, candidate);
+    }
+  }
+
+  return Array.from(byPriority.values())
+    .sort((a, b) =>
+      a.priority === b.priority
+        ? a.service_name.localeCompare(b.service_name)
+        : a.priority - b.priority
+    )
+    .map(({ __score, __updatedAtTs, ...item }) => item as T);
+}
 
 function normalizeProviderSelection(value: string): ProviderSelection {
   if (value === "sendgrid" || value === "mailgun" || value === "auto") {
@@ -127,7 +187,8 @@ function getCurrentSenderIdentity() {
     };
   }
 
-  const fallbackFrom = process.env.MAILGUN_FROM_EMAIL || process.env.SENDGRID_FROM_EMAIL || "noreply@tubetoolsup.uk";
+  const fallbackFrom =
+    process.env.MAILGUN_FROM_EMAIL || process.env.SENDGRID_FROM_EMAIL || DEFAULT_FROM_EMAIL;
   return {
     fromEmail: fallbackFrom,
     fromName: process.env.MAILGUN_FROM_NAME || process.env.SENDGRID_FROM_NAME || "TubeTools",
@@ -297,23 +358,31 @@ async function readRotationDecision(
     priority: number;
     daily_limit: number;
     sent_today: number;
+    from_email: string | null;
+    provider: string | null;
+    updated_at: Date | string | null;
   }[]>`
-    SELECT service_name, priority, daily_limit, sent_today
+    SELECT
+      service_name,
+      priority,
+      daily_limit,
+      sent_today,
+      from_email,
+      provider,
+      updated_at
     FROM email_sending_accounts
     WHERE enabled = 1
       AND sent_today < daily_limit
-    ORDER BY priority ASC, service_name ASC
-    LIMIT 1
   `;
 
-  if (!rows[0]) {
+  const active = dedupeAccountsByPriority(rows)[0];
+  if (!active) {
     return {
       allowed: false,
       reason: "Nenhuma conta habilitada com cota disponivel.",
     };
   }
 
-  const active = rows[0];
   if (active.service_name !== SERVICE_NAME) {
     return {
       allowed: false,
@@ -359,19 +428,28 @@ async function acquireRotationSlot(): Promise<RotationSlot> {
 
       const activeRows = await tx<{
         service_name: string;
+        priority: number;
         daily_limit: number;
         sent_today: number;
+        from_email: string | null;
+        provider: string | null;
+        updated_at: Date | string | null;
       }[]>`
-        SELECT service_name, daily_limit, sent_today
+        SELECT
+          service_name,
+          priority,
+          daily_limit,
+          sent_today,
+          from_email,
+          provider,
+          updated_at
         FROM email_sending_accounts
         WHERE enabled = 1
           AND sent_today < daily_limit
-        ORDER BY priority ASC, service_name ASC
-        LIMIT 1
         FOR UPDATE
       `;
 
-      const active = activeRows[0];
+      const active = dedupeAccountsByPriority(activeRows)[0];
       if (!active) {
         return {
           allowed: false,
@@ -716,6 +794,7 @@ export async function listSenderAccountsForVariation(): Promise<SenderAccountInf
       from_email: string | null;
       from_name: string | null;
       provider: string | null;
+      updated_at: Date | string | null;
     }[]>`
       SELECT
         service_name,
@@ -723,7 +802,8 @@ export async function listSenderAccountsForVariation(): Promise<SenderAccountInf
         enabled,
         from_email,
         from_name,
-        provider
+        provider,
+        updated_at
       FROM email_sending_accounts
       WHERE enabled = 1
       ORDER BY priority ASC, service_name ASC
@@ -733,17 +813,24 @@ export async function listSenderAccountsForVariation(): Promise<SenderAccountInf
       return fallback;
     }
 
-    return rows.map(row => ({
-      serviceName: row.service_name,
-      priority: Number(row.priority ?? 100),
-      enabled: Number(row.enabled ?? 0) === 1,
-      fromEmail: (row.from_email || "").trim() || "noreply@tubetoolsup.uk",
-      fromName: (row.from_name || "").trim() || row.service_name,
-      provider:
+    const deduped = dedupeAccountsByPriority(rows).map(row => {
+      const fromEmail = (row.from_email || "").trim() || DEFAULT_FROM_EMAIL;
+      const fromName = (row.from_name || "").trim() || row.service_name;
+      const provider =
         row.provider === "sendgrid" || row.provider === "mailgun"
           ? row.provider
-          : "none",
-    }));
+          : ("none" as const);
+      return {
+        serviceName: row.service_name,
+        priority: normalizeAccountPriority(row.priority),
+        enabled: Number(row.enabled ?? 0) === 1,
+        fromEmail,
+        fromName,
+        provider,
+      } satisfies SenderAccountInfo;
+    });
+
+    return deduped.length ? deduped : fallback;
   } catch (error) {
     console.error(
       `[Email:${SERVICE_NAME}] Falha ao listar contas para variacao`,

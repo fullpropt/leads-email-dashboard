@@ -131,6 +131,7 @@ export type TransmissionPreviewVariantDTO = {
 let sqlClient: ReturnType<typeof postgres> | null = null;
 let schemaReady = false;
 let ensurePromise: Promise<void> | null = null;
+const DEFAULT_FROM_EMAIL = "noreply@tubetoolsup.uk";
 
 function getSqlClient() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -447,7 +448,52 @@ async function listStoredTransmissionVariations(
       AND source_signature = ${sourceSignature}
     ORDER BY priority ASC, service_name ASC
   `;
-  return rows;
+
+  if (!rows.length) {
+    return rows;
+  }
+
+  const byPriority = new Map<
+    number,
+    TransmissionVariationRow & { score: number; updatedAtTs: number }
+  >();
+
+  for (const row of rows) {
+    const priority = Number.isFinite(Number(row.priority)) ? Number(row.priority) : 100;
+    const fromEmail = (row.from_email || "").trim().toLowerCase();
+    const updatedAtTs = new Date(String(row.updated_at || "")).getTime() || 0;
+
+    let score = 0;
+    if (fromEmail && fromEmail !== DEFAULT_FROM_EMAIL) score += 4;
+    if (/@mg\d+\./i.test(fromEmail)) score += 1;
+
+    const existing = byPriority.get(priority);
+    const candidate = {
+      ...row,
+      priority,
+      score,
+      updatedAtTs,
+    };
+
+    if (
+      !existing ||
+      candidate.score > existing.score ||
+      (candidate.score === existing.score &&
+        (candidate.updatedAtTs > existing.updatedAtTs ||
+          (candidate.updatedAtTs === existing.updatedAtTs &&
+            candidate.service_name.localeCompare(existing.service_name) < 0)))
+    ) {
+      byPriority.set(priority, candidate);
+    }
+  }
+
+  return Array.from(byPriority.values())
+    .sort((a, b) =>
+      a.priority === b.priority
+        ? a.service_name.localeCompare(b.service_name)
+        : a.priority - b.priority
+    )
+    .map(({ score: _score, updatedAtTs: _updatedAtTs, ...row }) => row);
 }
 
 function mapVariationToPreview(row: TransmissionVariationRow): TransmissionPreviewVariantDTO {
@@ -592,6 +638,19 @@ async function generateAndStoreTransmissionVariations(
     WHERE transmission_id = ${transmission.id}
       AND source_signature <> ${sourceSignature}
   `;
+
+  const keepServiceNames = Array.from(uniqueAccounts.keys());
+  if (keepServiceNames.length > 0) {
+    await sql.unsafe(
+      `
+        DELETE FROM email_transmission_variations
+        WHERE transmission_id = $1
+          AND source_signature = $2
+          AND NOT (service_name = ANY($3::text[]))
+      `,
+      [transmission.id, sourceSignature, keepServiceNames]
+    );
+  }
 
   return generated;
 }
