@@ -1082,6 +1082,11 @@ export const appRouter = router({
   }),
   // ==================== ROUTER DE CONFIGURAÇÃO DE ENVIO (RATE LIMITING) ====================
   sendingConfig: router({
+    rotationOverview: publicProcedure.query(async () => {
+      const { getRotationOverview } = await import("./email");
+      return getRotationOverview();
+    }),
+
     get: publicProcedure.query(async () => {
       const { getDb } = await import("./db");
       const { sendingConfig } = await import("../drizzle/schema_postgresql");

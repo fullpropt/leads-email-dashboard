@@ -125,6 +125,25 @@ interface TransmissionPreviewVariant {
   reason?: string;
 }
 
+interface RotationAccountOverview {
+  serviceName: string;
+  priority: number;
+  enabled: boolean;
+  fromEmail: string;
+  fromName: string;
+  provider: "sendgrid" | "mailgun" | "none";
+  dailyLimit: number;
+  sentToday: number;
+  remaining: number;
+  isActive: boolean;
+}
+
+interface RotationOverview {
+  rotationEnabled: boolean;
+  activeService: string | null;
+  accounts: RotationAccountOverview[];
+}
+
 
 // Labels para exibição dos filtros
 const STATUS_PLATAFORMA_LABELS: Record<string, string> = {
@@ -161,6 +180,12 @@ const TRANSMISSION_STATUS_LABELS: Record<string, string> = {
   completed: "Concluida",
   paused: "Pausada",
   failed: "Falhou",
+};
+
+const PROVIDER_LABELS: Record<RotationAccountOverview["provider"], string> = {
+  sendgrid: "SendGrid",
+  mailgun: "Mailgun",
+  none: "Nao definido",
 };
 
 const VARIATION_REASON_LABELS: Record<string, string> = {
@@ -224,6 +249,13 @@ export default function EmailTemplates() {
   const { data: allTemplates, refetch: refetchTemplates } = trpc.emailTemplates.list.useQuery();
   const { data: allFunnels, refetch: refetchFunnels } = trpc.funnels.list.useQuery();
   const { data: allTransmissions, refetch: refetchTransmissions } = trpc.transmissions.list.useQuery();
+  const { data: rotationOverview } = trpc.sendingConfig.rotationOverview.useQuery(
+    undefined,
+    {
+      refetchInterval: 15000,
+      refetchOnWindowFocus: true,
+    }
+  );
   const { data: emailSentCounts } = trpc.emailTemplates.getAllEmailSentCounts.useQuery();
   const { data: funnelEmailStats } = trpc.funnels.getEmailStats.useQuery();
 
@@ -793,6 +825,16 @@ export default function EmailTemplates() {
   const selectedTemplate = selectedTemplateId
     ? templates.find(t => t.id === selectedTemplateId)
     : null;
+  const rotationData = rotationOverview as RotationOverview | undefined;
+  const rotationAccounts = rotationData?.accounts || [];
+  const totalSentByServices = rotationAccounts.reduce(
+    (sum, account) => sum + Number(account.sentToday || 0),
+    0
+  );
+  const totalLimitByServices = rotationAccounts.reduce(
+    (sum, account) => sum + Number(account.dailyLimit || 0),
+    0
+  );
 
   // Combinar templates e funis para exibicao
   const funnels = allFunnels || [];
@@ -820,6 +862,91 @@ export default function EmailTemplates() {
           Configure e gerencie os envios de emails
         </p>
       </div>
+
+      <Card className="border border-cyan-100 dark:border-cyan-900/50">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-base">Envios por servico (hoje)</CardTitle>
+              <CardDescription>
+                Painel global de todos os servicos ativos de envio.
+              </CardDescription>
+            </div>
+            <div className="text-sm font-medium text-cyan-700 dark:text-cyan-300">
+              {totalSentByServices} / {totalLimitByServices}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {rotationAccounts.length === 0 ? (
+            <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+              Nenhum servico de envio encontrado.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2 xl:grid-cols-3">
+              {rotationAccounts.map(account => {
+                const usagePercent =
+                  account.dailyLimit > 0
+                    ? Math.min(
+                        100,
+                        Math.round((account.sentToday / account.dailyLimit) * 100)
+                      )
+                    : 0;
+                return (
+                  <div
+                    key={account.serviceName}
+                    className={`rounded-lg border p-3 transition-colors ${
+                      account.isActive
+                        ? "border-cyan-300 bg-cyan-50/60 dark:border-cyan-700 dark:bg-cyan-950/20"
+                        : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="truncate text-sm font-semibold">{account.serviceName}</div>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          account.isActive
+                            ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-200"
+                            : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                        }`}
+                      >
+                        {account.isActive ? "Ativo" : account.enabled ? "Fila" : "Desativado"}
+                      </span>
+                    </div>
+                    <div className="mt-1 truncate text-xs text-muted-foreground">
+                      {account.fromEmail}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-sm">
+                      <span className="font-medium">
+                        {account.sentToday} / {account.dailyLimit}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        resta {account.remaining}
+                      </span>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                      <div
+                        className={`h-full ${
+                          account.isActive ? "bg-cyan-500" : "bg-slate-500"
+                        }`}
+                        style={{ width: `${usagePercent}%` }}
+                      />
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      Prioridade {account.priority} - {PROVIDER_LABELS[account.provider]}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {rotationData?.rotationEnabled === false && (
+            <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+              Rotacao por servico desativada nesta instancia.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full max-w-md grid-cols-3">

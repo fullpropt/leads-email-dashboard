@@ -25,6 +25,25 @@ export type SenderAccountInfo = {
   provider: Provider;
 };
 
+export type RotationAccountStatus = {
+  serviceName: string;
+  priority: number;
+  enabled: boolean;
+  fromEmail: string;
+  fromName: string;
+  provider: Provider;
+  dailyLimit: number;
+  sentToday: number;
+  remaining: number;
+  isActive: boolean;
+};
+
+export type RotationOverview = {
+  rotationEnabled: boolean;
+  activeService: string | null;
+  accounts: RotationAccountStatus[];
+};
+
 const SERVICE_NAME =
   process.env.MAILMKT_SERVICE_NAME ||
   process.env.RAILWAY_SERVICE_NAME ||
@@ -72,7 +91,11 @@ type RotationAccountRowLike = {
   service_name: string;
   priority: number | null;
   from_email: string | null;
+  from_name?: string | null;
   provider: string | null;
+  enabled?: number | null;
+  daily_limit?: number | null;
+  sent_today?: number | null;
   updated_at: Date | string | null;
 };
 
@@ -119,12 +142,17 @@ function dedupeAccountsByPriority<T extends RotationAccountRowLike>(rows: T[]): 
   }
 
   return Array.from(byPriority.values())
-    .sort((a, b) =>
-      a.priority === b.priority
+    .sort((a, b) => {
+      const priorityA = normalizeAccountPriority(a.priority);
+      const priorityB = normalizeAccountPriority(b.priority);
+      return priorityA === priorityB
         ? a.service_name.localeCompare(b.service_name)
-        : a.priority - b.priority
-    )
-    .map(({ __score, __updatedAtTs, ...item }) => item as T);
+        : priorityA - priorityB;
+    })
+    .map(item => {
+      const { __score: _score, __updatedAtTs: _updatedAtTs, ...row } = item;
+      return row as unknown as T;
+    });
 }
 
 function normalizeProviderSelection(value: string): ProviderSelection {
@@ -340,7 +368,7 @@ async function ensureRotationSetup(): Promise<boolean> {
   return rotationInitPromise;
 }
 
-async function resetDailyCounters(tx: ReturnType<typeof postgres>) {
+async function resetDailyCounters(tx: any) {
   await tx`
     UPDATE email_sending_accounts
     SET sent_today = 0,
@@ -351,7 +379,7 @@ async function resetDailyCounters(tx: ReturnType<typeof postgres>) {
 }
 
 async function readRotationDecision(
-  tx: ReturnType<typeof postgres>
+  tx: any
 ): Promise<RotationDecision> {
   const rows = await tx<{
     service_name: string;
@@ -382,20 +410,24 @@ async function readRotationDecision(
       reason: "Nenhuma conta habilitada com cota disponivel.",
     };
   }
+  const activeRemaining = Math.max(
+    Number(active.daily_limit ?? 0) - Number(active.sent_today ?? 0),
+    0
+  );
 
   if (active.service_name !== SERVICE_NAME) {
     return {
       allowed: false,
       reason: `Conta ativa atual: ${active.service_name}`,
       activeService: active.service_name,
-      remaining: active.daily_limit - active.sent_today,
+      remaining: activeRemaining,
     };
   }
 
   return {
     allowed: true,
     activeService: active.service_name,
-    remaining: active.daily_limit - active.sent_today,
+    remaining: activeRemaining,
   };
 }
 
@@ -423,7 +455,7 @@ async function acquireRotationSlot(): Promise<RotationSlot> {
   }
 
   try {
-    const result = await sql.begin(async tx => {
+    const result = await sql.begin(async (tx: any) => {
       await resetDailyCounters(tx);
 
       const activeRows = await tx<{
@@ -459,11 +491,15 @@ async function acquireRotationSlot(): Promise<RotationSlot> {
       }
 
       if (active.service_name !== SERVICE_NAME) {
+        const activeRemaining = Math.max(
+          Number(active.daily_limit ?? 0) - Number(active.sent_today ?? 0),
+          0
+        );
         return {
           allowed: false,
           reason: `Conta ativa atual: ${active.service_name}`,
           activeService: active.service_name,
-          remaining: active.daily_limit - active.sent_today,
+          remaining: activeRemaining,
           accounted: false,
         } satisfies RotationSlot;
       }
@@ -757,6 +793,138 @@ export function getCurrentServiceSenderIdentity() {
     fromName: identity.fromName,
     provider: identity.provider,
   };
+}
+
+export async function getRotationOverview(): Promise<RotationOverview> {
+  const identity = getCurrentSenderIdentity();
+  const fallbackAccount: RotationAccountStatus = {
+    serviceName: SERVICE_NAME,
+    priority: Number.isFinite(rotationPriority) ? rotationPriority : 100,
+    enabled: rotationSenderEnabled,
+    fromEmail: identity.fromEmail,
+    fromName: identity.fromName,
+    provider: identity.provider,
+    dailyLimit: Number.isFinite(rotationDailyLimit) ? Math.max(rotationDailyLimit, 0) : 0,
+    sentToday: 0,
+    remaining: Number.isFinite(rotationDailyLimit) ? Math.max(rotationDailyLimit, 0) : 0,
+    isActive: true,
+  };
+
+  if (!rotationEnabled) {
+    return {
+      rotationEnabled: false,
+      activeService: SERVICE_NAME,
+      accounts: [fallbackAccount],
+    };
+  }
+
+  const ready = await ensureRotationSetup();
+  if (!ready) {
+    return {
+      rotationEnabled: true,
+      activeService: null,
+      accounts: [{ ...fallbackAccount, isActive: false }],
+    };
+  }
+
+  const sql = getRotationSqlClient();
+  if (!sql) {
+    return {
+      rotationEnabled: true,
+      activeService: null,
+      accounts: [{ ...fallbackAccount, isActive: false }],
+    };
+  }
+
+  try {
+    const rows = await sql<{
+      service_name: string;
+      priority: number | null;
+      daily_limit: number | null;
+      sent_today: number | null;
+      enabled: number | null;
+      from_email: string | null;
+      from_name: string | null;
+      provider: string | null;
+      updated_at: Date | string | null;
+    }[]>`
+      SELECT
+        service_name,
+        priority,
+        daily_limit,
+        sent_today,
+        enabled,
+        from_email,
+        from_name,
+        provider,
+        updated_at
+      FROM email_sending_accounts
+      ORDER BY priority ASC, service_name ASC
+    `;
+
+    if (!rows.length) {
+      return {
+        rotationEnabled: true,
+        activeService: null,
+        accounts: [{ ...fallbackAccount, isActive: false }],
+      };
+    }
+
+    const activeRows = dedupeAccountsByPriority(
+      rows.filter(row => {
+        const enabled = Number(row.enabled ?? 0) === 1;
+        const dailyLimit = Number.isFinite(Number(row.daily_limit))
+          ? Math.max(Math.floor(Number(row.daily_limit)), 0)
+          : 0;
+        const sentToday = Number.isFinite(Number(row.sent_today))
+          ? Math.max(Math.floor(Number(row.sent_today)), 0)
+          : 0;
+        return enabled && sentToday < dailyLimit;
+      })
+    );
+    const activeService = activeRows[0]?.service_name || null;
+
+    const accounts = rows.map(row => {
+      const fromEmail = (row.from_email || "").trim() || DEFAULT_FROM_EMAIL;
+      const fromName = (row.from_name || "").trim() || row.service_name;
+      const provider =
+        row.provider === "sendgrid" || row.provider === "mailgun"
+          ? row.provider
+          : ("none" as const);
+      const dailyLimit = Number.isFinite(Number(row.daily_limit))
+        ? Math.max(Math.floor(Number(row.daily_limit)), 0)
+        : 0;
+      const sentToday = Number.isFinite(Number(row.sent_today))
+        ? Math.max(Math.floor(Number(row.sent_today)), 0)
+        : 0;
+      const remaining = Math.max(dailyLimit - sentToday, 0);
+      return {
+        serviceName: row.service_name,
+        priority: normalizeAccountPriority(row.priority),
+        enabled: Number(row.enabled ?? 0) === 1,
+        fromEmail,
+        fromName,
+        provider,
+        dailyLimit,
+        sentToday,
+        remaining,
+        isActive: row.service_name === activeService,
+      } satisfies RotationAccountStatus;
+    });
+
+    return {
+      rotationEnabled: true,
+      activeService,
+      accounts,
+    };
+  } catch (error) {
+    console.error(`[Email:${SERVICE_NAME}] Falha ao carregar overview de rotacao`, error);
+    return {
+      rotationEnabled: true,
+      activeService: null,
+      accounts: [{ ...fallbackAccount, isActive: false }],
+    };
+  }
 }
 
 export async function listSenderAccountsForVariation(): Promise<SenderAccountInfo[]> {
