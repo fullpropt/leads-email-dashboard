@@ -140,6 +140,8 @@ let sqlClient: ReturnType<typeof postgres> | null = null;
 let schemaReady = false;
 let ensurePromise: Promise<void> | null = null;
 const DEFAULT_FROM_EMAIL = "noreply@tubetoolsup.uk";
+const TRANSMISSION_SCHEDULER_VERBOSE =
+  process.env.TRANSMISSION_SCHEDULER_VERBOSE === "true";
 
 function getSqlClient() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -1465,7 +1467,11 @@ async function processSingleTransmission(transmissionId: number) {
     const nowLoop = new Date();
     const queuePermission = await canCurrentServiceProcessQueue();
     if (!queuePermission.allowed) {
-      await scheduleNextRun(transmission.id, 30);
+      const handingOffToAnotherService =
+        typeof queuePermission.reason === "string" &&
+        queuePermission.reason.startsWith("Conta ativa atual:");
+      // Quando a conta ativa mudou, reagenda curto para a instancia correta assumir rapido.
+      await scheduleNextRun(transmission.id, handingOffToAnotherService ? 3 : 30);
       return;
     }
 
@@ -1590,6 +1596,16 @@ async function processSingleTransmission(transmissionId: number) {
 export async function processDueTransmissions(): Promise<void> {
   try {
     await ensureSchema();
+    const queuePermission = await canCurrentServiceProcessQueue();
+    if (!queuePermission.allowed) {
+      if (TRANSMISSION_SCHEDULER_VERBOSE && queuePermission.reason) {
+        console.log(
+          `[Transmission] Scheduler skip neste servico: ${queuePermission.reason}`
+        );
+      }
+      return;
+    }
+
     const sql = getSqlClient();
 
     const dueRows = await sql<{ id: number }[]>`
