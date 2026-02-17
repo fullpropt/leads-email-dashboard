@@ -260,7 +260,13 @@ export default function EmailTemplates() {
   // Queries
   const { data: allTemplates, refetch: refetchTemplates } = trpc.emailTemplates.list.useQuery();
   const { data: allFunnels, refetch: refetchFunnels } = trpc.funnels.list.useQuery();
-  const { data: allTransmissions, refetch: refetchTransmissions } = trpc.transmissions.list.useQuery();
+  const { data: allTransmissions, refetch: refetchTransmissions } = trpc.transmissions.list.useQuery(
+    undefined,
+    {
+      refetchInterval: 15000,
+      refetchOnWindowFocus: true,
+    }
+  );
   const { data: sendingConfigData, refetch: refetchSendingConfig } = trpc.sendingConfig.get.useQuery();
   const { data: rotationOverview, refetch: refetchRotationOverview } = trpc.sendingConfig.rotationOverview.useQuery(
     undefined,
