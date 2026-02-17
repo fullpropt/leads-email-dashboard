@@ -13,6 +13,75 @@ import { eq, and, or, sql, lte, isNotNull, asc, desc } from "drizzle-orm";
 let funnelSchedulerInterval: NodeJS.Timeout | null = null;
 const emailAccountRotationEnabled =
   process.env.EMAIL_ACCOUNT_ROTATION_ENABLED === "true";
+let funnelRuntimeSchemaEnsured = false;
+let sendingConfigRuntimeSchemaEnsured = false;
+
+type DbClient = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+function clampIntervalSeconds(value: unknown, fallback = 0) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(0, Math.min(3600, Math.floor(numeric)));
+}
+
+function randomIntervalBetween(minSeconds: number, maxSeconds: number) {
+  const min = clampIntervalSeconds(minSeconds, 0);
+  const max = Math.max(min, clampIntervalSeconds(maxSeconds, min));
+  if (max <= min) return min;
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function resolveEffectiveIntervalSeconds(
+  configIntervalSeconds: number,
+  customIntervalSeconds?: number
+) {
+  const configInterval = clampIntervalSeconds(configIntervalSeconds, 0);
+  if (customIntervalSeconds === undefined) return configInterval;
+  return clampIntervalSeconds(customIntervalSeconds, configInterval);
+}
+
+function calculateRelativeSendTime(delayValue: number, delayUnit: string): Date {
+  const safeDelayValue = Math.max(0, Number.isFinite(Number(delayValue)) ? Number(delayValue) : 0);
+  const delayByUnit: Record<string, number> = {
+    minutes: 60 * 1000,
+    hours: 60 * 60 * 1000,
+    days: 24 * 60 * 60 * 1000,
+    weeks: 7 * 24 * 60 * 60 * 1000,
+  };
+  const unitKey = String(delayUnit || "days").toLowerCase();
+  const unitMs = delayByUnit[unitKey] ?? delayByUnit.days;
+  return new Date(Date.now() + safeDelayValue * unitMs);
+}
+
+async function ensureFunnelRuntimeSchema(db: DbClient) {
+  if (funnelRuntimeSchemaEnsured) return;
+
+  await db.execute(sql`
+    ALTER TABLE funnels
+    ADD COLUMN IF NOT EXISTS send_interval_min_seconds integer NOT NULL DEFAULT 10
+  `);
+  await db.execute(sql`
+    ALTER TABLE funnels
+    ADD COLUMN IF NOT EXISTS send_interval_max_seconds integer NOT NULL DEFAULT 30
+  `);
+  await db.execute(sql`
+    ALTER TABLE funnels
+    ADD COLUMN IF NOT EXISTS send_order varchar(20) NOT NULL DEFAULT 'newest_first'
+  `);
+
+  funnelRuntimeSchemaEnsured = true;
+}
+
+async function ensureSendingConfigRuntimeSchema(db: DbClient) {
+  if (sendingConfigRuntimeSchemaEnsured) return;
+
+  await db.execute(sql`
+    ALTER TABLE sending_config
+    ADD COLUMN IF NOT EXISTS rotation_chunk_size integer NOT NULL DEFAULT 100
+  `);
+
+  sendingConfigRuntimeSchemaEnsured = true;
+}
 
 /**
  * Iniciar o scheduler de funis
@@ -59,10 +128,8 @@ async function getSendingConfig() {
   const db = await getDb();
   if (!db) return null;
 
-  await db.execute(sql`
-    ALTER TABLE sending_config
-    ADD COLUMN IF NOT EXISTS rotation_chunk_size integer NOT NULL DEFAULT 100
-  `);
+  await ensureSendingConfigRuntimeSchema(db);
+
 
   const [config] = await db.select().from(sendingConfig).limit(1);
   
@@ -117,7 +184,9 @@ async function incrementEmailsSentToday() {
 /**
  * Verificar se pode enviar email (rate limiting)
  */
-async function canSendEmail(): Promise<{ allowed: boolean; reason?: string }> {
+async function canSendEmail(
+  customIntervalSeconds?: number
+): Promise<{ allowed: boolean; reason?: string; waitSeconds?: number }> {
   const config = await getSendingConfig();
   if (!config) {
     return { allowed: false, reason: "Configuração de envio não disponível" };
@@ -129,9 +198,17 @@ async function canSendEmail(): Promise<{ allowed: boolean; reason?: string }> {
   // Verificar intervalo entre envios
   if (config.lastSentAt) {
     const timeSinceLastSend = Date.now() - new Date(config.lastSentAt).getTime();
-    const intervalMs = config.intervalSeconds * 1000;
+    const effectiveIntervalSeconds = resolveEffectiveIntervalSeconds(
+      config.intervalSeconds,
+      customIntervalSeconds
+    );
+    const intervalMs = effectiveIntervalSeconds * 1000;
     if (timeSinceLastSend < intervalMs) {
-      return { allowed: false, reason: `Aguardando intervalo (${Math.ceil((intervalMs - timeSinceLastSend) / 1000)}s restantes)` };
+      return {
+        allowed: false,
+        reason: `Aguardando intervalo (${Math.ceil((intervalMs - timeSinceLastSend) / 1000)}s restantes)`,
+        waitSeconds: Math.ceil((intervalMs - timeSinceLastSend) / 1000),
+      };
     }
   }
 
@@ -141,12 +218,16 @@ async function canSendEmail(): Promise<{ allowed: boolean; reason?: string }> {
 /**
  * Esperar o intervalo configurado entre envios
  */
-async function waitForInterval(): Promise<void> {
+async function waitForInterval(customIntervalSeconds?: number): Promise<void> {
   const config = await getSendingConfig();
   if (!config) return;
-  
-  const intervalMs = config.intervalSeconds * 1000;
-  
+
+  const effectiveIntervalSeconds = resolveEffectiveIntervalSeconds(
+    config.intervalSeconds,
+    customIntervalSeconds
+  );
+  const intervalMs = effectiveIntervalSeconds * 1000;
+
   if (config.lastSentAt) {
     const timeSinceLastSend = Date.now() - new Date(config.lastSentAt).getTime();
     const waitTime = intervalMs - timeSinceLastSend;
@@ -168,6 +249,7 @@ async function processFunnelEmails() {
       console.warn("[FunnelScheduler] Banco de dados não disponível");
       return;
     }
+    await ensureFunnelRuntimeSchema(db);
 
     const { canCurrentServiceProcessQueue } = await import("./email");
     const queuePermission = await canCurrentServiceProcessQueue();
@@ -203,10 +285,16 @@ async function processFunnelEmails() {
 
     // Buscar progressos de funis prontos para envio
     // Ordenar por data de criação do lead (mais novos primeiro)
-    const progressReadyForSend = await db
+    const fetchLimit = emailAccountRotationEnabled
+      ? 500
+      : Math.max(remainingToday * 3, remainingToday);
+    const progressReadyRows = await db
       .select({
         progress: funnelLeadProgress,
         leadCreatedAt: leads.dataCriacao,
+        funnelSendOrder: funnels.sendOrder,
+        funnelIntervalMinSeconds: funnels.sendIntervalMinSeconds,
+        funnelIntervalMaxSeconds: funnels.sendIntervalMaxSeconds,
       })
       .from(funnelLeadProgress)
       .innerJoin(leads, eq(leads.id, funnelLeadProgress.leadId))
@@ -219,8 +307,34 @@ async function processFunnelEmails() {
           lte(funnelLeadProgress.nextSendAt, now)
         )
       )
-      .orderBy(desc(leads.dataCriacao)) // Mais novos primeiro
-      .limit(remainingToday); // Limitar ao que resta do dia
+      .orderBy(asc(funnelLeadProgress.nextSendAt), desc(leads.dataCriacao))
+      .limit(fetchLimit);
+
+    const toTimestamp = (value: Date | string | null | undefined) => {
+      if (!value) return 0;
+      const parsed = new Date(value).getTime();
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
+
+    const progressReadyForSend = progressReadyRows
+      .sort((a, b) => {
+        const nextA = toTimestamp(a.progress.nextSendAt);
+        const nextB = toTimestamp(b.progress.nextSendAt);
+        if (nextA !== nextB) return nextA - nextB;
+
+        if (a.progress.funnelId === b.progress.funnelId) {
+          const sendOrder =
+            a.funnelSendOrder === "oldest_first" ? "oldest_first" : "newest_first";
+          const createdA = toTimestamp(a.leadCreatedAt);
+          const createdB = toTimestamp(b.leadCreatedAt);
+          return sendOrder === "oldest_first"
+            ? createdA - createdB
+            : createdB - createdA;
+        }
+
+        return toTimestamp(b.leadCreatedAt) - toTimestamp(a.leadCreatedAt);
+      })
+      .slice(0, remainingToday);
 
     if (progressReadyForSend.length === 0) {
       console.log("[FunnelScheduler] ✓ Nenhum email de funil pronto para envio");
@@ -249,18 +363,38 @@ async function processFunnelEmails() {
     >();
 
     // Processar cada progresso
-    for (const { progress } of progressReadyForSend) {
+    for (const {
+      progress,
+      funnelIntervalMinSeconds,
+      funnelIntervalMaxSeconds,
+    } of progressReadyForSend) {
       try {
+        const intervalMinSeconds = clampIntervalSeconds(funnelIntervalMinSeconds, 10);
+        const intervalMaxSeconds = Math.max(
+          intervalMinSeconds,
+          clampIntervalSeconds(funnelIntervalMaxSeconds, intervalMinSeconds)
+        );
+        const randomizedIntervalSeconds = randomIntervalBetween(
+          intervalMinSeconds,
+          intervalMaxSeconds
+        );
+
         // Verificar rate limiting antes de cada envio
-        const canSend = await canSendEmail();
+        let canSend = await canSendEmail(randomizedIntervalSeconds);
+        let waitedForInterval = false;
+        if (!canSend.allowed && (canSend.waitSeconds ?? 0) > 0) {
+          await waitForInterval(randomizedIntervalSeconds);
+          waitedForInterval = true;
+          canSend = await canSendEmail(randomizedIntervalSeconds);
+        }
         if (!canSend.allowed) {
           console.log(`[FunnelScheduler] ⏳ ${canSend.reason} — parando ciclo`);
           break;
         }
 
         // Esperar intervalo entre envios
-        if (sentCount > 0) {
-          await waitForInterval();
+        if (sentCount > 0 && !waitedForInterval) {
+          await waitForInterval(randomizedIntervalSeconds);
         }
 
         // Buscar o lead
@@ -385,14 +519,9 @@ async function processFunnelEmails() {
 
           if (nextTemplate) {
             // Calcular próximo envio considerando timezone do lead e unidade de delay
-            const leadTimezone = lead.timezone || "America/Sao_Paulo";
-            const { calculateSendTimeWithUnit } = await import("./timezone-utils");
-            
-            const nextSendAt = calculateSendTimeWithUnit(
+            const nextSendAt = calculateRelativeSendTime(
               nextTemplate.delayValue,
-              nextTemplate.delayUnit,
-              nextTemplate.sendTime,
-              leadTimezone
+              nextTemplate.delayUnit
             );
 
             // Atualizar progresso para próximo template
@@ -406,7 +535,7 @@ async function processFunnelEmails() {
               })
               .where(eq(funnelLeadProgress.id, progress.id));
 
-            console.log(`[FunnelScheduler] 📅 Próximo email agendado para ${nextSendAt.toLocaleString("pt-BR")} (timezone: ${leadTimezone})`);
+            console.log(`[FunnelScheduler] 📅 Próximo email agendado para ${nextSendAt.toLocaleString("pt-BR")} `);
           } else {
             // Funil concluído
             await db
@@ -457,6 +586,7 @@ export async function addLeadToFunnel(leadId: number, funnelId: number) {
       console.warn("[FunnelScheduler] Banco de dados não disponível");
       return { success: false, message: "Banco de dados não disponível" };
     }
+    await ensureFunnelRuntimeSchema(db);
 
     // Buscar o lead
     const [lead] = await db
@@ -500,15 +630,10 @@ export async function addLeadToFunnel(leadId: number, funnelId: number) {
       return { success: false, message: "Funil não tem templates ativos" };
     }
 
-    // Calcular primeiro envio considerando timezone do lead e unidade de delay
-    const { calculateSendTimeWithUnit } = await import("./timezone-utils");
-    const leadTimezone = lead.timezone || "America/Sao_Paulo";
-    
-    const nextSendAt = calculateSendTimeWithUnit(
+    // Calcular primeiro envio com delay relativo ao momento atual
+    const nextSendAt = calculateRelativeSendTime(
       firstTemplate.delayValue,
-      firstTemplate.delayUnit,
-      firstTemplate.sendTime,
-      leadTimezone
+      firstTemplate.delayUnit
     );
 
     // Criar progresso do funil
@@ -523,13 +648,13 @@ export async function addLeadToFunnel(leadId: number, funnelId: number) {
     });
 
     console.log(`[FunnelScheduler] ✅ Lead ${lead.email} adicionado ao funil ${funnelId}`);
-    console.log(`[FunnelScheduler] 📅 Primeiro email agendado para ${nextSendAt.toLocaleString("pt-BR")} (timezone: ${leadTimezone})`);
+    console.log(`[FunnelScheduler] 📅 Primeiro email agendado para ${nextSendAt.toLocaleString("pt-BR")} `);
 
     return { 
       success: true, 
       message: "Lead adicionado ao funil",
       nextSendAt: nextSendAt.toISOString(),
-      timezone: leadTimezone,
+      timezone: lead.timezone || "America/Sao_Paulo",
     };
   } catch (error) {
     console.error("[FunnelScheduler] ❌ Erro ao adicionar lead ao funil:", error);
@@ -554,6 +679,7 @@ export async function enqueueExistingLeads(
     if (!db) {
       return { success: false, enqueued: 0, skipped: 0, message: "Banco de dados não disponível" };
     }
+    await ensureFunnelRuntimeSchema(db);
 
     // Buscar o funil
     const [funnel] = await db.select().from(funnels).where(eq(funnels.id, funnelId));
@@ -587,7 +713,7 @@ export async function enqueueExistingLeads(
         : or(eq(leads.status, "active"), eq(leads.leadType, "compra_aprovada"));
 
     const eligibleLeads = await db
-      .select({ id: leads.id, timezone: leads.timezone, email: leads.email })
+      .select({ id: leads.id, email: leads.email })
       .from(leads)
       .where(
         and(
@@ -607,20 +733,14 @@ export async function enqueueExistingLeads(
       return { success: true, enqueued: 0, skipped: 0, message: "Nenhum lead elegível encontrado" };
     }
 
-    const { calculateSendTimeWithUnit } = await import("./timezone-utils");
-    
     let enqueued = 0;
     let skipped = 0;
 
     for (const lead of eligibleLeads) {
       try {
-        const leadTimezone = lead.timezone || "America/Sao_Paulo";
-        
-        const nextSendAt = calculateSendTimeWithUnit(
+        const nextSendAt = calculateRelativeSendTime(
           firstTemplate.delayValue,
-          firstTemplate.delayUnit,
-          firstTemplate.sendTime,
-          leadTimezone
+          firstTemplate.delayUnit
         );
 
         await db.insert(funnelLeadProgress).values({

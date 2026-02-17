@@ -15,6 +15,9 @@ interface FunnelConfig {
   nome: string;
   targetStatusPlataforma: "all" | "accessed" | "not_accessed";
   targetSituacao: "all" | "active" | "abandoned";
+  sendIntervalMinSeconds: number;
+  sendIntervalMaxSeconds: number;
+  sendOrder: "newest_first" | "oldest_first";
 }
 
 interface TransmissionConfig {
@@ -31,7 +34,6 @@ interface TransmissionConfig {
 interface FunnelTemplateConfig {
   delayValue: number;
   delayUnit: "minutes" | "hours" | "days" | "weeks";
-  sendTime?: string;
 }
 
 interface CreateItemModalProps {
@@ -57,6 +59,11 @@ export function CreateItemModal({
   const [statusPlataforma, setStatusPlataforma] = useState<"all" | "accessed" | "not_accessed">("all");
   const [situacao, setSituacao] = useState<"all" | "active" | "abandoned">("all");
   const [funnelNome, setFunnelNome] = useState("Novo Funil");
+  const [funnelIntervalMinSeconds, setFunnelIntervalMinSeconds] = useState(10);
+  const [funnelIntervalMaxSeconds, setFunnelIntervalMaxSeconds] = useState(30);
+  const [funnelSendOrder, setFunnelSendOrder] = useState<
+    "newest_first" | "oldest_first"
+  >("newest_first");
 
   const [transmissionName, setTransmissionName] = useState("Nova Transmissao");
   const [transmissionMode, setTransmissionMode] = useState<"immediate" | "scheduled">("immediate");
@@ -72,13 +79,15 @@ export function CreateItemModal({
 
   const [delayValue, setDelayValue] = useState(0);
   const [delayUnit, setDelayUnit] = useState<"minutes" | "hours" | "days" | "weeks">("days");
-  const [sendTime, setSendTime] = useState("");
 
   const resetForm = () => {
     setActiveTab("template");
     setStatusPlataforma("all");
     setSituacao("all");
     setFunnelNome("Novo Funil");
+    setFunnelIntervalMinSeconds(10);
+    setFunnelIntervalMaxSeconds(30);
+    setFunnelSendOrder("newest_first");
     setTransmissionName("Nova Transmissao");
     setTransmissionMode("immediate");
     setTransmissionScheduledAt("");
@@ -88,7 +97,6 @@ export function CreateItemModal({
     setTransmissionSendOrder("newest_first");
     setDelayValue(0);
     setDelayUnit("days");
-    setSendTime("");
   };
 
   const handleClose = () => {
@@ -101,7 +109,6 @@ export function CreateItemModal({
       onCreateFunnelTemplate?.({
         delayValue,
         delayUnit,
-        sendTime: sendTime || undefined,
       });
       handleClose();
       return;
@@ -117,10 +124,15 @@ export function CreateItemModal({
     }
 
     if (activeTab === "funnel") {
+      const safeMin = Math.max(0, funnelIntervalMinSeconds || 0);
+      const safeMax = Math.max(safeMin, funnelIntervalMaxSeconds || safeMin);
       onCreateFunnel({
         nome: funnelNome,
         targetStatusPlataforma: statusPlataforma,
         targetSituacao: situacao,
+        sendIntervalMinSeconds: safeMin,
+        sendIntervalMaxSeconds: safeMax,
+        sendOrder: funnelSendOrder,
       });
       handleClose();
       return;
@@ -203,29 +215,80 @@ export function CreateItemModal({
                   </Select>
                 </div>
 
-                <div className="flex-1">
-                  <Label className="text-xs">Horario (UTC)</Label>
-                  <Input
-                    type="time"
-                    value={sendTime}
-                    onChange={event => setSendTime(event.target.value)}
-                    placeholder="--:--"
-                    disabled={delayUnit === "hours" || delayUnit === "minutes"}
-                  />
-                </div>
               </div>
             </>
           ) : (
             <>
               {activeTab === "funnel" && (
-                <div className="space-y-2">
-                  <Label className="text-xs">Nome do Funil</Label>
-                  <Input
-                    value={funnelNome}
-                    onChange={event => setFunnelNome(event.target.value)}
-                    placeholder="Nome do Funil"
-                  />
-                </div>
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Nome do Funil</Label>
+                    <Input
+                      value={funnelNome}
+                      onChange={event => setFunnelNome(event.target.value)}
+                      placeholder="Nome do Funil"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Intervalo minimo (s)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={3600}
+                        value={funnelIntervalMinSeconds}
+                        onChange={event =>
+                          setFunnelIntervalMinSeconds(
+                            Number.isNaN(Number(event.target.value))
+                              ? 0
+                              : Number(event.target.value)
+                          )
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Intervalo maximo (s)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={3600}
+                        value={funnelIntervalMaxSeconds}
+                        onChange={event =>
+                          setFunnelIntervalMaxSeconds(
+                            Number.isNaN(Number(event.target.value))
+                              ? 0
+                              : Number(event.target.value)
+                          )
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Prioridade de envio</Label>
+                      <Select
+                        value={funnelSendOrder}
+                        onValueChange={value =>
+                          setFunnelSendOrder(value as "newest_first" | "oldest_first")
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="newest_first">Leads mais novos primeiro</SelectItem>
+                          <SelectItem value="oldest_first">Leads mais antigos primeiro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground">
+                    O sistema sorteia um intervalo entre minimo e maximo a cada envio do funil.
+                    Se forem iguais, o intervalo fica fixo.
+                  </p>
+                </>
               )}
 
               {activeTab === "transmission" && (

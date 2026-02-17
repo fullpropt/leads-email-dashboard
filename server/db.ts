@@ -2029,6 +2029,7 @@ export async function getMatchingFunnelsForLead(
   }
 
   try {
+    await ensureFunnelRuntimeSchema(db);
     // Buscar funis ativos
     const allFunnels = await db
       .select()
@@ -2058,6 +2059,27 @@ export async function getMatchingFunnelsForLead(
   }
 }
 
+let funnelRuntimeSchemaEnsured = false;
+
+async function ensureFunnelRuntimeSchema(db: NonNullable<Awaited<ReturnType<typeof getDb>>>) {
+  if (funnelRuntimeSchemaEnsured) return;
+
+  await db.execute(sql`
+    ALTER TABLE funnels
+    ADD COLUMN IF NOT EXISTS send_interval_min_seconds integer NOT NULL DEFAULT 10
+  `);
+  await db.execute(sql`
+    ALTER TABLE funnels
+    ADD COLUMN IF NOT EXISTS send_interval_max_seconds integer NOT NULL DEFAULT 30
+  `);
+  await db.execute(sql`
+    ALTER TABLE funnels
+    ADD COLUMN IF NOT EXISTS send_order varchar(20) NOT NULL DEFAULT 'newest_first'
+  `);
+
+  funnelRuntimeSchemaEnsured = true;
+}
+
 /**
  * Listar todos os funis
  */
@@ -2069,6 +2091,7 @@ export async function getAllFunnels() {
   }
 
   try {
+    await ensureFunnelRuntimeSchema(db);
     return await db.select().from(funnels).orderBy(desc(funnels.criadoEm));
   } catch (error) {
     console.error("[Database] Failed to get funnels:", error);
@@ -2083,6 +2106,9 @@ export async function createFunnel(data: {
   nome: string;
   targetStatusPlataforma: string;
   targetSituacao: string;
+  sendIntervalMinSeconds?: number;
+  sendIntervalMaxSeconds?: number;
+  sendOrder?: "newest_first" | "oldest_first";
 }) {
   const db = await getDb();
   if (!db) {
@@ -2091,10 +2117,22 @@ export async function createFunnel(data: {
   }
 
   try {
+    await ensureFunnelRuntimeSchema(db);
+    const minInterval = Number.isFinite(data.sendIntervalMinSeconds)
+      ? Math.max(0, Math.min(3600, Math.floor(Number(data.sendIntervalMinSeconds))))
+      : 10;
+    const maxIntervalRaw = Number.isFinite(data.sendIntervalMaxSeconds)
+      ? Math.max(0, Math.min(3600, Math.floor(Number(data.sendIntervalMaxSeconds))))
+      : 30;
+    const maxInterval = Math.max(minInterval, maxIntervalRaw);
+
     const [newFunnel] = await db.insert(funnels).values({
       nome: data.nome,
       targetStatusPlataforma: data.targetStatusPlataforma,
       targetSituacao: data.targetSituacao,
+      sendIntervalMinSeconds: minInterval,
+      sendIntervalMaxSeconds: maxInterval,
+      sendOrder: data.sendOrder || "newest_first",
     }).returning();
 
     // Criar primeiro template vazio automaticamente
@@ -2126,6 +2164,7 @@ export async function getFunnelById(funnelId: number) {
   }
 
   try {
+    await ensureFunnelRuntimeSchema(db);
     const [funnel] = await db.select().from(funnels).where(eq(funnels.id, funnelId));
     return funnel || null;
   } catch (error) {
@@ -2145,6 +2184,7 @@ export async function getFunnelWithTemplates(funnelId: number) {
   }
 
   try {
+    await ensureFunnelRuntimeSchema(db);
     const [funnel] = await db.select().from(funnels).where(eq(funnels.id, funnelId));
     const templates = await db.select()
       .from(funnelTemplates)
@@ -2168,6 +2208,7 @@ export async function toggleFunnelActive(funnelId: number) {
   }
 
   try {
+    await ensureFunnelRuntimeSchema(db);
     const [current] = await db.select().from(funnels).where(eq(funnels.id, funnelId));
     if (!current) return { success: false };
 
@@ -2192,6 +2233,7 @@ export async function deleteFunnel(funnelId: number) {
   }
 
   try {
+    await ensureFunnelRuntimeSchema(db);
     await db.delete(funnels).where(eq(funnels.id, funnelId));
     return { success: true };
   } catch (error) {
@@ -2208,6 +2250,9 @@ export async function updateFunnel(funnelId: number, updates: Partial<{
   descricao: string;
   targetStatusPlataforma: string;
   targetSituacao: string;
+  sendIntervalMinSeconds: number;
+  sendIntervalMaxSeconds: number;
+  sendOrder: "newest_first" | "oldest_first";
 }>) {
   const db = await getDb();
   if (!db) {
@@ -2216,8 +2261,40 @@ export async function updateFunnel(funnelId: number, updates: Partial<{
   }
 
   try {
+    await ensureFunnelRuntimeSchema(db);
+    const normalizedUpdates: Record<string, unknown> = { ...updates };
+
+    if (updates.sendIntervalMinSeconds !== undefined || updates.sendIntervalMaxSeconds !== undefined) {
+      const [current] = await db
+        .select({
+          sendIntervalMinSeconds: funnels.sendIntervalMinSeconds,
+          sendIntervalMaxSeconds: funnels.sendIntervalMaxSeconds,
+        })
+        .from(funnels)
+        .where(eq(funnels.id, funnelId))
+        .limit(1);
+
+      const currentMin = Number.isFinite(current?.sendIntervalMinSeconds)
+        ? Number(current?.sendIntervalMinSeconds)
+        : 10;
+      const currentMax = Number.isFinite(current?.sendIntervalMaxSeconds)
+        ? Number(current?.sendIntervalMaxSeconds)
+        : Math.max(30, currentMin);
+
+      const safeMin = updates.sendIntervalMinSeconds !== undefined
+        ? Math.max(0, Math.min(3600, Math.floor(Number(updates.sendIntervalMinSeconds))))
+        : currentMin;
+      const requestedMax = updates.sendIntervalMaxSeconds !== undefined
+        ? Math.max(0, Math.min(3600, Math.floor(Number(updates.sendIntervalMaxSeconds))))
+        : currentMax;
+      const safeMax = Math.max(safeMin, requestedMax);
+
+      normalizedUpdates.sendIntervalMinSeconds = safeMin;
+      normalizedUpdates.sendIntervalMaxSeconds = safeMax;
+    }
+
     await db.update(funnels)
-      .set({ ...updates, atualizadoEm: new Date() })
+      .set({ ...normalizedUpdates, atualizadoEm: new Date() })
       .where(eq(funnels.id, funnelId));
     return { success: true };
   } catch (error) {

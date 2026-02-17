@@ -44,6 +44,9 @@ interface FunnelConfig {
   nome: string;
   targetStatusPlataforma: "all" | "accessed" | "not_accessed";
   targetSituacao: "all" | "active" | "abandoned";
+  sendIntervalMinSeconds: number;
+  sendIntervalMaxSeconds: number;
+  sendOrder: "newest_first" | "oldest_first";
 }
 
 interface TransmissionConfig {
@@ -85,6 +88,9 @@ interface FunnelBlock {
   descricao: string | null;
   targetStatusPlataforma: string;
   targetSituacao: string;
+  sendIntervalMinSeconds: number;
+  sendIntervalMaxSeconds: number;
+  sendOrder: "newest_first" | "oldest_first";
   ativo: number;
   criadoEm: Date;
   atualizadoEm: Date;
@@ -668,6 +674,9 @@ export default function EmailTemplates() {
       nome: config.nome,
       targetStatusPlataforma: config.targetStatusPlataforma,
       targetSituacao: config.targetSituacao,
+      sendIntervalMinSeconds: config.sendIntervalMinSeconds,
+      sendIntervalMaxSeconds: config.sendIntervalMaxSeconds,
+      sendOrder: config.sendOrder,
     });
   };
 

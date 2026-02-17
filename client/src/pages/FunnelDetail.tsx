@@ -38,6 +38,8 @@ interface FunnelTemplateBlock {
   atualizadoEm: Date;
 }
 
+type FunnelSendOrder = "newest_first" | "oldest_first";
+
 export default function FunnelDetail() {
   const params = useParams();
   const [, setLocation] = useLocation();
@@ -49,6 +51,9 @@ export default function FunnelDetail() {
   const [previewHtml, setPreviewHtml] = useState("");
   const [localTemplates, setLocalTemplates] = useState<FunnelTemplateBlock[]>([]);
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
+  const [funnelIntervalMinSeconds, setFunnelIntervalMinSeconds] = useState(10);
+  const [funnelIntervalMaxSeconds, setFunnelIntervalMaxSeconds] = useState(30);
+  const [funnelSendOrder, setFunnelSendOrder] = useState<FunnelSendOrder>("newest_first");
 
   // Estados para diálogo de confirmação de exclusão
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -107,6 +112,16 @@ export default function FunnelDetail() {
     },
   });
 
+  const updateFunnelSettings = trpc.funnels.update.useMutation({
+    onSuccess: () => {
+      toast.success("Configuracoes do funil atualizadas!");
+      refetchFunnel();
+    },
+    onError: () => {
+      toast.error("Erro ao atualizar configuracoes do funil");
+    },
+  });
+
   const previewTemplate = trpc.funnelTemplates.previewWithFirstLead.useQuery(
     { templateId: selectedTemplateId! },
     { enabled: selectedTemplateId !== null && selectedTemplateId > 0 && activeTab === "preview" }
@@ -121,6 +136,22 @@ export default function FunnelDetail() {
       })));
     }
   }, [funnelData]);
+
+  useEffect(() => {
+    if (!funnelData?.funnel) return;
+    const funnel = funnelData.funnel as {
+      sendIntervalMinSeconds?: number | null;
+      sendIntervalMaxSeconds?: number | null;
+      sendOrder?: FunnelSendOrder | null;
+    };
+    const safeMin = Math.max(0, Number(funnel.sendIntervalMinSeconds ?? 10));
+    const safeMax = Math.max(safeMin, Number(funnel.sendIntervalMaxSeconds ?? safeMin));
+    setFunnelIntervalMinSeconds(safeMin);
+    setFunnelIntervalMaxSeconds(safeMax);
+    setFunnelSendOrder(
+      funnel.sendOrder === "oldest_first" ? "oldest_first" : "newest_first"
+    );
+  }, [funnelData?.funnel]);
 
   useEffect(() => {
     if (previewTemplate.data?.success) {
@@ -138,6 +169,19 @@ export default function FunnelDetail() {
       delayValue: config.delayValue,
       delayUnit: config.delayUnit,
       sendTime: config.sendTime,
+    });
+  };
+
+  const handleSaveFunnelSettings = () => {
+    const safeMin = Math.max(0, Number(funnelIntervalMinSeconds || 0));
+    const safeMax = Math.max(safeMin, Number(funnelIntervalMaxSeconds || safeMin));
+    updateFunnelSettings.mutate({
+      funnelId,
+      updates: {
+        sendIntervalMinSeconds: safeMin,
+        sendIntervalMaxSeconds: safeMax,
+        sendOrder: funnelSendOrder,
+      },
     });
   };
 
@@ -277,6 +321,76 @@ export default function FunnelDetail() {
 
         <TabsContent value="templates" className="space-y-4">
           <div className="text-sm text-muted-foreground">Transmissões</div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+            <div className="space-y-3">
+              <div className="text-sm font-medium">Configuracao geral de envio do funil</div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Intervalo minimo (s)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="3600"
+                    value={funnelIntervalMinSeconds}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      setFunnelIntervalMinSeconds(Number.isNaN(value) ? 0 : value);
+                    }}
+                    className="text-sm h-9"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Intervalo maximo (s)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="3600"
+                    value={funnelIntervalMaxSeconds}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      setFunnelIntervalMaxSeconds(Number.isNaN(value) ? 0 : value);
+                    }}
+                    className="text-sm h-9"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Prioridade de envio</Label>
+                  <Select
+                    value={funnelSendOrder}
+                    onValueChange={(value) =>
+                      setFunnelSendOrder(value as FunnelSendOrder)
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="newest_first">Leads mais novos primeiro</SelectItem>
+                      <SelectItem value="oldest_first">Leads mais antigos primeiro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Esta configuracao vale para todas as transmissoes do funil.
+                  O intervalo eh sorteado entre minimo e maximo em cada envio.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={handleSaveFunnelSettings}
+                  disabled={updateFunnelSettings.isPending}
+                >
+                  {updateFunnelSettings.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Salvar configuracao"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
 
           <div className="space-y-3">
             {localTemplates.map((template, index) => (

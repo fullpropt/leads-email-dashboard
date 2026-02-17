@@ -158,6 +158,9 @@ export const funnels = pgTable("funnels", {
   descricao: text("descricao"),
   targetStatusPlataforma: varchar("target_status_plataforma", { length: 20 }).notNull().default("all"),
   targetSituacao: varchar("target_situacao", { length: 20 }).notNull().default("all"),
+  sendIntervalMinSeconds: integer("send_interval_min_seconds").notNull().default(10),
+  sendIntervalMaxSeconds: integer("send_interval_max_seconds").notNull().default(30),
+  sendOrder: varchar("send_order", { length: 20 }).notNull().default("newest_first"), // "newest_first" | "oldest_first"
   ativo: integer("ativo").notNull().default(1),
   criadoEm: timestamp("criado_em").defaultNow().notNull(),
   atualizadoEm: timestamp("atualizado_em").defaultNow().notNull(),

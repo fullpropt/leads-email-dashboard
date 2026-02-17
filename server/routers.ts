@@ -863,6 +863,9 @@ export const appRouter = router({
         nome: z.string(),
         targetStatusPlataforma: z.enum(["all", "accessed", "not_accessed"]),
         targetSituacao: z.enum(["all", "active", "abandoned"]),
+        sendIntervalMinSeconds: z.number().min(0).max(3600).default(10),
+        sendIntervalMaxSeconds: z.number().min(0).max(3600).default(30),
+        sendOrder: z.enum(["newest_first", "oldest_first"]).default("newest_first"),
       }))
       .mutation(async ({ input }) => {
         const { createFunnel } = await import("./db");
@@ -892,6 +895,9 @@ export const appRouter = router({
           descricao: z.string().optional(),
           targetStatusPlataforma: z.string().optional(),
           targetSituacao: z.string().optional(),
+          sendIntervalMinSeconds: z.number().min(0).max(3600).optional(),
+          sendIntervalMaxSeconds: z.number().min(0).max(3600).optional(),
+          sendOrder: z.enum(["newest_first", "oldest_first"]).optional(),
         }),
       }))
       .mutation(async ({ input }) => {
