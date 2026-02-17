@@ -559,7 +559,7 @@ export default function FunnelDetail() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-sm">Bloco de rotaÃ§Ã£o por conta</Label>
+                  <Label className="text-sm">Bloco de rotação por conta</Label>
                   <Input
                     type="number"
                     min="1"
