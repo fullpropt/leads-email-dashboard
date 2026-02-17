@@ -460,6 +460,10 @@ export const appRouter = router({
           return { success: false, message: "Lead não encontrado" };
         }
 
+        if (lead.unsubscribed === 1) {
+          return { success: false, message: "Lead suprimido (unsubscribe/block/bounce)" };
+        }
+
         // Buscar template (específico ou ativo)
         let template;
         if (input.templateId) {
@@ -603,7 +607,7 @@ export const appRouter = router({
         const { getAllLeads, replaceTemplateVariables, getEmailTemplateById } = await import("./db");
         const { sendEmail } = await import("./email");
 
-        const leads = await getAllLeads();
+        const leads = (await getAllLeads()).filter((lead) => lead.unsubscribed !== 1);
 
         if (leads.length === 0) {
           return { success: true, sent: 0, failed: 0, message: "Nenhum lead disponível" };

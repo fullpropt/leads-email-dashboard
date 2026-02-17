@@ -763,7 +763,12 @@ export async function getSelectedLeadsForManualSend() {
   try {
     return await db.select()
       .from(leads)
-      .where(eq(leads.selectedForManualSend, 1));
+      .where(
+        and(
+          eq(leads.selectedForManualSend, 1),
+          eq(leads.unsubscribed, 0)
+        )
+      );
   } catch (error) {
     console.error("[Database] Erro ao obter leads selecionados:", error);
     return [];
@@ -1464,6 +1469,9 @@ export async function getLeadsForTemplateFilters(
   try {
     const conditions = [];
 
+    // Nunca enviar para leads suprimidos/unsubscribed
+    conditions.push(eq(leads.unsubscribed, 0));
+
     // Filtro de email pendente
     if (onlyPending) {
       conditions.push(eq(leads.emailEnviado, 0));
@@ -1497,6 +1505,57 @@ export async function getLeadsForTemplateFilters(
   } catch (error) {
     console.error("[Database] Failed to get leads for template filters:", error);
     return [];
+  }
+}
+
+/**
+ * Suprime envios futuros para um email (marca lead como unsubscribed)
+ * @param email - Email do destinatario
+ * @param source - Fonte do evento (ex: sendgrid:block, mailgun:failed)
+ * @param reason - Motivo resumido
+ * @returns Quantidade de leads atualizados
+ */
+export async function suppressLeadsByEmail(
+  email: string,
+  source: string,
+  reason?: string
+): Promise<number> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot suppress lead: database not available");
+    return 0;
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  if (!normalizedEmail) return 0;
+
+  try {
+    const updated = await db
+      .update(leads)
+      .set({
+        unsubscribed: 1,
+        unsubscribedAt: new Date(),
+        selectedForManualSend: 0,
+      })
+      .where(
+        and(
+          sql`LOWER(${leads.email}) = ${normalizedEmail}`,
+          eq(leads.unsubscribed, 0)
+        )
+      )
+      .returning({ id: leads.id });
+
+    if (updated.length > 0) {
+      const reasonSuffix = reason ? ` reason="${reason}"` : "";
+      console.log(
+        `[Suppression] ${updated.length} lead(s) suprimido(s) por email=${normalizedEmail} source=${source}${reasonSuffix}`
+      );
+    }
+
+    return updated.length;
+  } catch (error) {
+    console.error("[Database] Failed to suppress leads by email:", error);
+    return 0;
   }
 }
 

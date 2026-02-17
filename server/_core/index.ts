@@ -15,6 +15,10 @@ import { startSyncScheduler } from "../scheduler-sync-tubetools";
 import { startTransmissionScheduler } from "../scheduler-transmissions";
 import { handleMailgunIncomingWebhook } from "../webhooks-support";
 import { handleStripeWebhook } from "../webhooks-stripe";
+import {
+  handleMailgunEventsWebhook,
+  handleSendGridEventsWebhook,
+} from "../webhooks-email-events";
 
 type SchedulerMode = "leader" | "enabled" | "disabled";
 
@@ -136,6 +140,16 @@ async function startServer() {
     express.raw({ type: "application/json" }),
     handleStripeWebhook
   );
+  app.post(
+    "/api/webhooks/sendgrid/events",
+    express.raw({ type: "application/json" }),
+    handleSendGridEventsWebhook
+  );
+  app.post(
+    "/api/webhooks/mailgun/events",
+    express.urlencoded({ extended: true }),
+    handleMailgunEventsWebhook
+  );
   
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
@@ -186,6 +200,18 @@ async function startServer() {
     res.status(200).json({
       status: "ok",
       message: "Stripe webhook endpoint está funcionando",
+    });
+  });
+  app.get("/api/webhooks/sendgrid/events/health", (req, res) => {
+    res.status(200).json({
+      status: "ok",
+      message: "SendGrid event webhook endpoint esta funcionando",
+    });
+  });
+  app.get("/api/webhooks/mailgun/events/health", (req, res) => {
+    res.status(200).json({
+      status: "ok",
+      message: "Mailgun event webhook endpoint esta funcionando",
     });
   });
 
@@ -345,6 +371,8 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/` );
     console.log(`Webhook endpoint (PerfectPay legado): http://localhost:${port}/api/webhooks/perfectpay`);
     console.log(`Webhook endpoint (Stripe): http://localhost:${port}/api/webhooks/stripe`);
+    console.log(`Webhook endpoint (SendGrid events): http://localhost:${port}/api/webhooks/sendgrid/events`);
+    console.log(`Webhook endpoint (Mailgun events): http://localhost:${port}/api/webhooks/mailgun/events`);
     
     // Inicializar schedulers
     void startBackgroundSchedulers();
