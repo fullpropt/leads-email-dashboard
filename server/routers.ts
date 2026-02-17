@@ -263,8 +263,44 @@ export const appRouter = router({
         // ✅ CORREÇÃO: Aplicar o processamento de template com header, CSS e rodapé
         const { processEmailTemplate } = await import("./emailTemplate");
         const html = processEmailTemplate(replacedHtml);
-        
+
         return { success: true, html, message: "Preview gerado com sucesso" };
+      }),
+    previewDraft: publicProcedure
+      .input(
+        z.object({
+          htmlContent: z.string(),
+        })
+      )
+      .query(async ({ input }) => {
+        const { getFirstLead, replaceTemplateVariables } = await import("./db");
+        const { processEmailTemplate } = await import("./emailTemplate");
+
+        const firstLead = await getFirstLead();
+        const leadForPreview = firstLead || {
+          nome: "Lead Exemplo",
+          email: "lead@example.com",
+          produto: "Produto Exemplo",
+          plano: "Plano Premium",
+          valor: 199,
+          dataAprovacao: new Date(),
+        };
+
+        const replacedHtml = replaceTemplateVariables(
+          input.htmlContent || "",
+          leadForPreview as any
+        );
+        const html = processEmailTemplate(
+          replacedHtml,
+          firstLead?.unsubscribeToken || undefined
+        );
+
+        return {
+          success: true,
+          html,
+          leadEmail: firstLead?.email || null,
+          usingSampleLead: !firstLead,
+        };
       }),
     toggleActive: publicProcedure
       .input(z.object({ templateId: z.number() }))

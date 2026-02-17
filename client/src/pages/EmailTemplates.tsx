@@ -235,63 +235,6 @@ function toDateTimeLocal(value: string | null) {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
-const LIVE_PREVIEW_SAMPLE_VALUES: Record<string, string> = {
-  "{{nome}}": "Lead Exemplo",
-  "{{email}}": "lead@example.com",
-  "{{produto}}": "Produto Exemplo",
-  "{{plano}}": "Plano Premium",
-  "{{valor}}": "R$ 199,00",
-};
-
-function replaceLivePreviewVariables(content: string) {
-  let output = content;
-  for (const [token, value] of Object.entries(LIVE_PREVIEW_SAMPLE_VALUES)) {
-    output = output.split(token).join(value);
-  }
-  return output;
-}
-
-function buildRealtimePreviewDoc(content: string) {
-  const withSampleValues = replaceLivePreviewVariables(content || "");
-  const trimmed = withSampleValues.trim();
-
-  if (!trimmed) {
-    return `
-      <html>
-        <body style="margin:0;padding:24px;font-family:Arial,sans-serif;color:#475569;background:#f8fafc;">
-          Sem conteudo para visualizar.
-        </body>
-      </html>
-    `;
-  }
-
-  const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(trimmed);
-  if (looksLikeHtml) {
-    return trimmed;
-  }
-
-  const escaped = trimmed
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
-  const paragraphs = escaped
-    .split(/\n{2,}/)
-    .map(
-      paragraph =>
-        `<p style="margin:0 0 12px 0;line-height:1.65;">${paragraph.replace(/\n/g, "<br/>")}</p>`
-    )
-    .join("");
-
-  return `
-    <html>
-      <body style="margin:0;padding:24px;font-family:Arial,sans-serif;color:#0f172a;background:#ffffff;">
-        ${paragraphs}
-      </body>
-    </html>
-  `;
-}
-
 export default function EmailTemplates() {
   const [, setLocation] = useLocation();
   const [templates, setTemplates] = useState<TemplateBlock[]>([]);
@@ -307,6 +250,8 @@ export default function EmailTemplates() {
   const [selectedTransmissionId, setSelectedTransmissionId] = useState<number | null>(null);
   const [previewTemplateId, setPreviewTemplateId] = useState<number | null>(null);
   const [previewTransmissionId, setPreviewTransmissionId] = useState<number | null>(null);
+  const [draftPreviewSourceHtml, setDraftPreviewSourceHtml] = useState("");
+  const [draftPreviewDebouncedHtml, setDraftPreviewDebouncedHtml] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
   const [editingTransmissionId, setEditingTransmissionId] = useState<number | null>(null);
@@ -592,6 +537,15 @@ export default function EmailTemplates() {
     }
   );
 
+  const draftPreview = trpc.emailTemplates.previewDraft.useQuery(
+    { htmlContent: draftPreviewDebouncedHtml },
+    {
+      enabled: activeTab === "editor" && draftPreviewDebouncedHtml.trim().length > 0,
+      retry: false,
+      refetchOnWindowFocus: false,
+    }
+  );
+
   React.useEffect(() => {
     if (allTemplates) {
       setTemplates(allTemplates.map(t => ({
@@ -682,6 +636,47 @@ export default function EmailTemplates() {
       toast.error("Erro ao gerar previa da transmissao");
     }
   }, [previewTransmission.data, previewTransmission.isError]);
+
+  React.useEffect(() => {
+    if (activeTab !== "editor") {
+      setDraftPreviewSourceHtml("");
+      return;
+    }
+
+    if (selectedTemplateId) {
+      const template = templates.find(item => item.id === selectedTemplateId);
+      setDraftPreviewSourceHtml(template?.htmlContent || "");
+      return;
+    }
+
+    if (selectedTransmissionId) {
+      const transmission = transmissions.find(item => item.id === selectedTransmissionId);
+      setDraftPreviewSourceHtml(transmission?.htmlContent || "");
+      return;
+    }
+
+    setDraftPreviewSourceHtml("");
+  }, [
+    activeTab,
+    selectedTemplateId,
+    selectedTransmissionId,
+    templates,
+    transmissions,
+  ]);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDraftPreviewDebouncedHtml(draftPreviewSourceHtml);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [draftPreviewSourceHtml]);
+
+  React.useEffect(() => {
+    if (draftPreview.isError) {
+      toast.error("Erro ao montar preview com o processador real de email.");
+    }
+  }, [draftPreview.isError]);
 
   const updateTemplateField = (templateId: number, field: keyof TemplateBlock, value: any) => {
     setTemplates(prev =>
@@ -1007,11 +1002,13 @@ export default function EmailTemplates() {
       : editorType === "transmission"
         ? selectedTransmission?.name
         : "";
-  const realtimePreviewDoc = buildRealtimePreviewDoc(
-    editorType === "template"
-      ? selectedTemplate?.htmlContent || ""
-      : selectedTransmission?.htmlContent || ""
-  );
+  const realtimePreviewDoc = draftPreview.data?.html || "";
+  const isRealtimePreviewLoading = draftPreview.isFetching;
+  const realtimePreviewMeta = draftPreview.data?.usingSampleLead
+    ? "Lead de exemplo usado no preview (sem lead real disponivel)."
+    : draftPreview.data?.leadEmail
+      ? `Lead usado no preview: ${draftPreview.data.leadEmail}`
+      : "";
   const rotationData = rotationOverview as RotationOverview | undefined;
   const rotationAccounts = rotationData?.accounts || [];
   const rotationChunkCurrentRaw = Number(
@@ -1033,13 +1030,6 @@ export default function EmailTemplates() {
 
   // Combinar templates e funis para exibicao
   const funnels = allFunnels || [];
-  const isPreviewLoading = previewTemplate.isLoading || previewTransmission.isLoading;
-  const selectedPreviewVariant =
-    previewMode === "transmission"
-      ? previewVariants.find(item => item.key === selectedPreviewVariantKey) ||
-        previewVariants[0] ||
-        null
-      : null;
 
   return (
     <div className="space-y-6">
@@ -2132,22 +2122,29 @@ export default function EmailTemplates() {
                 <CardHeader className="pb-3">
                   <CardTitle>Preview em tempo real</CardTitle>
                   <CardDescription>
-                    O preview usa valores de exemplo para variaveis como nome e produto.
+                    Este preview usa o mesmo processamento real do envio: estilos, header, footer e unsubscribe.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="overflow-hidden rounded-md border bg-slate-50 dark:bg-slate-900">
-                    <iframe
-                      srcDoc={realtimePreviewDoc}
-                      title="Realtime Email Preview"
-                      className="w-full border-0"
-                      style={{ height: "calc(100vh - 290px)", minHeight: "560px" }}
-                    />
-                  </div>
-                  {isPreviewLoading ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Atualizando dados de preview...
-                    </p>
+                  {realtimePreviewDoc ? (
+                    <div className="overflow-hidden rounded-md border bg-slate-50 dark:bg-slate-900">
+                      <iframe
+                        srcDoc={realtimePreviewDoc}
+                        title="Realtime Email Preview"
+                        className="w-full border-0"
+                        style={{ height: "calc(100vh - 290px)", minHeight: "560px" }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-md border bg-slate-50 dark:bg-slate-900 px-3 py-6 text-sm text-muted-foreground">
+                      Digite conteudo no editor para gerar o preview com o formatador real de envio.
+                    </div>
+                  )}
+                  {realtimePreviewMeta ? (
+                    <p className="mt-2 text-xs text-muted-foreground">{realtimePreviewMeta}</p>
+                  ) : null}
+                  {isRealtimePreviewLoading ? (
+                    <p className="mt-2 text-xs text-muted-foreground">Atualizando preview...</p>
                   ) : null}
                 </CardContent>
               </Card>
