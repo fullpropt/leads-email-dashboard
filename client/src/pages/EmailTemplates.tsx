@@ -14,9 +14,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
+  ArrowLeft,
   Eye,
   Send,
   Loader2,
@@ -90,7 +91,7 @@ interface FunnelBlock {
   targetSituacao: string;
   sendIntervalMinSeconds: number;
   sendIntervalMaxSeconds: number;
-  sendOrder: "newest_first" | "oldest_first";
+  sendOrder: string;
   ativo: number;
   criadoEm: Date;
   atualizadoEm: Date;
@@ -234,6 +235,63 @@ function toDateTimeLocal(value: string | null) {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
+const LIVE_PREVIEW_SAMPLE_VALUES: Record<string, string> = {
+  "{{nome}}": "Lead Exemplo",
+  "{{email}}": "lead@example.com",
+  "{{produto}}": "Produto Exemplo",
+  "{{plano}}": "Plano Premium",
+  "{{valor}}": "R$ 199,00",
+};
+
+function replaceLivePreviewVariables(content: string) {
+  let output = content;
+  for (const [token, value] of Object.entries(LIVE_PREVIEW_SAMPLE_VALUES)) {
+    output = output.split(token).join(value);
+  }
+  return output;
+}
+
+function buildRealtimePreviewDoc(content: string) {
+  const withSampleValues = replaceLivePreviewVariables(content || "");
+  const trimmed = withSampleValues.trim();
+
+  if (!trimmed) {
+    return `
+      <html>
+        <body style="margin:0;padding:24px;font-family:Arial,sans-serif;color:#475569;background:#f8fafc;">
+          Sem conteudo para visualizar.
+        </body>
+      </html>
+    `;
+  }
+
+  const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(trimmed);
+  if (looksLikeHtml) {
+    return trimmed;
+  }
+
+  const escaped = trimmed
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  const paragraphs = escaped
+    .split(/\n{2,}/)
+    .map(
+      paragraph =>
+        `<p style="margin:0 0 12px 0;line-height:1.65;">${paragraph.replace(/\n/g, "<br/>")}</p>`
+    )
+    .join("");
+
+  return `
+    <html>
+      <body style="margin:0;padding:24px;font-family:Arial,sans-serif;color:#0f172a;background:#ffffff;">
+        ${paragraphs}
+      </body>
+    </html>
+  `;
+}
+
 export default function EmailTemplates() {
   const [, setLocation] = useLocation();
   const [templates, setTemplates] = useState<TemplateBlock[]>([]);
@@ -246,6 +304,7 @@ export default function EmailTemplates() {
   const [selectedPreviewVariantKey, setSelectedPreviewVariantKey] = useState<string>("");
   const [activeTab, setActiveTab] = useState("items");
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [selectedTransmissionId, setSelectedTransmissionId] = useState<number | null>(null);
   const [previewTemplateId, setPreviewTemplateId] = useState<number | null>(null);
   const [previewTransmissionId, setPreviewTransmissionId] = useState<number | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -594,8 +653,6 @@ export default function EmailTemplates() {
       setPreviewInfo("");
       setPreviewVariants([]);
       setSelectedPreviewVariantKey("");
-      setActiveTab("preview");
-      toast.success("Previa gerada com sucesso!");
     } else if (previewTemplate.isError) {
       toast.error("Erro ao gerar pre-visualizacao");
     }
@@ -621,8 +678,6 @@ export default function EmailTemplates() {
         );
       }
 
-      setActiveTab("preview");
-      toast.success("Previa da transmissao gerada com sucesso!");
     } else if (previewTransmission.isError) {
       toast.error("Erro ao gerar previa da transmissao");
     }
@@ -798,7 +853,17 @@ export default function EmailTemplates() {
     setDeleteItemName("");
   };
 
-  const handleSaveFunnel = (funnelId: number, updates: { nome?: string; targetStatusPlataforma?: string; targetSituacao?: string }) => {
+  const handleSaveFunnel = (
+    funnelId: number,
+    updates: {
+      nome?: string;
+      targetStatusPlataforma?: string;
+      targetSituacao?: string;
+      sendIntervalMinSeconds?: number;
+      sendIntervalMaxSeconds?: number;
+      sendOrder?: "newest_first" | "oldest_first";
+    }
+  ) => {
     updateFunnel.mutate({ funnelId, updates });
   };
 
@@ -825,18 +890,30 @@ export default function EmailTemplates() {
     );
   };
 
+  const openTemplateWorkspace = (templateId: number) => {
+    setSelectedTemplateId(templateId);
+    setSelectedTransmissionId(null);
+    setActiveTab("editor");
+  };
+
+  const openTransmissionWorkspace = (transmissionId: number) => {
+    setSelectedTransmissionId(transmissionId);
+    setSelectedTemplateId(null);
+    setActiveTab("editor");
+  };
+
+  const handleBackToItems = () => {
+    setActiveTab("items");
+    setSelectedTemplateId(null);
+    setSelectedTransmissionId(null);
+  };
+
   const handlePreview = (templateId: number) => {
     if (!templateId) {
       toast.error("Template nao encontrado");
       return;
     }
-    setPreviewMode("template");
-    setPreviewTransmissionId(null);
-    setPreviewSubject("");
-    setPreviewInfo("");
-    setPreviewVariants([]);
-    setSelectedPreviewVariantKey("");
-    setPreviewTemplateId(templateId);
+    openTemplateWorkspace(templateId);
   };
 
   const handlePreviewTransmission = (transmissionId: number) => {
@@ -844,11 +921,7 @@ export default function EmailTemplates() {
       toast.error("Transmissao nao encontrada");
       return;
     }
-    setPreviewMode("transmission");
-    setPreviewTemplateId(null);
-    setPreviewVariants([]);
-    setSelectedPreviewVariantKey("");
-    setPreviewTransmissionId(transmissionId);
+    openTransmissionWorkspace(transmissionId);
   };
 
   const handleSelectPreviewVariant = (variantKey: string) => {
@@ -869,7 +942,6 @@ export default function EmailTemplates() {
       toast.success(result.message || "Variacoes geradas com sucesso");
       setPreviewMode("transmission");
       setPreviewTemplateId(null);
-      setActiveTab("preview");
       if (previewTransmissionId === transmissionId) {
         await previewTransmission.refetch();
       } else {
@@ -915,13 +987,31 @@ export default function EmailTemplates() {
   };
 
   const openHtmlEditor = (templateId: number) => {
-    setSelectedTemplateId(templateId);
-    setActiveTab("editor");
+    openTemplateWorkspace(templateId);
   };
 
   const selectedTemplate = selectedTemplateId
     ? templates.find(t => t.id === selectedTemplateId)
     : null;
+  const selectedTransmission = selectedTransmissionId
+    ? transmissions.find(t => t.id === selectedTransmissionId)
+    : null;
+  const editorType: "template" | "transmission" | null = selectedTemplate
+    ? "template"
+    : selectedTransmission
+      ? "transmission"
+      : null;
+  const editorTitle =
+    editorType === "template"
+      ? selectedTemplate?.nome
+      : editorType === "transmission"
+        ? selectedTransmission?.name
+        : "";
+  const realtimePreviewDoc = buildRealtimePreviewDoc(
+    editorType === "template"
+      ? selectedTemplate?.htmlContent || ""
+      : selectedTransmission?.htmlContent || ""
+  );
   const rotationData = rotationOverview as RotationOverview | undefined;
   const rotationAccounts = rotationData?.accounts || [];
   const rotationChunkCurrentRaw = Number(
@@ -944,20 +1034,12 @@ export default function EmailTemplates() {
   // Combinar templates e funis para exibicao
   const funnels = allFunnels || [];
   const isPreviewLoading = previewTemplate.isLoading || previewTransmission.isLoading;
-  const previewDescription =
-    previewMode === "transmission"
-      ? "Visualize como a transmissao sera exibida para o primeiro lead elegivel."
-      : "Visualize como o email sera exibido no primeiro lead";
   const selectedPreviewVariant =
     previewMode === "transmission"
       ? previewVariants.find(item => item.key === selectedPreviewVariantKey) ||
         previewVariants[0] ||
         null
       : null;
-  const previewEmptyMessage =
-    previewMode === "transmission"
-      ? 'Selecione uma transmissao e clique em "Visualizar" para ver a previa.'
-      : 'Selecione um template e clique em "Visualizar Email" para ver a pre-visualizacao.';
 
   return (
     <div className="space-y-6">
@@ -1141,19 +1223,6 @@ export default function EmailTemplates() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-3">
-          <TabsTrigger value="items" className="gap-2">
-            Itens
-          </TabsTrigger>
-          <TabsTrigger value="preview" className="gap-2">
-            <Eye className="h-4 w-4" />
-            Pré-visualização
-          </TabsTrigger>
-          <TabsTrigger value="editor" className="gap-2">
-            <Code className="h-4 w-4" />
-            Editor HTML
-          </TabsTrigger>
-        </TabsList>
 
         <TabsContent value="items" className="space-y-4">
           <div className="text-sm text-muted-foreground">Itens</div>
@@ -1161,13 +1230,10 @@ export default function EmailTemplates() {
           <div className="space-y-3">
             {/* Renderizar Templates */}
             {templates.map((template) => (
-              <div 
-                key={`template-${template.id}`} 
+              <div
+                key={`template-${template.id}`}
                 className={`bg-white dark:bg-slate-950 rounded-xl border border-sky-100 dark:border-sky-900 border-l-4 border-l-sky-300 dark:border-l-sky-700 shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${template.ativo === 0 ? 'opacity-60' : ''}`}
-                onClick={() => {
-                  setSelectedTemplateId(template.id);
-                  handlePreview(template.id);
-                }}
+                onClick={() => openTemplateWorkspace(template.id)}
               >
                 <div className="px-4 py-3">
                   <div className="flex items-center gap-4">
@@ -1175,7 +1241,7 @@ export default function EmailTemplates() {
                     <div className="px-4 py-1.5 rounded-full border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950 text-sm font-medium text-sky-600 dark:text-sky-400 min-w-[90px] text-center">
                       Template
                     </div>
-                    
+
                     {/* Nome do template */}
                     <div className="flex-1" onClick={(e) => e.stopPropagation()}>
                       <Input
@@ -1186,20 +1252,20 @@ export default function EmailTemplates() {
                         placeholder="Nome do Template"
                       />
                     </div>
-                    
+
                     {/* Filtros como badges */}
                     <div className="flex items-center gap-1 text-xs text-cyan-600 dark:text-cyan-400">
                       <span>{SITUACAO_SHORT[template.targetSituacao]}</span>
                       <span className="text-slate-400">.</span>
                       <span>{STATUS_PLATAFORMA_SHORT[template.targetStatusPlataforma]}</span>
                     </div>
-                    
+
                     {/* Contador de emails enviados */}
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400" title="Emails enviados">
                       <Mail className="h-3.5 w-3.5" />
                       <span>{emailSentCounts?.[template.id] || 0}</span>
                     </div>
-                    
+
                     {/* Ações */}
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {/* Botão de configurações */}
@@ -1211,7 +1277,7 @@ export default function EmailTemplates() {
                       >
                         <Settings className="h-4 w-4" />
                       </Button>
-                      
+
                       {/* Botão Enviar */}
                       <Button
                         variant="outline"
@@ -1229,7 +1295,7 @@ export default function EmailTemplates() {
                           </>
                         )}
                       </Button>
-                      
+
                       {/* Botão S (enviar para selecionados) */}
                       <Button
                         variant="outline"
@@ -1241,10 +1307,10 @@ export default function EmailTemplates() {
                       >
                         S
                       </Button>
-                      
+
                       {/* Seta para detalhes */}
-                      <ChevronRight 
-                        className="h-5 w-5 text-slate-300" 
+                      <ChevronRight
+                        className="h-5 w-5 text-slate-300"
                       />
                     </div>
                   </div>
@@ -1310,7 +1376,7 @@ export default function EmailTemplates() {
                             onClick={() => handlePreview(template.id)}
                           >
                             <Eye className="h-4 w-4 mr-1" />
-                            Visualizar
+                            Editar + Preview
                           </Button>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1348,11 +1414,7 @@ export default function EmailTemplates() {
               <div
                 key={`transmission-${transmission.id}`}
                 className={`bg-white dark:bg-slate-950 rounded-xl border border-amber-100 dark:border-amber-900 border-l-4 border-l-amber-400 dark:border-l-amber-700 shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${transmission.enabled === 0 ? "opacity-60" : ""}`}
-                onClick={() =>
-                  setEditingTransmissionId(
-                    editingTransmissionId === transmission.id ? null : transmission.id
-                  )
-                }
+                onClick={() => openTransmissionWorkspace(transmission.id)}
               >
                 <div className="px-4 py-3">
                   <div className="flex items-center gap-4">
@@ -1398,7 +1460,7 @@ export default function EmailTemplates() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handlePreviewTransmission(transmission.id)}
+                        onClick={() => openTransmissionWorkspace(transmission.id)}
                         disabled={previewTransmission.isLoading}
                         className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-200 dark:border-amber-700 dark:hover:bg-amber-950"
                       >
@@ -1407,7 +1469,7 @@ export default function EmailTemplates() {
                         ) : (
                           <>
                             <Eye className="h-3.5 w-3.5" />
-                            <span>Visualizar</span>
+                            <span>Editar</span>
                           </>
                         )}
                       </Button>
@@ -1717,38 +1779,38 @@ export default function EmailTemplates() {
 
             {/* Renderizar Funis */}
             {funnels.map((funnel: FunnelBlock) => (
-              <div 
-                key={`funnel-${funnel.id}`} 
+              <div
+                key={`funnel-${funnel.id}`}
                 className={`bg-white dark:bg-slate-950 rounded-xl border border-cyan-100 dark:border-cyan-900 border-l-4 border-l-cyan-400 dark:border-l-cyan-700 shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${funnel.ativo === 0 ? 'opacity-60' : ''}`}
                 onClick={() => handleFunnelClick(funnel.id)}
               >
                 <div className="px-4 py-3">
                   <div className="flex items-center gap-4">
                     {/* Badge de tipo - Funil com cor diferente */}
-                    <div 
+                    <div
                       className="px-4 py-1.5 rounded-full border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950 text-sm font-medium text-cyan-600 dark:text-cyan-400 min-w-[90px] text-center"
                     >
                       Funil
                     </div>
-                    
+
                     {/* Nome do funil */}
                     <div className="flex-1">
                       <span className="text-sm font-medium">{funnel.nome}</span>
                     </div>
-                    
+
                     {/* Filtros como badges */}
                     <div className="flex items-center gap-1 text-xs text-cyan-600 dark:text-cyan-400">
                       <span>{SITUACAO_SHORT[funnel.targetSituacao] || funnel.targetSituacao}</span>
                       <span className="text-slate-400">.</span>
                       <span>{STATUS_PLATAFORMA_SHORT[funnel.targetStatusPlataforma] || funnel.targetStatusPlataforma}</span>
                     </div>
-                    
+
                     {/* Contador de emails enviados */}
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400" title="Emails enviados">
                       <Mail className="h-3.5 w-3.5" />
                       <span>{funnelEmailStats?.find((f: any) => f.id === funnel.id)?.emailsSent || 0}</span>
                     </div>
-                    
+
                     {/* Ações */}
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {/* Botão de configurações */}
@@ -1760,9 +1822,9 @@ export default function EmailTemplates() {
                       >
                         <Settings className="h-4 w-4" />
                       </Button>
-                      
+
                       {/* Toggle Off/On */}
-                      <div 
+                      <div
                         className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-slate-200 dark:border-slate-700"
                       >
                         <span className="text-xs text-slate-400">Off</span>
@@ -1773,10 +1835,10 @@ export default function EmailTemplates() {
                         />
                         <span className={`text-xs ${funnel.ativo === 1 ? 'text-cyan-500 font-medium' : 'text-slate-400'}`}>On</span>
                       </div>
-                      
+
                       {/* Seta para detalhes */}
-                      <ChevronRight 
-                        className="h-5 w-5 text-slate-300" 
+                      <ChevronRight
+                        className="h-5 w-5 text-slate-300"
                       />
                     </div>
                   </div>
@@ -1830,6 +1892,75 @@ export default function EmailTemplates() {
                           </Select>
                         </div>
                       </div>
+                      <div className="space-y-3 rounded-lg border border-cyan-100 bg-cyan-50/40 p-3 dark:border-cyan-900/60 dark:bg-cyan-950/20">
+                        <div className="text-xs font-medium">Configuracao geral de envio do funil</div>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                          <div className="space-y-2">
+                            <Label className="text-xs">Intervalo minimo (s)</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={3600}
+                              defaultValue={funnel.sendIntervalMinSeconds}
+                              onBlur={event => {
+                                const min = Math.max(
+                                  0,
+                                  Math.min(3600, Number(event.target.value || 0))
+                                );
+                                const safeMax = Math.max(min, Number(funnel.sendIntervalMaxSeconds || min));
+                                handleSaveFunnel(funnel.id, {
+                                  sendIntervalMinSeconds: min,
+                                  sendIntervalMaxSeconds: safeMax,
+                                });
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs">Intervalo maximo (s)</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={3600}
+                              defaultValue={funnel.sendIntervalMaxSeconds}
+                              onBlur={event => {
+                                const max = Math.max(
+                                  0,
+                                  Math.min(3600, Number(event.target.value || 0))
+                                );
+                                const safeMax = Math.max(
+                                  Number(funnel.sendIntervalMinSeconds || 0),
+                                  max
+                                );
+                                handleSaveFunnel(funnel.id, {
+                                  sendIntervalMaxSeconds: safeMax,
+                                });
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs">Prioridade de envio</Label>
+                            <Select
+                              defaultValue={funnel.sendOrder}
+                              onValueChange={value =>
+                                handleSaveFunnel(funnel.id, {
+                                  sendOrder: value as "newest_first" | "oldest_first",
+                                })
+                              }
+                            >
+                              <SelectTrigger className="text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="newest_first">Leads mais novos primeiro</SelectItem>
+                                <SelectItem value="oldest_first">Leads mais antigos primeiro</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Este intervalo e aplicado em todas as transmissoes do funil.
+                        </p>
+                      </div>
                       <div className="flex items-center justify-between">
                         <Button
                           variant="ghost"
@@ -1874,129 +2005,158 @@ export default function EmailTemplates() {
             </Button>
           </div>
         </TabsContent>
+        <TabsContent value="editor" className="space-y-4">
+          <div className="flex items-center gap-2 text-sm">
+            <Button variant="ghost" size="sm" onClick={handleBackToItems} className="gap-1 px-2">
+              <ArrowLeft className="h-4 w-4" />
+              Voltar para Itens
+            </Button>
+            {editorTitle ? (
+              <>
+                <span className="text-slate-300">|</span>
+                <span className="font-medium text-slate-700 dark:text-slate-300">{editorTitle}</span>
+              </>
+            ) : null}
+          </div>
 
-        <TabsContent value="preview" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Pré-visualização do Email</CardTitle>
-              <CardDescription>{previewDescription}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isPreviewLoading && (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-              )}
-              {previewHtml && !isPreviewLoading ? (
-                <div className="space-y-3">
-                  {previewMode === "transmission" && previewVariants.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {previewVariants.map(variant => (
+          {editorType ? (
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <Card className="border-slate-200 dark:border-slate-800">
+                <CardHeader className="pb-3">
+                  <CardTitle>
+                    {editorType === "template" ? "Editor de Template" : "Editor de Transmissao"}
+                  </CardTitle>
+                  <CardDescription>
+                    Edite o conteudo no painel esquerdo e acompanhe o resultado no preview em tempo real.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {editorType === "template" && selectedTemplate ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Assunto</Label>
+                        <Input
+                          value={selectedTemplate.assunto}
+                          onChange={event =>
+                            updateTemplateField(selectedTemplate.id, "assunto", event.target.value)
+                          }
+                          placeholder="Assunto do email"
+                        />
+                      </div>
+                      <SimplifiedEmailEditor
+                        htmlContent={selectedTemplate.htmlContent}
+                        onContentChange={content =>
+                          updateTemplateField(selectedTemplate.id, "htmlContent", content)
+                        }
+                      />
+                      <div className="flex gap-2 pt-2 border-t">
                         <Button
-                          key={variant.key}
-                          type="button"
-                          size="sm"
-                          variant={selectedPreviewVariantKey === variant.key ? "default" : "outline"}
-                          className={`h-8 text-xs ${
-                            !variant.applied && selectedPreviewVariantKey !== variant.key
-                              ? "border-amber-300 text-amber-700 hover:bg-amber-50"
-                              : ""
-                          }`}
-                          onClick={() => handleSelectPreviewVariant(variant.key)}
+                          onClick={() => handleSaveTemplate(selectedTemplate.id)}
+                          disabled={updateTemplate.isPending}
+                          className="gap-2"
                         >
-                          {variant.label}
-                          {!variant.applied ? " - sem variacao" : ""}
+                          {updateTemplate.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                          Salvar Alteracoes
                         </Button>
-                      ))}
-                    </div>
-                  )}
-                  {previewMode === "transmission" && (
-                    <div className="rounded-md border bg-amber-50/60 dark:bg-amber-950/30 px-3 py-2 text-xs">
-                      {selectedPreviewVariant?.fromEmail && (
-                        <p className="text-amber-700 dark:text-amber-300">
-                          <strong>Conta:</strong> {selectedPreviewVariant.fromEmail}
-                        </p>
-                      )}
-                      {previewSubject && (
-                        <p className="text-amber-800 dark:text-amber-200">
-                          <strong>Assunto:</strong> {previewSubject}
-                        </p>
-                      )}
-                      {previewInfo && (
-                        <p className="text-amber-700 dark:text-amber-300">{previewInfo}</p>
-                      )}
-                      {selectedPreviewVariant &&
-                        !selectedPreviewVariant.applied &&
-                        selectedPreviewVariant.reason && (
-                          <p className="text-amber-700 dark:text-amber-300">
-                            <strong>Variacao:</strong>{" "}
-                            {formatVariationReason(selectedPreviewVariant.reason)}
-                          </p>
-                        )}
-                    </div>
-                  )}
-                  <div className="border rounded-lg bg-gray-50 overflow-hidden">
+                      </div>
+                    </>
+                  ) : null}
+
+                  {editorType === "transmission" && selectedTransmission ? (
+                    <>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label className="text-xs">Nome</Label>
+                          <Input
+                            value={selectedTransmission.name}
+                            onChange={event =>
+                              updateTransmissionField(
+                                selectedTransmission.id,
+                                "name",
+                                event.target.value
+                              )
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Assunto</Label>
+                          <Input
+                            value={selectedTransmission.subject}
+                            onChange={event =>
+                              updateTransmissionField(
+                                selectedTransmission.id,
+                                "subject",
+                                event.target.value
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+                      <SimplifiedEmailEditor
+                        htmlContent={selectedTransmission.htmlContent}
+                        onContentChange={content =>
+                          updateTransmissionField(selectedTransmission.id, "htmlContent", content)
+                        }
+                      />
+                      <div className="flex flex-wrap gap-2 pt-2 border-t">
+                        <Button
+                          onClick={() => handleSaveTransmission(selectedTransmission.id)}
+                          disabled={updateTransmission.isPending}
+                          className="gap-2"
+                        >
+                          {updateTransmission.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                          Salvar Alteracoes
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => handleLaunchTransmission(selectedTransmission.id)}
+                          disabled={launchTransmission.isPending || selectedTransmission.enabled === 0}
+                        >
+                          {selectedTransmission.mode === "scheduled" ? "Agendar" : "Enviar"}
+                        </Button>
+                      </div>
+                    </>
+                  ) : null}
+                </CardContent>
+              </Card>
+
+              <Card className="border-slate-200 dark:border-slate-800">
+                <CardHeader className="pb-3">
+                  <CardTitle>Preview em tempo real</CardTitle>
+                  <CardDescription>
+                    O preview usa valores de exemplo para variaveis como nome e produto.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-hidden rounded-md border bg-slate-50 dark:bg-slate-900">
                     <iframe
-                      srcDoc={previewHtml}
-                      title="Email Preview"
+                      srcDoc={realtimePreviewDoc}
+                      title="Realtime Email Preview"
                       className="w-full border-0"
-                      style={{ height: "calc(100vh - 280px)", minHeight: "500px" }}
+                      style={{ height: "calc(100vh - 290px)", minHeight: "560px" }}
                     />
                   </div>
-                </div>
-              ) : !isPreviewLoading && (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Eye className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>{previewEmptyMessage}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="editor" className="space-y-6">
-          {selectedTemplate ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Editor de Email - {selectedTemplate.nome}</CardTitle>
-                <CardDescription>
-                  Crie seu email usando texto simples ou HTML. O sistema aplica automaticamente estilos, header, footer e link de unsubscribe.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <SimplifiedEmailEditor
-                  htmlContent={selectedTemplate.htmlContent}
-                  onContentChange={(content) => updateTemplateField(selectedTemplate.id, "htmlContent", content)}
-                  onPreview={() => handlePreview(selectedTemplate.id)}
-                  isPreviewLoading={previewTemplate.isLoading}
-                />
-                <div className="flex gap-2 pt-4 border-t">
-                  <Button
-                    onClick={() => handleSaveTemplate(selectedTemplate.id)}
-                    disabled={updateTemplate.isPending}
-                    className="gap-2"
-                  >
-                    {updateTemplate.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
-                    Salvar Alterações
-                  </Button>
-                  <Button
-                    onClick={() => setActiveTab("items")}
-                    variant="outline"
-                  >
-                    Voltar
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                  {isPreviewLoading ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Atualizando dados de preview...
+                    </p>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </div>
           ) : (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
                 <Code className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Selecione um template na aba "Itens" para editar seu conteúdo</p>
+                <p>Selecione um template ou transmissao em Itens para abrir o editor.</p>
               </CardContent>
             </Card>
           )}

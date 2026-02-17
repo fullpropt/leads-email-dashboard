@@ -9,7 +9,7 @@ import {
   Card,
   CardContent,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -38,7 +38,61 @@ interface FunnelTemplateBlock {
   atualizadoEm: Date;
 }
 
-type FunnelSendOrder = "newest_first" | "oldest_first";
+const LIVE_PREVIEW_SAMPLE_VALUES: Record<string, string> = {
+  "{{nome}}": "Lead Exemplo",
+  "{{email}}": "lead@example.com",
+  "{{produto}}": "Produto Exemplo",
+  "{{plano}}": "Plano Premium",
+  "{{valor}}": "R$ 199,00",
+};
+
+function replaceLivePreviewVariables(content: string) {
+  let output = content;
+  for (const [token, value] of Object.entries(LIVE_PREVIEW_SAMPLE_VALUES)) {
+    output = output.split(token).join(value);
+  }
+  return output;
+}
+
+function buildRealtimePreviewDoc(content: string) {
+  const withSampleValues = replaceLivePreviewVariables(content || "");
+  const trimmed = withSampleValues.trim();
+
+  if (!trimmed) {
+    return `
+      <html>
+        <body style="margin:0;padding:24px;font-family:Arial,sans-serif;color:#475569;background:#f8fafc;">
+          Sem conteudo para visualizar.
+        </body>
+      </html>
+    `;
+  }
+
+  const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(trimmed);
+  if (looksLikeHtml) {
+    return trimmed;
+  }
+
+  const escaped = trimmed
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  const paragraphs = escaped
+    .split(/\n{2,}/)
+    .map(
+      paragraph =>
+        `<p style="margin:0 0 12px 0;line-height:1.65;">${paragraph.replace(/\n/g, "<br/>")}</p>`
+    )
+    .join("");
+
+  return `
+    <html>
+      <body style="margin:0;padding:24px;font-family:Arial,sans-serif;color:#0f172a;background:#ffffff;">
+        ${paragraphs}
+      </body>
+    </html>
+  `;
+}
 
 export default function FunnelDetail() {
   const params = useParams();
@@ -48,12 +102,8 @@ export default function FunnelDetail() {
   const [activeTab, setActiveTab] = useState("templates");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
-  const [previewHtml, setPreviewHtml] = useState("");
   const [localTemplates, setLocalTemplates] = useState<FunnelTemplateBlock[]>([]);
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
-  const [funnelIntervalMinSeconds, setFunnelIntervalMinSeconds] = useState(10);
-  const [funnelIntervalMaxSeconds, setFunnelIntervalMaxSeconds] = useState(30);
-  const [funnelSendOrder, setFunnelSendOrder] = useState<FunnelSendOrder>("newest_first");
 
   // Estados para diálogo de confirmação de exclusão
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -112,21 +162,6 @@ export default function FunnelDetail() {
     },
   });
 
-  const updateFunnelSettings = trpc.funnels.update.useMutation({
-    onSuccess: () => {
-      toast.success("Configuracoes do funil atualizadas!");
-      refetchFunnel();
-    },
-    onError: () => {
-      toast.error("Erro ao atualizar configuracoes do funil");
-    },
-  });
-
-  const previewTemplate = trpc.funnelTemplates.previewWithFirstLead.useQuery(
-    { templateId: selectedTemplateId! },
-    { enabled: selectedTemplateId !== null && selectedTemplateId > 0 && activeTab === "preview" }
-  );
-
   // Sincronizar templates locais com dados do servidor
   useEffect(() => {
     if (funnelData?.templates) {
@@ -136,28 +171,6 @@ export default function FunnelDetail() {
       })));
     }
   }, [funnelData]);
-
-  useEffect(() => {
-    if (!funnelData?.funnel) return;
-    const funnel = funnelData.funnel as {
-      sendIntervalMinSeconds?: number | null;
-      sendIntervalMaxSeconds?: number | null;
-      sendOrder?: FunnelSendOrder | null;
-    };
-    const safeMin = Math.max(0, Number(funnel.sendIntervalMinSeconds ?? 10));
-    const safeMax = Math.max(safeMin, Number(funnel.sendIntervalMaxSeconds ?? safeMin));
-    setFunnelIntervalMinSeconds(safeMin);
-    setFunnelIntervalMaxSeconds(safeMax);
-    setFunnelSendOrder(
-      funnel.sendOrder === "oldest_first" ? "oldest_first" : "newest_first"
-    );
-  }, [funnelData?.funnel]);
-
-  useEffect(() => {
-    if (previewTemplate.data?.success) {
-      setPreviewHtml(previewTemplate.data.html);
-    }
-  }, [previewTemplate.data]);
 
   const handleBack = () => {
     setLocation("/email-templates");
@@ -169,19 +182,6 @@ export default function FunnelDetail() {
       delayValue: config.delayValue,
       delayUnit: config.delayUnit,
       sendTime: config.sendTime,
-    });
-  };
-
-  const handleSaveFunnelSettings = () => {
-    const safeMin = Math.max(0, Number(funnelIntervalMinSeconds || 0));
-    const safeMax = Math.max(safeMin, Number(funnelIntervalMaxSeconds || safeMin));
-    updateFunnelSettings.mutate({
-      funnelId,
-      updates: {
-        sendIntervalMinSeconds: safeMin,
-        sendIntervalMaxSeconds: safeMax,
-        sendOrder: funnelSendOrder,
-      },
     });
   };
 
@@ -235,7 +235,7 @@ export default function FunnelDetail() {
 
   const handlePreview = (templateId: number) => {
     setSelectedTemplateId(templateId);
-    setActiveTab("preview");
+    setActiveTab("editor");
   };
 
   const openHtmlEditor = (templateId: number) => {
@@ -243,9 +243,15 @@ export default function FunnelDetail() {
     setActiveTab("editor");
   };
 
+  const handleBackToTransmissions = () => {
+    setActiveTab("templates");
+    setSelectedTemplateId(null);
+  };
+
   const selectedTemplate = selectedTemplateId
     ? localTemplates.find(t => t.id === selectedTemplateId)
     : null;
+  const realtimePreviewDoc = buildRealtimePreviewDoc(selectedTemplate?.htmlContent || "");
 
   if (isLoading) {
     return (
@@ -293,7 +299,7 @@ export default function FunnelDetail() {
           <span className="text-slate-300">|</span>
           <span className="font-medium text-slate-700 dark:text-slate-300">{funnel.nome}</span>
         </div>
-        
+
         {/* Estatísticas do Funil */}
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400" title="Total de emails enviados">
@@ -305,98 +311,14 @@ export default function FunnelDetail() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-xl grid-cols-3">
-          <TabsTrigger value="templates" className="gap-2">
-            Transmissões
-          </TabsTrigger>
-          <TabsTrigger value="preview" className="gap-2">
-            <Eye className="h-4 w-4" />
-            Pré-visualização
-          </TabsTrigger>
-          <TabsTrigger value="editor" className="gap-2">
-            <Code className="h-4 w-4" />
-            Editor HTML
-          </TabsTrigger>
-        </TabsList>
-
         <TabsContent value="templates" className="space-y-4">
           <div className="text-sm text-muted-foreground">Transmissões</div>
-
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-            <div className="space-y-3">
-              <div className="text-sm font-medium">Configuracao geral de envio do funil</div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Intervalo minimo (s)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="3600"
-                    value={funnelIntervalMinSeconds}
-                    onChange={(e) => {
-                      const value = Number(e.target.value);
-                      setFunnelIntervalMinSeconds(Number.isNaN(value) ? 0 : value);
-                    }}
-                    className="text-sm h-9"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Intervalo maximo (s)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="3600"
-                    value={funnelIntervalMaxSeconds}
-                    onChange={(e) => {
-                      const value = Number(e.target.value);
-                      setFunnelIntervalMaxSeconds(Number.isNaN(value) ? 0 : value);
-                    }}
-                    className="text-sm h-9"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Prioridade de envio</Label>
-                  <Select
-                    value={funnelSendOrder}
-                    onValueChange={(value) =>
-                      setFunnelSendOrder(value as FunnelSendOrder)
-                    }
-                  >
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="newest_first">Leads mais novos primeiro</SelectItem>
-                      <SelectItem value="oldest_first">Leads mais antigos primeiro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <p className="text-xs text-muted-foreground">
-                  Esta configuracao vale para todas as transmissoes do funil.
-                  O intervalo eh sorteado entre minimo e maximo em cada envio.
-                </p>
-                <Button
-                  size="sm"
-                  onClick={handleSaveFunnelSettings}
-                  disabled={updateFunnelSettings.isPending}
-                >
-                  {updateFunnelSettings.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Salvar configuracao"
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
-
           <div className="space-y-3">
             {localTemplates.map((template, index) => (
-              <div 
-                key={template.id} 
-                className={`bg-white dark:bg-slate-950 rounded-xl border shadow-sm ${template.ativo === 0 ? 'opacity-60' : ''}`}
+              <div
+                key={template.id}
+                className={`bg-white dark:bg-slate-950 rounded-xl border shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors ${template.ativo === 0 ? 'opacity-60' : ''}`}
+                onClick={() => openHtmlEditor(template.id)}
               >
                 <div className="px-4 py-3">
                   <div className="flex items-center gap-4">
@@ -404,9 +326,9 @@ export default function FunnelDetail() {
                     <div className="px-4 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-400 min-w-[90px] text-center">
                       Transmissão
                     </div>
-                    
+
                     {/* Nome do template */}
-                    <div className="flex-1">
+                    <div className="flex-1" onClick={(e) => e.stopPropagation()}>
                       <Input
                         value={template.nome}
                         onChange={(e) => updateTemplateField(template.id, "nome", e.target.value)}
@@ -415,15 +337,15 @@ export default function FunnelDetail() {
                         placeholder="Nome da Transmissão"
                       />
                     </div>
-                    
+
                     {/* Contador de emails enviados */}
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400" title="Emails enviados">
                       <Mail className="h-3.5 w-3.5" />
                       <span>{funnelStats?.templates?.find((t: any) => t.id === template.id)?.emailsSent || 0}</span>
                     </div>
-                    
+
                     {/* Ações */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {/* Botão de configurações */}
                       <Button
                         variant="ghost"
@@ -433,7 +355,7 @@ export default function FunnelDetail() {
                       >
                         <Settings className="h-4 w-4" />
                       </Button>
-                      
+
                       {/* Toggle Off/On */}
                       <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-slate-200 dark:border-slate-700">
                         <span className="text-xs text-slate-400">Off</span>
@@ -444,10 +366,10 @@ export default function FunnelDetail() {
                         />
                         <span className={`text-xs ${template.ativo === 1 ? 'text-cyan-500 font-medium' : 'text-slate-400'}`}>On</span>
                       </div>
-                      
+
                       {/* Seta para detalhes */}
-                      <ChevronRight 
-                        className="h-5 w-5 text-slate-300 cursor-pointer hover:text-slate-500" 
+                      <ChevronRight
+                        className="h-5 w-5 text-slate-300 cursor-pointer hover:text-slate-500"
                         onClick={() => handlePreview(template.id)}
                       />
                     </div>
@@ -455,7 +377,7 @@ export default function FunnelDetail() {
 
                   {/* Painel de edição expandido */}
                   {editingTemplateId === template.id && (
-                    <div className="mt-4 pt-4 border-t space-y-4">
+                    <div className="mt-4 pt-4 border-t space-y-4" onClick={(e) => e.stopPropagation()}>
                       {/* Configurações de Delay e Horário - para todos os templates */}
                       <div className="space-y-3 bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
                         <Label className="text-xs font-medium">
@@ -527,11 +449,10 @@ export default function FunnelDetail() {
                             variant="ghost"
                             size="sm"
                             onClick={() => handlePreview(template.id)}
-                            disabled={previewTemplate.isLoading}
                             className="text-xs"
                           >
                             <Eye className="h-3 w-3 mr-1" />
-                            Visualizar
+                            Editar + Preview
                           </Button>
                           <Button
                             variant="ghost"
@@ -594,108 +515,85 @@ export default function FunnelDetail() {
           </div>
         </TabsContent>
 
-        <TabsContent value="preview" className="space-y-6">
-          {/* Breadcrumb do template selecionado */}
-          {selectedTemplate && (
-            <div className="flex items-center gap-2 text-sm">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setActiveTab("templates")}
-                className="gap-1 px-2 h-7 text-slate-500 hover:text-slate-700"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-              </Button>
-              <span className="text-slate-400">Transmissão</span>
-              <span className="text-slate-300">|</span>
-              <span className="font-medium text-slate-700 dark:text-slate-300">{selectedTemplate.nome}</span>
-            </div>
-          )}
-
-          <div className="text-sm text-muted-foreground">Pré-visualização</div>
-
-          <Card className="border-0 shadow-none">
-            <CardContent className="p-0">
-              {previewTemplate.isLoading && (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-              )}
-              {previewHtml && !previewTemplate.isLoading ? (
-                <div className="border rounded-lg bg-gray-50 overflow-hidden">
-                  <iframe
-                    srcDoc={previewHtml}
-                    title="Email Preview"
-                    className="w-full border-0"
-                    style={{ height: "calc(100vh - 280px)", minHeight: "500px" }}
-                  />
-                </div>
-              ) : !previewTemplate.isLoading && (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Eye className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Selecione uma transmissão na aba "Transmissões" para pré-visualizar</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="editor" className="space-y-6">
-          {/* Breadcrumb do template selecionado */}
-          {selectedTemplate && (
-            <div className="flex items-center gap-2 text-sm">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setActiveTab("templates")}
-                className="gap-1 px-2 h-7 text-slate-500 hover:text-slate-700"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-              </Button>
-              <span className="text-slate-400">Transmissão</span>
-              <span className="text-slate-300">|</span>
-              <span className="font-medium text-slate-700 dark:text-slate-300">{selectedTemplate.nome}</span>
-            </div>
-          )}
-
-          <div className="text-sm text-muted-foreground">Editor de Email</div>
+        <TabsContent value="editor" className="space-y-4">
+          <div className="flex items-center gap-2 text-sm">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBackToTransmissions}
+              className="gap-1 px-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar para Transmissoes
+            </Button>
+            {selectedTemplate ? (
+              <>
+                <span className="text-slate-300">|</span>
+                <span className="font-medium text-slate-700 dark:text-slate-300">
+                  {selectedTemplate.nome}
+                </span>
+              </>
+            ) : null}
+          </div>
 
           {selectedTemplate ? (
-            <Card className="border-0 shadow-none">
-              <CardContent className="p-0 space-y-4">
-                <SimplifiedEmailEditor
-                  htmlContent={selectedTemplate.htmlContent}
-                  onContentChange={(content) => updateTemplateField(selectedTemplate.id, "htmlContent", content)}
-                  onPreview={() => handlePreview(selectedTemplate.id)}
-                  isPreviewLoading={previewTemplate.isLoading}
-                />
-                <div className="flex gap-2 pt-4 border-t">
-                  <Button
-                    onClick={() => handleSaveTemplate(selectedTemplate.id)}
-                    disabled={updateFunnelTemplate.isPending}
-                    className="gap-2"
-                  >
-                    {updateFunnelTemplate.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
-                    Salvar Alterações
-                  </Button>
-                  <Button
-                    onClick={() => setActiveTab("templates")}
-                    variant="outline"
-                  >
-                    Voltar
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <Card className="border-slate-200 dark:border-slate-800">
+                <CardContent className="pt-5 space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs">Assunto</Label>
+                    <Input
+                      value={selectedTemplate.assunto}
+                      onChange={event =>
+                        updateTemplateField(selectedTemplate.id, "assunto", event.target.value)
+                      }
+                      placeholder="Assunto do email"
+                    />
+                  </div>
+                  <SimplifiedEmailEditor
+                    htmlContent={selectedTemplate.htmlContent}
+                    onContentChange={content =>
+                      updateTemplateField(selectedTemplate.id, "htmlContent", content)
+                    }
+                  />
+                  <div className="flex gap-2 pt-2 border-t">
+                    <Button
+                      onClick={() => handleSaveTemplate(selectedTemplate.id)}
+                      disabled={updateFunnelTemplate.isPending}
+                      className="gap-2"
+                    >
+                      {updateFunnelTemplate.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                      Salvar Alteracoes
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-slate-200 dark:border-slate-800">
+                <CardContent className="pt-5">
+                  <div className="mb-3 text-xs text-muted-foreground">
+                    Preview em tempo real com valores de exemplo para variaveis.
+                  </div>
+                  <div className="overflow-hidden rounded-md border bg-slate-50 dark:bg-slate-900">
+                    <iframe
+                      srcDoc={realtimePreviewDoc}
+                      title="Realtime Funnel Email Preview"
+                      className="w-full border-0"
+                      style={{ height: "calc(100vh - 290px)", minHeight: "560px" }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           ) : (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
                 <Code className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Selecione uma transmissão na aba "Transmissões" para editar seu conteúdo</p>
+                <p>Selecione uma transmissao para abrir o editor.</p>
               </CardContent>
             </Card>
           )}
