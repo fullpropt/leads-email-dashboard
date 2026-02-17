@@ -558,19 +558,6 @@ export default function FunnelDetail() {
                     </div>
                   )}
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-sm">Bloco de rotação por conta</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="1000"
-                    value={rotationChunkSize}
-                    onChange={(e) => setRotationChunkSize(parseInt(e.target.value) || 100)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Quantos envios seguidos por conta antes de alternar.
-                  </p>
-                </div>
               </div>
             ))}
           </div>
@@ -778,6 +765,19 @@ export default function FunnelDetail() {
                   />
                   <p className="text-xs text-muted-foreground">
                     Tempo mínimo entre cada email
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Bloco de rotação por conta</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="1000"
+                    value={rotationChunkSize}
+                    onChange={(e) => setRotationChunkSize(parseInt(e.target.value) || 100)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Quantos envios seguidos por conta antes de alternar.
                   </p>
                 </div>
               </div>
