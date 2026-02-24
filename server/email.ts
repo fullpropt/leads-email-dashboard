@@ -877,6 +877,19 @@ async function sendViaMailgun(params: SendEmailParams): Promise<SendAttemptResul
   }
 }
 
+async function sendWithConfiguredProvider(params: SendEmailParams): Promise<SendAttemptResult> {
+  if (selectedProvider === "sendgrid") {
+    return sendViaSendgrid(params);
+  }
+
+  if (selectedProvider === "mailgun") {
+    return sendViaMailgun(params);
+  }
+
+  console.error(`[Email:${SERVICE_NAME}] Envio bloqueado: ${providerError}`);
+  return { ok: false, error: providerError || "Provider de email nao configurado" };
+}
+
 export async function canCurrentServiceProcessQueue(): Promise<RotationDecision> {
   if (!rotationEnabled) {
     return { allowed: true };
@@ -921,15 +934,7 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
     return false;
   }
 
-  let result: SendAttemptResult = { ok: false, error: providerError || "Provider de email nao configurado" };
-  if (selectedProvider === "sendgrid") {
-    result = await sendViaSendgrid(params);
-  } else if (selectedProvider === "mailgun") {
-    result = await sendViaMailgun(params);
-  } else {
-    console.error(`[Email:${SERVICE_NAME}] Envio bloqueado: ${providerError}`);
-    result = { ok: false, error: providerError || "Provider de email nao configurado" };
-  }
+  const result = await sendWithConfiguredProvider(params);
 
   if (result.ok && slot.accounted) {
     await markRotationSuccess();
@@ -940,6 +945,11 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
     await releaseRotationSlot();
   }
 
+  return result.ok;
+}
+
+export async function sendEmailWithoutRotation(params: SendEmailParams): Promise<boolean> {
+  const result = await sendWithConfiguredProvider(params);
   return result.ok;
 }
 

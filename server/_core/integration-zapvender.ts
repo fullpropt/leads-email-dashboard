@@ -59,6 +59,10 @@ function normalizeOptionalString(value: unknown, maxLength: number): string | nu
   return trimmed.slice(0, maxLength);
 }
 
+function isEnvTrue(name: string): boolean {
+  return String(process.env[name] || "").trim().toLowerCase() === "true";
+}
+
 function isLikelyEmail(email: string): boolean {
   if (!email || email.length > 320) return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -207,17 +211,29 @@ export function registerZapVenderIntegrationRoutes(app: Express) {
     }
 
     try {
-      const [{ sendEmail }, { processEmailTemplate }] = await Promise.all([
+      const [
+        { sendEmail, sendEmailWithoutRotation },
+        { processEmailTemplate },
+      ] = await Promise.all([
         import("../email"),
         import("../emailTemplate"),
       ]);
 
+      const bypassRotation = isEnvTrue("ZAPVENDER_CONFIRMATION_BYPASS_ROTATION");
+      const fromEmail =
+        normalizeOptionalString(process.env.ZAPVENDER_CONFIRMATION_FROM_EMAIL, 320) ||
+        undefined;
+      const fromName =
+        normalizeOptionalString(process.env.ZAPVENDER_CONFIRMATION_FROM_NAME, 120) ||
+        parsed.appName;
       const html = processEmailTemplate(buildConfirmationEmailHtml(parsed));
-      const sent = await sendEmail({
+      const sendFn = bypassRotation ? sendEmailWithoutRotation : sendEmail;
+      const sent = await sendFn({
         to: parsed.email,
         subject: parsed.subject,
         html,
-        fromName: parsed.appName,
+        fromEmail,
+        fromName,
       });
 
       if (!sent) {
@@ -231,7 +247,7 @@ export function registerZapVenderIntegrationRoutes(app: Express) {
       }
 
       console.log(
-        `[ZapVender Integration] Confirmation email sent to ${maskEmail(parsed.email)}`
+        `[ZapVender Integration] Confirmation email sent to ${maskEmail(parsed.email)} (bypassRotation=${bypassRotation})`
       );
       return res.status(200).json({ success: true });
     } catch (error) {
