@@ -139,7 +139,7 @@ export type TransmissionPreviewVariantDTO = {
 let sqlClient: ReturnType<typeof postgres> | null = null;
 let schemaReady = false;
 let ensurePromise: Promise<void> | null = null;
-const DEFAULT_FROM_EMAIL = "noreply@tubetoolsup.uk";
+const DEFAULT_FROM_EMAIL = process.env.DEFAULT_FROM_EMAIL || "noreply@example.com";
 const TRANSMISSION_SCHEDULER_VERBOSE =
   process.env.TRANSMISSION_SCHEDULER_VERBOSE === "true";
 
@@ -1019,7 +1019,7 @@ export async function previewTransmissionWithFirstLead(
       key: "default",
       label: "Padrao",
       serviceName: "default",
-      fromEmail: "noreply@tubetoolsup.uk",
+      fromEmail: DEFAULT_FROM_EMAIL,
       subject: transmission.subject,
       html: processEmailTemplate(
         replaceTemplateVariables(transmission.html_content, leadForTemplate as any),

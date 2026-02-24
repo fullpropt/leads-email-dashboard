@@ -1043,7 +1043,6 @@ export async function getLeadsWhoDidNotAccessPlatform(): Promise<Lead[]> {
 }
 
 // Função para contar leads por status de acesso à plataforma
-// ATUALIZADO: Agora usa o total de usuários do TubeTools como "accessed"
 export async function getLeadsAccessStats() {
   const db = await getDb();
   if (!db) {
@@ -1053,7 +1052,6 @@ export async function getLeadsAccessStats() {
 
   try {
     const { count, eq, sql, and, inArray } = await import("drizzle-orm");
-    const { getTubetoolsDb } = await import("./tubetools-db");
     
     // Contar total de leads (apenas compras aprovadas, não abandonados)
     const [totalResult] = await db
@@ -1099,33 +1097,13 @@ export async function getLeadsAccessStats() {
       ? ((convertedCarts / abandoned) * 100).toFixed(1) 
       : "0.0";
     
-    // Buscar total de usuários ativos no TubeTools (todos os cadastrados)
-    let accessed = 0;
-    const tubetoolsSql = getTubetoolsDb();
-    if (tubetoolsSql) {
-      try {
-        const [tubetoolsResult] = await tubetoolsSql`SELECT COUNT(*) as count FROM users`;
-        accessed = Number(tubetoolsResult?.count || 0);
-      } catch (err) {
-        console.error("[Database] Failed to get TubeTools user count:", err);
-        // Fallback: usar contagem de leads com hasAccessedPlatform = 1
-        const [accessedResult] = await db
-          .select({ count: sql`COUNT(*)` })
-          .from(leads)
-          .where(eq(leads.hasAccessedPlatform, 1));
-        accessed = Number(accessedResult?.count || 0);
-      }
-    } else {
-      // Fallback: usar contagem de leads com hasAccessedPlatform = 1
-      const [accessedResult] = await db
-        .select({ count: sql`COUNT(*)` })
-        .from(leads)
-        .where(eq(leads.hasAccessedPlatform, 1));
-      accessed = Number(accessedResult?.count || 0);
-    }
-    
-    // Calcular leads que não acessaram (total de leads - leads que também estão no TubeTools)
-    // Para isso, precisamos contar quantos leads têm correspondência no TubeTools
+    // Contar leads marcados com acesso usando o flag local
+    const [accessedResult] = await db
+      .select({ count: sql`COUNT(*)` })
+      .from(leads)
+      .where(eq(leads.hasAccessedPlatform, 1));
+    const accessed = Number(accessedResult?.count || 0);
+    // Calcular leads que não acessaram com base no flag local
     const [leadsWithAccessResult] = await db
       .select({ count: sql`COUNT(*)` })
       .from(leads)

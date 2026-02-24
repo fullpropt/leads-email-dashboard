@@ -11,7 +11,10 @@ import { Readable } from "stream";
 
 // Configuração IMAP da Hostinger
 const IMAP_CONFIG = {
-  user: process.env.HOSTINGER_SMTP_USER || "noreply@tubetoolsup.uk",
+  user:
+    process.env.HOSTINGER_SMTP_USER ||
+    process.env.DEFAULT_FROM_EMAIL ||
+    "noreply@example.com",
   password: process.env.HOSTINGER_SMTP_PASS || "",
   host: "imap.hostinger.com",
   port: 993,

@@ -41,19 +41,19 @@ const FORMATTING_GUIDE = `
 **Exemplo:**
 # Welcome, {{nome}}!
 
-Thank you for joining TubeTools.
+Thank you for joining MailMKT.
 
 Here's what you can do:
 1. Watch amazing videos
 2. Rate your favorites
 3. Participate in the community
 
-Visit our [LINK:website:https://tubetoolsacess.work] or contact us at [EMAIL:supfullpropt@gmail.com]
+Visit our [LINK:website:https://example.com] or contact us at [EMAIL:support@example.com]
 
-[BUTTON:Start Now:https://tubetoolsacess.work]
+[BUTTON:Get Started:https://example.com]
 
 Best regards,
-**The TubeTools Team**
+**The MailMKT Team**
 `.trim();
 
 export function SimplifiedEmailEditor({
@@ -175,21 +175,21 @@ export function SimplifiedEmailEditor({
                 editorMode === "simple"
                   ? `# Welcome, {{nome}}!
 
-Thank you for joining TubeTools.
+Thank you for joining MailMKT.
 
 Here's what you can do:
 1. Watch amazing videos
 2. Rate your favorites
 3. Participate in the community
 
-Visit our [LINK:website:https://tubetoolsacess.work] or contact us at [EMAIL:supfullpropt@gmail.com]
+Visit our [LINK:website:https://example.com] or contact us at [EMAIL:support@example.com]
 
-[BUTTON:Start Now:https://tubetoolsacess.work]
+[BUTTON:Get Started:https://example.com]
 
 Best regards,
-**The TubeTools Team**`
+**The MailMKT Team**`
                   : `<h1 style="font-size: 28px; font-weight: bold; color: #000000; margin-bottom: 20px;">
-  Welcome to TubeTools, {{nome}}!
+  Welcome to MailMKT, {{nome}}!
 </h1>
 
 <p style="font-size: 16px; color: #333333; margin-bottom: 25px;">
@@ -200,7 +200,7 @@ Best regards,
 <table width="100%" cellpadding="0" cellspacing="0" border="0">
   <tr>
     <td align="center">
-      <a href="https://tubetoolsacess.work" target="_blank" style="display: inline-block; padding: 14px 35px; background-color: #FF0000; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+      <a href="https://example.com" target="_blank" style="display: inline-block; padding: 14px 35px; background-color: #FF0000; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
         Start Exploring Now
       </a>
     </td>
@@ -221,7 +221,7 @@ Best regards,
           <strong>Nota:</strong> O sistema aplica automaticamente:
         </p>
         <ul className="list-disc list-inside ml-2 space-y-0.5">
-          <li>Header com logo TubeTools</li>
+          <li>Header com identidade visual MailMKT</li>
           <li>Estilos CSS padronizados (cores, fontes, botoes)</li>
           <li>Footer com informacoes de contato</li>
           <li>Link de unsubscribe automatico</li>

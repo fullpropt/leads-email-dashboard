@@ -8,13 +8,10 @@ import { registerLocalAuthRoutes } from "./local-auth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { processWebhook } from "../webhooks";
 import { startScheduler } from "../scheduler";
 import { startFunnelScheduler } from "../scheduler-funnel";
-import { startSyncScheduler } from "../scheduler-sync-tubetools";
 import { startTransmissionScheduler } from "../scheduler-transmissions";
 import { handleMailgunIncomingWebhook } from "../webhooks-support";
-import { handleStripeWebhook } from "../webhooks-stripe";
 import {
   handleMailgunEventsWebhook,
   handleSendGridEventsWebhook,
@@ -123,7 +120,6 @@ async function startBackgroundSchedulers() {
 
   startScheduler();
   startFunnelScheduler();
-  startSyncScheduler();
   startTransmissionScheduler();
 }
 
@@ -132,14 +128,8 @@ async function startServer() {
   const server = createServer(app);
   app.set("trust proxy", 1);
 
-  // ===== WEBHOOK STRIPE =====
-  // IMPORTANTE: Stripe precisa do body RAW para validar assinatura.
-  // Por isso este endpoint é registrado ANTES do express.json().
-  app.post(
-    "/api/webhooks/stripe",
-    express.raw({ type: "application/json" }),
-    handleStripeWebhook
-  );
+  // ===== WEBHOOKS DE EVENTOS =====
+  // Endpoints de eventos de email registrados antes do express.json().
   app.post(
     "/api/webhooks/sendgrid/events",
     express.raw({ type: "application/json" }),
@@ -167,41 +157,6 @@ async function startServer() {
     console.warn(`[Email] Aviso de configuracao: ${emailConfig.error}`);
   }
   
-  // Webhook para PerfectPay (legado)
-  app.post("/api/webhooks/perfectpay", async (req, res) => {
-    try {
-      console.log("[Server] Webhook recebido em /api/webhooks/perfectpay");
-      console.log("[Server] Headers:", req.headers);
-      console.log("[Server] Body:", req.body);
-
-      const result = await processWebhook(req.body);
-      
-      // Retornar 200 OK mesmo que haja erro (PerfectPay pode retentar)
-      res.status(200).json(result);
-    } catch (error) {
-      console.error("[Server] Erro ao processar webhook:", error);
-      res.status(200).json({
-        success: false,
-        message: "Erro ao processar webhook",
-      });
-    }
-  });
-
-  // Health check para o webhook legado
-  app.get("/api/webhooks/health", (req, res) => {
-    res.status(200).json({
-      status: "ok",
-      message: "Webhook endpoint está funcionando",
-    });
-  });
-
-  // Health check para webhook do Stripe
-  app.get("/api/webhooks/stripe/health", (req, res) => {
-    res.status(200).json({
-      status: "ok",
-      message: "Stripe webhook endpoint está funcionando",
-    });
-  });
   app.get("/api/webhooks/sendgrid/events/health", (req, res) => {
     res.status(200).json({
       status: "ok",
@@ -244,6 +199,8 @@ async function startServer() {
     
     try {
       const result = await processUnsubscribe(token);
+      const appDisplayName = process.env.APP_DISPLAY_NAME || "MailMKT";
+      const supportEmail = process.env.SUPPORT_EMAIL || "support@example.com";
       
       // Retornar página HTML de confirmação
       const html = `
@@ -252,7 +209,7 @@ async function startServer() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Unsubscribe - TubeTools</title>
+  <title>Unsubscribe - ${appDisplayName}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -273,8 +230,11 @@ async function startServer() {
       text-align: center;
     }
     .logo {
-      max-width: 200px;
+      display: inline-block;
       margin-bottom: 30px;
+      font-size: 28px;
+      font-weight: 700;
+      color: #111111;
     }
     .icon {
       font-size: 60px;
@@ -312,7 +272,7 @@ async function startServer() {
 </head>
 <body>
   <div class="container">
-    <img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663266054093/HaAhrQWlddPFPJjs.png" alt="TubeTools" class="logo">
+    <div class="logo">${appDisplayName}</div>
     
     ${result.success ? `
       <div class="icon success">✓</div>
@@ -320,7 +280,7 @@ async function startServer() {
       ${result.email ? `<div class="email">${result.email}</div>` : ''}
       <p>${result.message === 'You have already unsubscribed' 
         ? 'You have already unsubscribed from our mailing list.' 
-        : 'You have been removed from our mailing list and will no longer receive promotional emails from TubeTools.'}</p>
+        : `You have been removed from our mailing list and will no longer receive promotional emails from ${appDisplayName}.`}</p>
     ` : `
       <div class="icon error">✗</div>
       <h1>Unsubscribe Failed</h1>
@@ -329,8 +289,8 @@ async function startServer() {
     `}
     
     <div class="footer">
-      <p>&copy; ${new Date().getFullYear()} TubeTools. All rights reserved.</p>
-      <p>Support: <a href="mailto:supfullpropt@gmail.com" style="color: #FF0000;">supfullpropt@gmail.com</a></p>
+      <p>&copy; ${new Date().getFullYear()} ${appDisplayName}. All rights reserved.</p>
+      <p>Support: <a href="mailto:${supportEmail}" style="color: #FF0000;">${supportEmail}</a></p>
     </div>
   </div>
 </body>
@@ -369,8 +329,6 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/` );
-    console.log(`Webhook endpoint (PerfectPay legado): http://localhost:${port}/api/webhooks/perfectpay`);
-    console.log(`Webhook endpoint (Stripe): http://localhost:${port}/api/webhooks/stripe`);
     console.log(`Webhook endpoint (SendGrid events): http://localhost:${port}/api/webhooks/sendgrid/events`);
     console.log(`Webhook endpoint (Mailgun events): http://localhost:${port}/api/webhooks/mailgun/events`);
     

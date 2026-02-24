@@ -317,7 +317,7 @@ export async function generateGroupResponse(
 
     const systemPrompt = "Você é um agente de suporte profissional e empático. Responda apenas com JSON válido.";
     
-    const userPrompt = `Você é um agente de suporte da TubeTools, uma plataforma onde usuários assistem vídeos e ganham recompensas.
+    const userPrompt = `Você é um agente de suporte da MailMKT.
 
 INFORMAÇÕES DO GRUPO DE EMAILS:
 - Nome do grupo: ${group.nome}
@@ -335,7 +335,7 @@ Crie uma resposta profissional e empática que possa ser enviada para todos os e
 1. Abordar o problema/solicitação comum do grupo
 2. Fornecer uma solução ou explicação clara
 3. Ser cordial e profissional
-4. Incluir assinatura "Equipe TubeTools"
+4. Incluir assinatura "Equipe MailMKT"
 
 Responda APENAS com um JSON válido:
 {
@@ -427,7 +427,7 @@ export async function generateEmailResponse(
 
     const systemPrompt = "Você é um agente de suporte profissional e empático. Responda apenas com JSON válido.";
     
-    const userPrompt = `Você é um agente de suporte da TubeTools, uma plataforma onde usuários assistem vídeos e ganham recompensas.
+    const userPrompt = `Você é um agente de suporte da MailMKT.
 
 EMAIL RECEBIDO:
 - De: ${email.sender} ${email.senderName ? `(${email.senderName})` : ""}
@@ -441,7 +441,7 @@ Crie uma resposta profissional e empática. A resposta deve:
 1. Ser personalizada para este usuário específico
 2. Abordar diretamente a questão levantada
 3. Ser cordial e profissional
-4. Incluir assinatura "Equipe TubeTools"
+4. Incluir assinatura "Equipe MailMKT"
 
 Responda APENAS com um JSON válido:
 {

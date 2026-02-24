@@ -1,19 +1,22 @@
 /**
- * Sistema de template de email com header, rodapé e estilos CSS padrão TubeTools
+ * Sistema de template de email com header, rodapé e estilos CSS padrão MailMKT
  * 
  * Este módulo fornece funções para criar emails com identidade visual consistente.
  * Inclui:
- * - Header com logo TubeTools
+ * - Header com branding MailMKT
  * - Footer com link de unsubscribe automático
  * - Estilos CSS padronizados
  * - Conversão automática de texto simples para HTML formatado
  */
 
 // URL base da aplicação (configurável via variável de ambiente)
-const APP_BASE_URL = process.env.APP_BASE_URL || "https://tubetoolsmailmkt-production.up.railway.app";
+const APP_BASE_URL = process.env.APP_BASE_URL || "http://localhost:3000";
+const APP_DISPLAY_NAME = process.env.APP_DISPLAY_NAME || "MailMKT";
+const APP_TAGLINE = process.env.APP_TAGLINE || "Email Marketing Automation";
+const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "support@example.com";
 
 /**
- * Estilos CSS inline padrão para emails TubeTools
+ * Estilos CSS inline padrão para emails MailMKT
  * Baseado no template WelcomeAproved-Email
  */
 export const EMAIL_STYLES = {
@@ -44,7 +47,7 @@ export const EMAIL_STYLES = {
 };
 
 /**
- * Gera o header padrão do email TubeTools
+ * Gera o header padrão do email MailMKT
  */
 export function getEmailHeader(): string {
   return `
@@ -54,7 +57,7 @@ export function getEmailHeader(): string {
           <table width="600" cellpadding="0" cellspacing="0" border="0">
             <tr>
               <td align="center" style="padding: 20px 0;">
-                <img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663266054093/HaAhrQWlddPFPJjs.png" alt="TubeTools" style="max-width: 250px; height: auto;" />
+                <div style="font-family: Arial, sans-serif; font-size: 28px; font-weight: 700; color: #111111;">${APP_DISPLAY_NAME}</div>
               </td>
             </tr>
           </table>
@@ -65,7 +68,7 @@ export function getEmailHeader(): string {
 }
 
 /**
- * Gera o rodapé padrão do email TubeTools com link de unsubscribe
+ * Gera o rodapé padrão do email MailMKT com link de unsubscribe
  * @param unsubscribeToken - Token único para o link de unsubscribe (opcional)
  */
 export function getEmailFooter(unsubscribeToken?: string): string {
@@ -87,14 +90,14 @@ export function getEmailFooter(unsubscribeToken?: string): string {
           <table width="600" cellpadding="0" cellspacing="0" border="0">
             <tr>
               <td align="center" style="padding: 20px; color: #666666; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6;">
-                <p style="margin: 0 0 10px 0; font-weight: bold; color: #000000;">TubeTools</p>
-                <p style="margin: 0 0 10px 0;">Watch. Rate. Participate.</p>
+                <p style="margin: 0 0 10px 0; font-weight: bold; color: #000000;">${APP_DISPLAY_NAME}</p>
+                <p style="margin: 0 0 10px 0;">${APP_TAGLINE}</p>
                 <p style="margin: 0 0 5px 0;">
                   <strong>Support:</strong> 
-                  <a href="mailto:supfullpropt@gmail.com" style="color: #FF0000; text-decoration: none;">supfullpropt@gmail.com</a>
+                  <a href="mailto:${SUPPORT_EMAIL}" style="color: #FF0000; text-decoration: none;">${SUPPORT_EMAIL}</a>
                 </p>
                 <p style="margin: 20px 0 0 0; font-size: 12px; color: #999999;">
-                  © ${new Date().getFullYear()} TubeTools. All rights reserved.
+                  © ${new Date().getFullYear()} ${APP_DISPLAY_NAME}. All rights reserved.
                 </p>
                 ${unsubscribeSection}
               </td>
@@ -171,7 +174,7 @@ function isEmptyLine(line: string): boolean {
 }
 
 /**
- * Converte texto simples em HTML formatado com estilos TubeTools
+ * Converte texto simples em HTML formatado com estilos MailMKT
  * 
  * Regras de parsing:
  * - Linhas vazias separam blocos (parágrafos, listas, etc.)
@@ -366,7 +369,7 @@ export function wrapEmailContent(content: string, unsubscribeToken?: string): st
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>TubeTools</title>
+  <title>${APP_DISPLAY_NAME}</title>
   <style>
     body {
       margin: 0;

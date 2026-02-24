@@ -31,7 +31,8 @@ export async function processScheduledEmails() {
     const fromEmail =
       process.env.MAILGUN_FROM_EMAIL ||
       process.env.SENDGRID_FROM_EMAIL ||
-      "noreply@tubetoolsup.uk";
+      process.env.DEFAULT_FROM_EMAIL ||
+      "noreply@example.com";
     const variedTemplateCache = new Map<
       number,
       { subject: string; html: string }

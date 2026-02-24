@@ -13,14 +13,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, RefreshCw, Search, CheckCircle2, XCircle, ArrowUp, ArrowDown, ChevronDown } from "lucide-react";
+import { Loader2, RefreshCw, Search, ArrowUp, ArrowDown, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useDebounce } from "@/hooks/use-debounce";
 
 type FilterStatus = 'all' | 'active' | 'abandoned' | 'none';
-type PlatformAccessFilter = 'all' | 'accessed' | 'not_accessed';
 type SortDirection = 'asc' | 'desc';
 
 export default function Leads() {
@@ -29,19 +28,15 @@ export default function Leads() {
   
   const [currentPage, setCurrentPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
-  const [platformAccessFilter, setPlatformAccessFilter] = useState<PlatformAccessFilter>('all');
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   
   // Estados para os dropdowns nos cabeçalhos
   const [showSituacaoDropdown, setShowSituacaoDropdown] = useState(false);
-  const [showStatusPlataformaDropdown, setShowStatusPlataformaDropdown] = useState(false);
   
   // Refs para detectar cliques fora dos dropdowns
   const situacaoDropdownRef = useRef<HTMLTableCellElement>(null);
-  const statusPlataformaDropdownRef = useRef<HTMLTableCellElement>(null);
   const situacaoMenuRef = useRef<HTMLDivElement>(null);
-  const statusPlataformaMenuRef = useRef<HTMLDivElement>(null);
 
   // Fechar dropdowns ao clicar fora
   useEffect(() => {
@@ -53,34 +48,25 @@ export default function Leads() {
         (situacaoDropdownRef.current && situacaoDropdownRef.current.contains(target)) ||
         (situacaoMenuRef.current && situacaoMenuRef.current.contains(target));
       
-      // Verificar se o clique foi dentro do cabeçalho ou menu de Status Plataforma
-      const isInsideStatusPlataforma = 
-        (statusPlataformaDropdownRef.current && statusPlataformaDropdownRef.current.contains(target)) ||
-        (statusPlataformaMenuRef.current && statusPlataformaMenuRef.current.contains(target));
-      
       if (!isInsideSituacao && showSituacaoDropdown) {
         setShowSituacaoDropdown(false);
-      }
-      if (!isInsideStatusPlataforma && showStatusPlataformaDropdown) {
-        setShowStatusPlataformaDropdown(false);
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showSituacaoDropdown, showStatusPlataformaDropdown]);
+  }, [showSituacaoDropdown]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm, platformAccessFilter, filterStatus, sortDirection]);
+  }, [debouncedSearchTerm, filterStatus, sortDirection]);
 
-  const { data: leadsData, isLoading, refetch } = trpc.leads.listPaginated.useQuery(
+  const { data: leadsData, isLoading, isFetching, refetch } = trpc.leads.listPaginated.useQuery(
     { 
       page: currentPage, 
       status: 'all',
       search: debouncedSearchTerm,
       leadStatus: filterStatus,
-      platformAccess: platformAccessFilter,
       sortDirection: sortDirection,
     },
     {
@@ -96,17 +82,6 @@ export default function Leads() {
     undefined,
     {
       staleTime: 1000,
-      gcTime: 1000 * 60 * 60,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      refetchOnMount: true,
-    }
-  );
-
-  const { data: accessStats } = trpc.leads.getAccessStats.useQuery(
-    undefined,
-    {
-      staleTime: 5000,
       gcTime: 1000 * 60 * 60,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
@@ -141,20 +116,6 @@ export default function Leads() {
     },
   });
 
-  const syncWithTubetools = trpc.tubetools.syncAll.useMutation({
-    onSuccess: (data) => {
-      console.log("✅ Sincronização com TubeTools concluída:", data);
-      toast.success(`Sincronização concluída: ${data.accessed} acessaram, ${data.notAccessed} não acessaram`);
-      refetch();
-    },
-    onError: (error) => {
-      console.error("❌ Erro ao sincronizar com TubeTools:", error);
-      toast.error("Erro ao sincronizar com TubeTools");
-    },
-  });
-
-  const isSyncing = syncWithTubetools.isPending;
-
   const leads = leadsData?.leads || [];
 
   useEffect(() => {
@@ -174,12 +135,6 @@ export default function Leads() {
     setFilterStatus(status);
     setCurrentPage(1);
     setShowSituacaoDropdown(false);
-  };
-
-  const handlePlatformAccessFilterChange = (filter: PlatformAccessFilter) => {
-    setPlatformAccessFilter(filter);
-    setCurrentPage(1);
-    setShowStatusPlataformaDropdown(false);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -221,7 +176,7 @@ export default function Leads() {
   const handleToggleAll = () => {
     const allSelected = selectedLeads.size === leads.length && leads.length > 0;
     console.log("🔄 Toggle all - Todos selecionados?", allSelected);
-    console.log("🔍 Filtros ativos - leadStatus:", filterStatus, "platformAccess:", platformAccessFilter, "search:", debouncedSearchTerm);
+    console.log("🔍 Filtros ativos - leadStatus:", filterStatus, "search:", debouncedSearchTerm);
     
     if (allSelected) {
       setSelectedLeads(new Set());
@@ -235,7 +190,6 @@ export default function Leads() {
     updateAllSelection.mutate({
       selected: !allSelected,
       leadStatus: filterStatus,
-      platformAccess: platformAccessFilter,
       search: debouncedSearchTerm || undefined
     });
   };
@@ -259,15 +213,6 @@ export default function Leads() {
     }
   };
 
-  // Função para obter o label do filtro de status plataforma atual
-  const getStatusPlataformaFilterLabel = () => {
-    switch (platformAccessFilter) {
-      case 'accessed': return 'Ativo';
-      case 'not_accessed': return 'Inativo';
-      default: return 'Status Plataforma';
-    }
-  };
-
   const totalPages = leadsData?.totalPages || 1;
   const total = leadsData?.total || 0;
 
@@ -285,12 +230,12 @@ export default function Leads() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => syncWithTubetools.mutate()}
-              disabled={isSyncing}
+              onClick={() => void refetch()}
+              disabled={isFetching}
               className="gap-2"
             >
-              <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Sincronizando...' : 'Atualizar'}
+              <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+              {isFetching ? 'Atualizando...' : 'Atualizar'}
             </Button>
           </div>
         </div>
@@ -320,17 +265,16 @@ export default function Leads() {
         <div className="flex items-center gap-4">
           <div className="text-sm font-medium bg-muted px-4 py-2 rounded-lg">
             Total de Leads: <span className="font-bold text-primary">{total}</span>
-            {(filterStatus !== 'all' || platformAccessFilter !== 'all' || debouncedSearchTerm) && (
+            {(filterStatus !== 'all' || debouncedSearchTerm) && (
               <span className="text-muted-foreground ml-2">(filtrados)</span>
             )}
           </div>
-          {(filterStatus !== 'all' || platformAccessFilter !== 'all') && (
+          {(filterStatus !== 'all') && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => {
                 setFilterStatus('all');
-                setPlatformAccessFilter('all');
               }}
             >
               Limpar filtros
@@ -359,55 +303,6 @@ export default function Leads() {
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
               
-              {/* Status Plataforma com Dropdown */}
-              <TableHead className="relative" ref={statusPlataformaDropdownRef}>
-                <div 
-                  className="flex items-center gap-1 cursor-pointer hover:text-primary transition-colors"
-                  onClick={() => {
-                    setShowStatusPlataformaDropdown(!showStatusPlataformaDropdown);
-                    setShowSituacaoDropdown(false);
-                  }}
-                >
-                  {getStatusPlataformaFilterLabel()}
-                  <ChevronDown className={`h-4 w-4 transition-transform ${showStatusPlataformaDropdown ? 'rotate-180' : ''}`} />
-                  {platformAccessFilter !== 'all' && (
-                    <span className="ml-1 w-2 h-2 bg-primary rounded-full"></span>
-                  )}
-                </div>
-                {showStatusPlataformaDropdown && statusPlataformaDropdownRef.current && createPortal(
-                  <div 
-                    ref={statusPlataformaMenuRef}
-                    className="bg-popover border rounded-md shadow-lg min-w-[160px] fixed"
-                    style={{ 
-                      zIndex: 9999,
-                      top: statusPlataformaDropdownRef.current.getBoundingClientRect().bottom + 4,
-                      left: statusPlataformaDropdownRef.current.getBoundingClientRect().left
-                    }}
-                  >
-                    <div className="py-1">
-                      <button
-                        className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${platformAccessFilter === 'all' ? 'bg-muted font-medium' : ''}`}
-                        onClick={() => handlePlatformAccessFilterChange('all')}
-                      >
-                        Todos {accessStats && `(${accessStats.total})`}
-                      </button>
-                      <button
-                        className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${platformAccessFilter === 'accessed' ? 'bg-muted font-medium' : ''}`}
-                        onClick={() => handlePlatformAccessFilterChange('accessed')}
-                      >
-                        Ativo {accessStats && `(${accessStats.accessed})`}
-                      </button>
-                      <button
-                        className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors ${platformAccessFilter === 'not_accessed' ? 'bg-muted font-medium' : ''}`}
-                        onClick={() => handlePlatformAccessFilterChange('not_accessed')}
-                      >
-                        Inativo {accessStats && `(${accessStats.notAccessed})`}
-                      </button>
-                    </div>
-                  </div>,
-                  document.body
-                )}
-              </TableHead>
               
               {/* Situação com Dropdown */}
               <TableHead className="relative" ref={situacaoDropdownRef}>
@@ -415,7 +310,6 @@ export default function Leads() {
                   className="flex items-center gap-1 cursor-pointer hover:text-primary transition-colors"
                   onClick={() => {
                     setShowSituacaoDropdown(!showSituacaoDropdown);
-                    setShowStatusPlataformaDropdown(false);
                   }}
                 >
                   {getSituacaoFilterLabel()}
@@ -480,7 +374,7 @@ export default function Leads() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={6} className="text-center py-8">
                   <div className="flex items-center justify-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     <span>Carregando leads...</span>
@@ -489,7 +383,7 @@ export default function Leads() {
               </TableRow>
             ) : leads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                   <p>Nenhum lead encontrado</p>
                 </TableCell>
               </TableRow>
@@ -505,19 +399,6 @@ export default function Leads() {
                   <TableCell className="font-medium">{lead.id}</TableCell>
                   <TableCell>{lead.nome}</TableCell>
                   <TableCell className="text-sm">{lead.email}</TableCell>
-                  <TableCell>
-                    {lead.hasAccessedPlatform === 1 ? (
-                      <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Ativo
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
-                        <XCircle className="h-3 w-3 mr-1" />
-                        Inativo
-                      </Badge>
-                    )}
-                  </TableCell>
                   <TableCell>
                     <Badge 
                       variant="secondary"
@@ -543,7 +424,6 @@ export default function Leads() {
               Exibindo <span className="font-semibold">{leads.length}</span> de{" "}
               <span className="font-semibold">{leadsData.total}</span> leads
               {debouncedSearchTerm && ` (filtrados por busca)`}
-              {platformAccessFilter !== 'all' && ` (filtrados por acesso)`}
               {filterStatus !== 'all' && ` (filtrados por situação)`}
             </>
           ) : (

@@ -119,7 +119,8 @@ async function processDelayedSends() {
     const fromEmail =
       process.env.MAILGUN_FROM_EMAIL ||
       process.env.SENDGRID_FROM_EMAIL ||
-      "noreply@tubetoolsup.uk";
+      process.env.DEFAULT_FROM_EMAIL ||
+      "noreply@example.com";
     const baseTemplate = await applyAICopyVariation({
       subject: template.assunto,
       html: template.htmlContent || "",

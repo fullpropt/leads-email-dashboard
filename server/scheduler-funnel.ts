@@ -354,7 +354,8 @@ async function processFunnelEmails() {
     const fromEmail =
       process.env.MAILGUN_FROM_EMAIL ||
       process.env.SENDGRID_FROM_EMAIL ||
-      "noreply@tubetoolsup.uk";
+      process.env.DEFAULT_FROM_EMAIL ||
+      "noreply@example.com";
 
     let sentCount = 0;
     const variedTemplateCache = new Map<

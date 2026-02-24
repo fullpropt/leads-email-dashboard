@@ -97,43 +97,6 @@ export const appRouter = router({
         return getChargebackStats();
       }),
 
-    // Consulta detalhada de um lead por email (integra dados MailMKT + TubeTools)
-    getDetailedByEmail: publicProcedure
-      .input(z.object({ email: z.string().email() }))
-      .query(async ({ input }) => {
-        const { getLeadByEmail, getEmailHistoryByLeadId } = await import("./db");
-        const { getFullUserDetailsByEmail } = await import("./tubetools-db");
-
-        // Buscar lead no banco MailMKT
-        const lead = await getLeadByEmail(input.email);
-        
-        // Buscar histórico de emails enviados
-        const emailHistory = lead ? await getEmailHistoryByLeadId(lead.id) : [];
-        
-        // Buscar dados completos do TubeTools
-        const tubetoolsData = await getFullUserDetailsByEmail(input.email);
-
-        return {
-          found: !!lead || !!tubetoolsData,
-          mailmkt: lead ? {
-            id: lead.id,
-            nome: lead.nome,
-            email: lead.email,
-            produto: lead.produto,
-            plano: lead.plano,
-            valor: lead.valor,
-            dataAprovacao: lead.dataAprovacao,
-            dataCriacao: lead.dataCriacao,
-            emailEnviado: lead.emailEnviado === 1,
-            dataEnvioEmail: lead.dataEnvioEmail,
-            status: lead.status,
-            leadType: lead.leadType,
-            hasAccessedPlatform: lead.hasAccessedPlatform === 1,
-            emailHistory,
-          } : null,
-          tubetools: tubetoolsData,
-        };
-      }),
 
     // ===== UNSUBSCRIBE ENDPOINTS =====
     unsubscribe: publicProcedure
@@ -332,154 +295,6 @@ export const appRouter = router({
       }),
   }),
   
-  // Router para webhooks
-  webhooks: router({
-    newSignup: publicProcedure
-      .input(z.object({
-        name: z.string(),
-        email: z.string().email(),
-        full_name: z.string().optional(),
-      }))
-      .mutation(async ({ input }) => {
-        const { processNewSignupWebhook } = await import("./webhooks-signup");
-        return processNewSignupWebhook(input);
-      }),
-  }),
-
-  // Router para recuperação de senha (TubeTools)
-  passwordReset: router({
-    sendResetEmail: publicProcedure
-      .input(z.object({ 
-        email: z.string().email(),
-        resetToken: z.string(),
-        appName: z.string().default('TubeTools')
-      }))
-      .mutation(async ({ input }) => {
-        const { sendEmail } = await import("./email");
-
-        const resetLink = `https://tubetoolsacess.work/reset-password?token=${input.resetToken}`;
-        
-        const htmlContent = `
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <meta charset="UTF-8">
-              <style>
-                body { 
-                  font-family: Arial, sans-serif; 
-                  background-color: #f5f5f5;
-                  margin: 0;
-                  padding: 0;
-                }
-                .container { 
-                  max-width: 600px; 
-                  margin: 40px auto; 
-                  background-color: white;
-                  border-radius: 8px;
-                  overflow: hidden;
-                  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                }
-                .header { 
-                  background-color: #dc2626; 
-                  color: white; 
-                  padding: 30px 20px;
-                  text-align: center;
-                }
-                .header h1 {
-                  margin: 0;
-                  font-size: 24px;
-                }
-                .content { 
-                  padding: 40px 30px;
-                  line-height: 1.6;
-                  color: #333;
-                }
-                .button { 
-                  display: inline-block;
-                  background-color: #dc2626; 
-                  color: white !important; 
-                  padding: 14px 30px; 
-                  text-decoration: none; 
-                  border-radius: 5px;
-                  margin: 20px 0;
-                  font-weight: bold;
-                }
-                .footer {
-                  background-color: #f9f9f9;
-                  padding: 20px;
-                  text-align: center;
-                  font-size: 12px;
-                  color: #666;
-                  border-top: 1px solid #eee;
-                }
-                .warning {
-                  background-color: #fff3cd;
-                  border-left: 4px solid #ffc107;
-                  padding: 15px;
-                  margin: 20px 0;
-                  font-size: 14px;
-                }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <div class="header">
-                  <h1>🔐 Reset Password - ${input.appName}</h1>
-                </div>
-                <div class="content">
-                  <p>Hello,</p>
-                  <p>We received a request to reset your password for your <strong>${input.appName}</strong> account.</p>
-                  <p>Click the button below to create a new password:</p>
-                  
-                  <div style="text-align: center;">
-                    <a href="${resetLink}" class="button">Reset My Password</a>
-                  </div>
-
-                  <div class="warning">
-                    <strong>⚠️ Important:</strong>
-                    <ul style="margin: 10px 0; padding-left: 20px;">
-                      <li>This link expires in <strong>1 hour</strong></li>
-                      <li>If you didn't request this reset, ignore this email</li>
-                      <li>Your current password will remain unchanged</li>
-                    </ul>
-                  </div>
-
-                  <p style="margin-top: 30px; font-size: 14px; color: #666;">
-                    If the button doesn't work, copy and paste this link into your browser:
-                  </p>
-                  <p style="word-break: break-all; background-color: #f5f5f5; padding: 10px; border-radius: 4px; font-size: 12px;">
-                    ${resetLink}
-                  </p>
-                </div>
-                <div class="footer">
-                  <p>This is an automated email, please do not reply.</p>
-                  <p>© ${new Date().getFullYear()} ${input.appName}. All rights reserved.</p>
-                </div>
-              </div>
-            </body>
-          </html>
-        `;
-
-        const success = await sendEmail({
-          to: input.email,
-          subject: `🔐 Reset Password - ${input.appName}`,
-          html: htmlContent,
-        });
-
-        if (success) {
-          return { 
-            success: true, 
-            message: "Password reset email sent successfully" 
-          };
-        } else {
-          return { 
-            success: false, 
-            message: "Error sending password reset email" 
-          };
-        }
-      }),
-  }),
-
   // Routers para envio de emails
   email: router({
     // Enviar email para um lead específico usando um template específico
@@ -521,7 +336,8 @@ export const appRouter = router({
         const fromEmail =
           process.env.MAILGUN_FROM_EMAIL ||
           process.env.SENDGRID_FROM_EMAIL ||
-          "noreply@tubetoolsup.uk";
+          process.env.DEFAULT_FROM_EMAIL ||
+          "noreply@example.com";
         const baseTemplate = await applyAICopyVariation({
           subject: template.assunto,
           html: template.htmlContent,
@@ -594,7 +410,8 @@ export const appRouter = router({
         const fromEmail =
           process.env.MAILGUN_FROM_EMAIL ||
           process.env.SENDGRID_FROM_EMAIL ||
-          "noreply@tubetoolsup.uk";
+          process.env.DEFAULT_FROM_EMAIL ||
+          "noreply@example.com";
         const baseTemplate = await applyAICopyVariation({
           subject: template.assunto,
           html: template.htmlContent,
@@ -668,7 +485,8 @@ export const appRouter = router({
         const fromEmail =
           process.env.MAILGUN_FROM_EMAIL ||
           process.env.SENDGRID_FROM_EMAIL ||
-          "noreply@tubetoolsup.uk";
+          process.env.DEFAULT_FROM_EMAIL ||
+          "noreply@example.com";
         const baseTemplate = await applyAICopyVariation({
           subject: template.assunto,
           html: template.htmlContent,
@@ -744,7 +562,8 @@ export const appRouter = router({
         const fromEmail =
           process.env.MAILGUN_FROM_EMAIL ||
           process.env.SENDGRID_FROM_EMAIL ||
-          "noreply@tubetoolsup.uk";
+          process.env.DEFAULT_FROM_EMAIL ||
+          "noreply@example.com";
         const baseTemplate = await applyAICopyVariation({
           subject: template.assunto,
           html: template.htmlContent,
@@ -797,80 +616,6 @@ export const appRouter = router({
         const { toggleAutoSend } = await import("./db");
         return await toggleAutoSend(input);
       }),
-  }),
-
-  // Routers para sincronização com TubeTools
-  tubetools: router({
-    // Sincronizar todos os leads
-    syncAll: publicProcedure.mutation(async () => {
-      const { syncAllLeadsWithTubetools } = await import("./sync-tubetools");
-      return await syncAllLeadsWithTubetools();
-    }),
-
-    // Sincronizar apenas leads não verificados
-    syncUnverified: publicProcedure.mutation(async () => {
-      const { syncUnverifiedLeadsWithTubetools } = await import("./sync-tubetools");
-      return await syncUnverifiedLeadsWithTubetools();
-    }),
-
-    // Sincronizar um único lead
-    syncSingle: publicProcedure
-      .input(z.object({ leadId: z.number() }))
-      .mutation(async ({ input }) => {
-        const { syncSingleLead } = await import("./sync-tubetools");
-        const success = await syncSingleLead(input.leadId);
-        return { success };
-      }),
-
-    // Buscar leads que acessaram a plataforma
-    getAccessedLeads: publicProcedure.query(async () => {
-      const { getLeadsWhoAccessedPlatform } = await import("./db");
-      return await getLeadsWhoAccessedPlatform();
-    }),
-
-    // Buscar leads que NÃO acessaram a plataforma
-    getNotAccessedLeads: publicProcedure.query(async () => {
-      const { getLeadsWhoDidNotAccessPlatform } = await import("./db");
-      return await getLeadsWhoDidNotAccessPlatform();
-    }),
-
-    // Buscar analytics do TubeTools
-    getAnalytics: publicProcedure.query(async () => {
-      const { getTubetoolsAnalytics } = await import("./tubetools-db");
-      return await getTubetoolsAnalytics();
-    }),
-
-    // Buscar informações de um usuário específico por email
-    getUserByEmail: publicProcedure
-      .input(z.object({ email: z.string().email() }))
-      .query(async ({ input }) => {
-        const { getTubetoolsUserByEmail } = await import("./tubetools-db");
-        return await getTubetoolsUserByEmail(input.email);
-      }),
-
-    // Buscar analytics temporais (votos por hora, cadastros por dia, etc)
-    getTemporalAnalytics: publicProcedure.query(async () => {
-      const { getTemporalAnalytics } = await import("./tubetools-db");
-      return await getTemporalAnalytics();
-    }),
-
-    // Buscar dados de jornada do usuário (distribuição de streaks e resets)
-    getUserJourneyAnalytics: publicProcedure.query(async () => {
-      const { getUserJourneyAnalytics } = await import("./tubetools-db");
-      return await getUserJourneyAnalytics();
-    }),
-
-    // Obter status do scheduler de sincronização
-    getSyncSchedulerStatus: publicProcedure.query(async () => {
-      const { getSyncSchedulerStatus } = await import("./scheduler-sync-tubetools");
-      return getSyncSchedulerStatus();
-    }),
-
-    // Forçar sincronização completa
-    forceFullSync: publicProcedure.mutation(async () => {
-      const { forceFullSync } = await import("./scheduler-sync-tubetools");
-      return await forceFullSync();
-    }),
   }),
 
   // ==================== ROUTER DE FUNIS ====================

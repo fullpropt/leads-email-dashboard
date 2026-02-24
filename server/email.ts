@@ -55,21 +55,21 @@ const SERVICE_NAME =
   process.env.MAILMKT_SERVICE_NAME ||
   process.env.RAILWAY_SERVICE_NAME ||
   "mailmkt";
-const DEFAULT_FROM_EMAIL = "noreply@tubetoolsup.uk";
+const DEFAULT_FROM_EMAIL = process.env.DEFAULT_FROM_EMAIL || "noreply@example.com";
 
 const providerSelectionRaw = (process.env.EMAIL_PROVIDER || "auto").toLowerCase();
 
 const sendGridConfig = {
   apiKey: process.env.SENDGRID_API_KEY || "",
   fromEmail: process.env.SENDGRID_FROM_EMAIL || DEFAULT_FROM_EMAIL,
-  fromName: process.env.SENDGRID_FROM_NAME || "TubeTools",
+  fromName: process.env.SENDGRID_FROM_NAME || "MailMKT",
 };
 
 const mailgunConfig = {
   apiKey: process.env.MAILGUN_API_KEY || "",
   domain: process.env.MAILGUN_DOMAIN || "",
   fromEmail: process.env.MAILGUN_FROM_EMAIL || DEFAULT_FROM_EMAIL,
-  fromName: process.env.MAILGUN_FROM_NAME || "TubeTools",
+  fromName: process.env.MAILGUN_FROM_NAME || "MailMKT",
   baseUrl: process.env.MAILGUN_BASE_URL || "https://api.mailgun.net",
 };
 
@@ -329,7 +329,7 @@ function getCurrentSenderIdentity() {
     process.env.MAILGUN_FROM_EMAIL || process.env.SENDGRID_FROM_EMAIL || DEFAULT_FROM_EMAIL;
   return {
     fromEmail: fallbackFrom,
-    fromName: process.env.MAILGUN_FROM_NAME || process.env.SENDGRID_FROM_NAME || "TubeTools",
+    fromName: process.env.MAILGUN_FROM_NAME || process.env.SENDGRID_FROM_NAME || "MailMKT",
     provider: "none" as Provider,
   };
 }
