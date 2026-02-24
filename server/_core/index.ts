@@ -5,6 +5,7 @@ import net from "net";
 import postgres from "postgres";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerLocalAuthRoutes } from "./local-auth";
+import { registerZapVenderIntegrationRoutes } from "./integration-zapvender";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -147,6 +148,7 @@ async function startServer() {
 
   // Local auth route (single account with email/password)
   registerLocalAuthRoutes(app);
+  registerZapVenderIntegrationRoutes(app);
 
   const { getEmailConfig } = await import("../email");
   const emailConfig = getEmailConfig();
